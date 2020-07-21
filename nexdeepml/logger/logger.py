@@ -42,7 +42,7 @@ class Logger:
         self._level = config.level
 
         # Get the logger
-        self._logger = logging.getLogger(config.name) # TODO: For later: check if the name already exists
+        self._logger = logging.getLogger(config.name)  # TODO: For later: check if the name already exists
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
@@ -50,7 +50,7 @@ class Logger:
         # TODO: Should we have logging to both the console and the file?
         # Determine whether to write to file or console and get the handlers
         if config.console is True:
-            self._handler = logging.StreamHandler()
+            self._handler = logging.StreamHandler(sys.stdout)
         else:
             self._handler = logging.FileHandler(config.filename)
 
