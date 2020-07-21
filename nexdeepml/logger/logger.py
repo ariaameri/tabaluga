@@ -154,31 +154,31 @@ class TQDMLogger(Logger, io.StringIO):
 
         self._tqdm.close()
 
-    def update(self, update_count: int, msg=None) -> None:
+    def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the tqdm progress bar with description set to message.
 
         Parameters
         ----------
         update_count : int
             The amount that should be added to the tqdm instance.
-        msg : Any, optional
-            Contains the message to be set as the progress bar description.
-            Will be passed to the _generate_message method.
+        msg_dict : Dict, optional
+            Contains the dictionary message to be set as the progress bar description.
+            Will be passed to the _generate_message method, read there for more info.
         """
 
         self._tqdm.update(update_count)
 
-        message = self._generate_message(msg)
+        message = self._generate_message(msg_dict)
         self._tqdm.set_description(message)
 
-    def _generate_message(self, msg: Dict) -> str:
+    def _generate_message(self, msg_dict: Dict) -> str:
         """Generates a string based on the input to be used as tqdm bar description.
 
         If msg is None, empty string will be returned.
 
         Parameters
         ---------
-        msg : Dict
+        msg_dict : Dict
             Dictionary containing the information to be used. Contains:
                 epoch: int
                 loss: float
@@ -187,22 +187,22 @@ class TQDMLogger(Logger, io.StringIO):
 
         message = ''
 
-        if msg is None:
+        if msg_dict is None:
             return message
 
         # Find the length of the total epochs
         # and reformat the string accordingly
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
-        message += f'Epoch {msg["epoch"]:{ep_len}d}/{self._n_epochs}: '
+        message += f'Epoch {msg_dict["epoch"]:{ep_len}d}/{self._n_epochs}: '
 
-        message += f'loss: {msg["loss"]: .5e}'
+        message += f'loss: {msg_dict["loss"]: .5e}'
 
-        if 'val_loss' in msg.keys():
-            message += f', val_loss: {msg["val_loss"]: .5e}'
+        if 'val_loss' in msg_dict.keys():
+            message += f', val_loss: {msg_dict["val_loss"]: .5e}'
 
         # Print the rest in msg
-        for key in [key for key in msg.keys() if key != 'epoch' and key != 'loss' and key != 'val_loss']:
-            message += f', {key}: {msg[key]}'
+        for key in [key for key in msg_dict.keys() if key != 'epoch' and key != 'loss' and key != 'val_loss']:
+            message += f', {key}: {msg_dict[key]}'
 
         message += ' '
 
