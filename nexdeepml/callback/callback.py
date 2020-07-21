@@ -182,7 +182,7 @@ class Callback:
 class TQDMCallback(Callback):
     """Creates and manages an instance of tqdm to take care of progress bar for training/testing the network."""
 
-    def __int__(self, tqdm_config):
+    def __init__(self, tqdm_config):
         """Initialize the callback for tqdm progress bar."""
         super().__init__()
 
