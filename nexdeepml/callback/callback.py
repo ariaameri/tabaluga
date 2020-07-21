@@ -11,9 +11,12 @@ class Callback:
 
     # TODO: Figure out the type of output for the callback functions
     # TODO: Does callback have to perform the change or pass it back to the trainer to do the change?
+    # TODO: Do we get to save a config?
+
+    # Training (testing) methods
 
     def on_begin(self, info: Dict) -> Dict:
-        """Method to be called at the beginning.
+        """Method to be called at the beginning of training (testing).
 
         Parameters
         ----------
@@ -26,10 +29,10 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
 
     def on_end(self, info: Dict) -> Dict:
-        """Method to be called at the end.
+        """Method to be called at the end of training (testing).
 
         Parameters
         ----------
@@ -42,10 +45,10 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
 
     def on_epoch_begin(self, info: Dict) -> Dict:
-        """Method to be called at the beginning of each epoch.
+        """Method to be called at the beginning of each training (testing) epoch.
 
         Parameters
         ----------
@@ -58,10 +61,10 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
 
     def on_epoch_end(self, info: Dict) -> Dict:
-        """Method to be called at the end of each epoch.
+        """Method to be called at the end of each training (testing) epoch.
 
         Parameters
         ----------
@@ -74,10 +77,10 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
 
     def on_batch_begin(self, info: Dict) -> Dict:
-        """Method to be called at the beginning of each batch.
+        """Method to be called at the beginning of each training (testing) batch.
 
         Parameters
         ----------
@@ -90,10 +93,10 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
 
     def on_batch_end(self, info: Dict) -> Dict:
-        """Method to be called at the end of each batch.
+        """Method to be called at the end of each training (testing) batch.
 
         Parameters
         ----------
@@ -106,4 +109,70 @@ class Callback:
 
         """
 
-        pass
+        raise NotImplemented
+
+    # Validation methods
+
+    def on_val_begin(self, info: Dict) -> Dict:
+        """Method to be called at the beginning of validation.
+
+        Parameters
+        ----------
+        info : dict
+            The information that has to be passed to the callback
+
+        Returns
+        -------
+        Config instance of the produced information
+
+        """
+
+        raise NotImplemented
+
+    def on_val_end(self, info: Dict) -> Dict:
+        """Method to be called at the end of validation.
+
+        Parameters
+        ----------
+        info : dict
+            The information that has to be passed to the callback
+
+        Returns
+        -------
+        Config instance of the produced information
+
+        """
+
+        raise NotImplemented
+
+    def on_val_batch_begin(self, info: Dict) -> Dict:
+        """Method to be called at the beginning of each validation batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information that has to be passed to the callback
+
+        Returns
+        -------
+        Config instance of the produced information
+
+        """
+
+        raise NotImplemented
+
+    def on_val_batch_end(self, info: Dict) -> Dict:
+        """Method to be called at the end of each validation batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information that has to be passed to the callback
+
+        Returns
+        -------
+        Config instance of the produced information
+
+        """
+
+        raise NotImplemented
