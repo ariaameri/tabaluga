@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import logging
 import sys
 from tqdm import tqdm
@@ -10,7 +10,7 @@ class Logger:
     """An abstract base/parent class for all logger classes."""
 
     # Keep track of how many logger instances we have
-    _counter = [0]
+    _counter: List[int] = [0]
 
     # TODO: Figure out the way configurations have to be passed to the class
 
@@ -39,7 +39,7 @@ class Logger:
         self._config = config
 
         # The level at which we log
-        self._level = config.level
+        self._level: int = config.level
 
         # Get the logger
         self._logger = logging.getLogger(config.name)  # TODO: For later: check if the name already exists
