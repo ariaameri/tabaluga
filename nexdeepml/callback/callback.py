@@ -1,4 +1,5 @@
 from typing import Dict
+from ..logger.logger import TQDMLogger
 
 
 class Callback:
@@ -15,7 +16,7 @@ class Callback:
 
     # Training (testing) methods
 
-    def on_begin(self, info: Dict) -> Dict:
+    def on_begin(self, info: Dict):
         """Method to be called at the beginning of training (testing).
 
         Parameters
@@ -31,7 +32,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_end(self, info: Dict) -> Dict:
+    def on_end(self, info: Dict):
         """Method to be called at the end of training (testing).
 
         Parameters
@@ -47,7 +48,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_epoch_begin(self, info: Dict) -> Dict:
+    def on_epoch_begin(self, info: Dict):
         """Method to be called at the beginning of each training (testing) epoch.
 
         Parameters
@@ -63,7 +64,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_epoch_end(self, info: Dict) -> Dict:
+    def on_epoch_end(self, info: Dict):
         """Method to be called at the end of each training (testing) epoch.
 
         Parameters
@@ -79,7 +80,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_batch_begin(self, info: Dict) -> Dict:
+    def on_batch_begin(self, info: Dict):
         """Method to be called at the beginning of each training (testing) batch.
 
         Parameters
@@ -95,7 +96,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_batch_end(self, info: Dict) -> Dict:
+    def on_batch_end(self, info: Dict):
         """Method to be called at the end of each training (testing) batch.
 
         Parameters
@@ -113,7 +114,7 @@ class Callback:
 
     # Validation methods
 
-    def on_val_begin(self, info: Dict) -> Dict:
+    def on_val_begin(self, info: Dict):
         """Method to be called at the beginning of validation.
 
         Parameters
@@ -129,7 +130,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_val_end(self, info: Dict) -> Dict:
+    def on_val_end(self, info: Dict):
         """Method to be called at the end of validation.
 
         Parameters
@@ -145,7 +146,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_val_batch_begin(self, info: Dict) -> Dict:
+    def on_val_batch_begin(self, info: Dict):
         """Method to be called at the beginning of each validation batch.
 
         Parameters
@@ -161,7 +162,7 @@ class Callback:
 
         raise NotImplemented
 
-    def on_val_batch_end(self, info: Dict) -> Dict:
+    def on_val_batch_end(self, info: Dict):
         """Method to be called at the end of each validation batch.
 
         Parameters
