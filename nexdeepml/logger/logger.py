@@ -135,7 +135,7 @@ class TQDMLogger(Logger, io.StringIO):
         # The number of total epochs
         self._n_epochs: int = config.n_epochs
 
-    def set_total(self, total: int) -> None:
+    def reset(self, total: int) -> None:
         """Set the total number of iterations and resets the tqdm.
 
         Also, the number is updated in self._config.total

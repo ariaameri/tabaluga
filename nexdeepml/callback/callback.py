@@ -200,7 +200,7 @@ class TQDMCallback(Callback):
         """
 
         total_iterations: int = info['total_iterations']
-        self._tqdm.set_total(total_iterations)
+        self._tqdm.reset(total_iterations)
 
     def on_batch_end(self, info: Dict):
         """Updates the tqdm progress bar.
