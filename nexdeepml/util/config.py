@@ -17,6 +17,23 @@ class ConfigParser:
         for key, value in config_dict.items():
             setattr(self, key, self._init_helper(value))
 
+    @classmethod
+    def create_from_file(cls, file_path: str):
+        """A classmethod that creates an instance of the class by taking a yaml file and loading its data.
+
+        Parameters
+        ----------
+        file_path : str
+            The absolute (or relative) path to the yaml file to be read
+        """
+
+        # Read the file
+        with open(file_path) as file:
+            config_dict = yaml.full_load(file)
+
+        # Return instance of the class
+        return cls(config_dict)
+
     def _init_helper(self, config: Any) -> Any:
         """Helper method for the constructor to recursively construct the config class.
 
