@@ -11,9 +11,16 @@ class Callback(base.BaseWorker):
 
         super().__init__()
 
-    # TODO: Figure out the type of output for the callback functions
-    # TODO: Does callback have to perform the change or pass it back to the trainer to do the change?
-    # TODO: Do we get to save a config?
+# TODO: Do we get to save a config?
+
+
+class CallbackManager(base.BaseManager):
+    """"A class that manages Callback instances and calls their events on the occurrence of events."""
+
+    def __init__(self):
+        """Initializes the callback manager class."""
+
+        super().__init__()
 
 
 class TQDMCallback(Callback):
