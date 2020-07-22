@@ -198,6 +198,22 @@ class BaseManager(BaseWorker):
 
         self.workers: List[BaseWorker] = []
 
+    def get_worker(self, index: int):
+        """Returns the worker given its index.
+
+        Parameters
+        ----------
+        index : int
+            The index of the worker in class' worker list
+
+        Returns
+        -------
+        worker : BaseWorker
+            Reference to the worker inquired
+        """
+
+        return self.workers[index]
+
     def on_begin(self, info: Dict):
         """Method to be called at the event of beginning of training.
 
