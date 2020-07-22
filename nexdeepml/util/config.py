@@ -88,3 +88,12 @@ class ConfigParser:
             out = config
 
         return out
+
+    def __getattr__(self, item):
+        """Method to help with getting an attribute.
+
+        Using this method, if the requested attribute does not exist,
+        a default value of None will be returned.
+        """
+
+        return None
