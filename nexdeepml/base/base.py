@@ -9,7 +9,31 @@ class BaseWorker:
 
         pass
 
-    # Training event methods
+    # General events
+
+    def on_epoch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each training epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_epoch_end(self, info: Dict):
+        """Method to be called at the event of end of each training epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
 
     def on_begin(self, info: Dict):
         """Method to be called at the event of beginning of training.
@@ -34,9 +58,21 @@ class BaseWorker:
         """
 
         pass
+        """Method to be called at the event of end of each training epoch.
 
-    def on_epoch_begin(self, info: Dict):
-        """Method to be called at the event of beginning of each training epoch.
+        Parameters
+        ----------
+        info : dict
+            The information that has to be passed to the callback
+
+        """
+
+        pass
+
+    # Training event methods
+
+    def on_train_begin(self, info: Dict):
+        """Method to be called at the event of beginning of training.
 
         Parameters
         ----------
@@ -47,13 +83,37 @@ class BaseWorker:
 
         pass
 
-    def on_epoch_end(self, info: Dict):
-        """Method to be called at the event of end of each training epoch.
+    def on_train_end(self, info: Dict):
+        """Method to be called at the event of end of training.
 
         Parameters
         ----------
         info : dict
-            The information that has to be passed to the callback
+            The information needed
+
+        """
+
+        pass
+
+    def on_train_epoch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each epoch for training.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_train_epoch_end(self, info: Dict):
+        """Method to be called at the event of end of each epoch for training.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
 
         """
 
@@ -72,6 +132,30 @@ class BaseWorker:
         pass
 
     def on_batch_end(self, info: Dict):
+        """Method to be called at the event of end of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_train_batch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_train_batch_end(self, info: Dict):
         """Method to be called at the event of end of each training batch.
 
         Parameters
@@ -106,6 +190,30 @@ class BaseWorker:
             The information needed
 
         """
+
+        pass
+
+    def on_val_epoch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each validation epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_val_epoch_end(self, info: Dict):
+        """Method to be called at the event of end of each validation epoch.
+
+            Parameters
+            ----------
+            info : dict
+                The information needed
+
+            """
 
         pass
 
@@ -214,6 +322,8 @@ class BaseManager(BaseWorker):
 
         return self.workers[index]
 
+    # General events
+
     def on_begin(self, info: Dict):
         """Method to be called at the event of beginning of training.
 
@@ -266,6 +376,60 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_epoch_end(info)
 
+    # Training event methods
+
+    def on_train_begin(self, info: Dict):
+        """Method to be called at the event of beginning of training.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_begin(info)
+
+    def on_train_end(self, info: Dict):
+        """Method to be called at the event of end of training.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_end(info)
+
+    def on_train_epoch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each training epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_epoch_begin(info)
+
+    def on_train_epoch_end(self, info: Dict):
+        """Method to be called at the event of end of each training epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_epoch_end(info)
+
     def on_batch_begin(self, info: Dict):
         """Method to be called at the event of beginning of each training batch.
 
@@ -291,6 +455,32 @@ class BaseManager(BaseWorker):
 
         for worker in self.workers:
             worker.on_batch_end(info)
+
+    def on_train_batch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_batch_begin(info)
+
+    def on_train_batch_end(self, info: Dict):
+        """Method to be called at the event of end of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_train_batch_end(info)
 
     # Validation event methods
 
@@ -345,6 +535,32 @@ class BaseManager(BaseWorker):
 
         for worker in self.workers:
             worker.on_val_batch_end(info)
+
+    def on_val_epoch_begin(self, info: Dict):
+        """Method to be called at the event of beginning of each validation epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_val_epoch_begin(info)
+
+    def on_val_epoch_end(self, info: Dict):
+        """Method to be called at the event of end of each validation epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            worker.on_val_epoch_end(info)
 
     # Test event methods
 
