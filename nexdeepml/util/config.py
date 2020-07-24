@@ -97,3 +97,26 @@ class ConfigParser:
         """
 
         return None
+
+    def __setattr__(self, name, value):
+        """Method to help with setting an attribute.
+
+        Using this method, if the requested attribute does not exist,
+        sets it and if it exists, raises an error.
+        """
+
+        if name in self.__dict__:
+            raise Exception(f"Value of {name} exists. Cannot change value of {name} due to immutability.")
+        else:
+            self.__dict__[name] = value
+
+    def is_empty(self) -> bool:
+        """EXPERIMENTAL: A checker method that tells whether this instance of config is empty or not
+
+        Returns
+        -------
+        bool
+            True if this class is empty and False otherwise
+        """
+
+        return not bool(self.__dict__)
