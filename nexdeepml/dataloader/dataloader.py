@@ -230,43 +230,38 @@ class DataLoader(base.BaseWorker):
         super().__init__()
 
         # Set the config and metadata
-        self._config = config
-        self.metadata = metadata
+        self._config: ConfigParser = config
+        self.metadata: pd.DataFrame = metadata
+
+        # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
+        self.batch_size: int
+        self.number_of_iterations: int
+
+        # Book keeping for iterator
+        self._iterator_count = 0
+
+    def modify_metadata(self) -> None:
+        """Checks how to create metadata from input source and create train, validation, and test metadata."""
+
+        # Make a selection of the metadata
+        selection = [self._check_file(file_path) for file_path in self.metadata['path']]
+
+        # Update the metadata
+        self.metadata = self.metadata.iloc[selection]
+
+    def _check_file(self, file_path: str) -> bool:
+        """"Helper function to check a single file.
 
         Parameters
         ----------
-        config : ConfigParser
-            The configuration for the instance
-        metadata : pd.DataFrame
-            The metadata for the data to be loaded
+        file_path : str
+            The path of the file
         """
 
-        super().__init__(config, metadata)
+        # Check criteria for the file name
+        check = self._filter_file_name(file_path.split('/')[-1])
 
-        # Modify the metadata
-        self.modify_metadata()
-
-    def load_data(self, metadata: pd.DataFrame):
-        """Loads images provided in the metadata data frame.
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            Panda's data frame containing the image metadata to be loaded
-
-        Returns
-        -------
-        List of images : List[np.ndarray]
-
-        NOTE: This function returns a list of numpy arrays and not a single numpy array.
-                This is because images might be of different sizes and may need to be
-                preprocessed at a later time.
-
-        """
-
-        images = [plt.imread(row['path']) for index, row in metadata.iterrows()]
-
-        return images
+        return check
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
@@ -277,7 +272,92 @@ class DataLoader(base.BaseWorker):
             The path of the file
         """
 
-        extension = file_name.split('.')[-1].lower()
-        accepted_extension = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'eps']
+        return True
 
-        return True if extension in accepted_extension else False
+    def set_batch_size(self, batch_size: int) -> None:
+        """Sets the batch size and thus finds the total number of batches in one epoch.
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        self.batch_size = batch_size
+        self.number_of_iterations = len(self.metadata) // batch_size
+
+    def load_data(self, metadata: pd.DataFrame):
+        """Loads data provided in the metadata data frame.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            Panda's data frame containing the data metadata to be loaded
+
+        Returns
+        -------
+        Loaded data
+
+        """
+
+        pass
+
+    def __len__(self) -> int:
+        """Gives the total number of iterations this data loader will go through.
+
+        Returns
+        -------
+        Total number of batches in each epoch
+
+        """
+
+        return self.number_of_iterations
+
+    def __next__(self):
+        """Returns the next set of images.
+
+        Returns
+        -------
+        A list of next set of images : List[np.ndarray]
+
+        """
+
+        # if the batch size is more that the amount of data left, go to beginning
+        if self._iterator_count >= self.number_of_iterations:
+            self._iterator_count = 0
+        # Find the correct begin index and slice the metadata
+        begin_index = self._iterator_count * self.batch_size
+        metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
+
+        # Load the images
+        images = self.load_data(metadata)
+
+        return images
+
+    def __getitem__(self, item: int):
+        """Returns the item-th batch of the image data.
+
+        Parameters
+        ----------
+        item : int
+            The index of the batch of the image data to be returned
+
+        Returns
+        -------
+        A list of the image data loaded : List[np.ndarray]
+
+        """
+
+        # Check if item count is sensible
+        assert item < self.number_of_iterations, \
+            f'Requested number of images to be loaded goes beyond the end of available data.'
+
+        # Find the corresponding metadata
+        begin_index = item * self.batch_size
+        metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
+
+        # Load the images
+        images = self.load_data(metadata)
+
+        return images
