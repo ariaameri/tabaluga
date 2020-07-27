@@ -157,43 +157,43 @@ class DataManager(base.BaseManager):
 class DataLoaderManager(base.BaseManager):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
-    def __init__(self, metadata: pd.DataFrame, config: ConfigParser):
+    def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
         """Initializer for data loader manager.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
-            The metadata for the data to be loaded
         config : ConfigParser
             The configuration for the instance
+        metadata : pd.DataFrame
+            The metadata for the data to be loaded
         """
 
         super().__init__()
 
         # Set the config and metadata
-        self.metadata = metadata
         self._config = config
+        self.metadata = metadata
 
 
 class DataLoader(base.BaseWorker):
     """This abstract class loads the data."""
 
-    def __init__(self, metadata: pd.DataFrame, config: ConfigParser):
+    def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
         """Initializer for data loader.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
-            The metadata for the data to be loaded
         config : ConfigParser
             The configuration for the instance
+        metadata : pd.DataFrame
+            The metadata for the data to be loaded
         """
 
         super().__init__()
 
         # Set the config and metadata
-        self.metadata = metadata
         self._config = config
+        self.metadata = metadata
 
 
 
