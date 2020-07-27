@@ -4,6 +4,7 @@ import os
 from typing import List
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 class DataManager(base.BaseManager):
@@ -174,6 +175,43 @@ class DataLoaderManager(base.BaseManager):
         self._config = config
         self.metadata = metadata
 
+        # Modify the metadata
+        self.modify_metadata()
+
+    def modify_metadata(self) -> None:
+        """Checks how to create metadata from input source and create train, validation, and test metadata."""
+
+        # Make a selection of the metadata
+        selection = [self._check_file(file_path) for file_path in self.metadata['path']]
+
+        # Update the metadata
+        self.metadata = self.metadata.iloc[selection]
+
+    def _check_file(self, file_path: str) -> bool:
+        """"Helper function to check a single file.
+
+        Parameters
+        ----------
+        file_path : str
+            The path of the file
+        """
+
+        # Check criteria for the file name
+        check = self._filter_file_name(file_path.split('/')[-1])
+
+        return check
+
+    def _filter_file_name(self, file_name: str) -> bool:
+        """"Helper function to filter a single file based on its name and criteria.
+
+        Parameters
+        ----------
+        file_name : str
+            The path of the file
+        """
+
+        return True
+
 
 class DataLoader(base.BaseWorker):
     """This abstract class loads the data."""
@@ -195,5 +233,51 @@ class DataLoader(base.BaseWorker):
         self._config = config
         self.metadata = metadata
 
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration for the instance
+        metadata : pd.DataFrame
+            The metadata for the data to be loaded
+        """
 
+        super().__init__(config, metadata)
 
+        # Modify the metadata
+        self.modify_metadata()
+
+    def load_data(self, metadata: pd.DataFrame):
+        """Loads images provided in the metadata data frame.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            Panda's data frame containing the image metadata to be loaded
+
+        Returns
+        -------
+        List of images : List[np.ndarray]
+
+        NOTE: This function returns a list of numpy arrays and not a single numpy array.
+                This is because images might be of different sizes and may need to be
+                preprocessed at a later time.
+
+        """
+
+        images = [plt.imread(row['path']) for index, row in metadata.iterrows()]
+
+        return images
+
+    def _filter_file_name(self, file_name: str) -> bool:
+        """"Helper function to filter a single file based on its name and criteria.
+
+        Parameters
+        ----------
+        file_name : str
+            The path of the file
+        """
+
+        extension = file_name.split('.')[-1].lower()
+        accepted_extension = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'eps']
+
+        return True if extension in accepted_extension else False
