@@ -1,9 +1,11 @@
+from ..util.config import ConfigParser
 from typing import Dict, List
 import logging
 import sys
 from tqdm import tqdm
 import numpy as np
 import io
+from datetime import datetime
 
 
 class Logger:
@@ -14,23 +16,23 @@ class Logger:
 
     # TODO: Figure out the way configurations have to be passed to the class
 
-    def __init__(self, config):
+    def __init__(self, config: ConfigParser):
         """Initializes the logger class
 
         Parameters
         ----------
-        config
+        config : ConfigParser
             The configuration for the logger class
             It should consist of the following attributes
-                name : str
+                name : str, optional
                     The name of the logger
-                level : {logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL}
+                level : {logging.NOTSET, logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL}, optional
                     The level at which logging should happen.
-                format : str
+                format : str, optional
                     The format at which the logger should log
-                console : boolean
-                    Whether or not to log to console. If false, will write to file whose path is provided by filename
-                filename : str
+                console : boolean, optional
+                    Whether or not to log to console. If false, will write to file whose path is provided by file_name
+                file_name : str, optional
                     The path of the file to write the log file to. Can be omitted if console is False
 
         """
@@ -39,24 +41,30 @@ class Logger:
         self._config = config
 
         # The level at which we log
-        self._level: int = config.level
+        self._level: int = config.level if config.level is not None else logging.INFO
 
         # Get the logger
-        self._logger = logging.getLogger(config.name)  # TODO: For later: check if the name already exists
+        self._logger = logging.getLogger(config.name if config.name is not None else self._counter[0])
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
 
         # TODO: Should we have logging to both the console and the file?
         # Determine whether to write to file or console and get the handlers
-        if config.console is True:
+        self.console = config.console
+        if self.console is True:
             self._handler = logging.StreamHandler(sys.stdout)
         else:
-            self._handler = logging.FileHandler(config.filename)
+            file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            file_name = f'{file_name}.txt'
+            self._handler = logging.FileHandler(config.file_name if config.file_name is not None else file_name)
 
         # Set the level, format, and attach
-        self._handler.setLevel(config.level)
-        self._handler.setFormatter(logging.Formatter(config.format))
+        self._handler.setLevel(config.level if config.level is not None else logging.INFO)
+        self._handler.setFormatter(
+            logging.Formatter(
+                config.format if config.format is not None else '%(asctime)s - %(name)s - %(levelname)s: %(message)s'
+            ))
         self._logger.addHandler(self._handler)
 
     def info(self, msg: str) -> None:
@@ -113,10 +121,12 @@ class TQDMLogger(Logger, io.StringIO):
 
     # TODO: Write the doc for the config argument
 
-    def __init__(self, config):
+    def __init__(self, config: ConfigParser):
 
         # Making sure the logger is going to write to the console
-        config.console = True
+        assert config.console is True, "console config is not True for TQDM!"
+
+        self._config = config
 
         Logger.__init__(self, config)
         io.StringIO.__init__(self)
@@ -147,7 +157,6 @@ class TQDMLogger(Logger, io.StringIO):
 
         self._tqdm.reset(total=total)
         self._total = total
-        self._config.total = total
 
     def close(self) -> None:
         """Finishes and closes the tqdm instance."""
