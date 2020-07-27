@@ -1,6 +1,8 @@
 from . import preprocess
+from ...util.config import ConfigParser
 from typing import List, Union
 import numpy as np
+import cv2
 
 
 class ImageNormalizer(preprocess.Preprocess):
@@ -39,5 +41,65 @@ class ImageNormalizer(preprocess.Preprocess):
             output = images / 255.
         else:
             raise Exception('Unrecognized format passed to the image normalizer!')
+
+        return output
+
+
+class ImageResizer(preprocess.Preprocess):
+    """Resizes images."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            Contains the config needed including:
+                destination_image_size : (int, int)
+                    The image size to resize images to.
+                interpolation, optional
+                    The type of interpolation to use
+
+        """
+
+        self.destination_image_size = config.destination_image_size
+
+        self.interpolation = config.interpolation if config.interpolation is not None else cv2.INTER_AREA
+
+        super().__init__()
+
+    def resize(self, images: Union[List[np.ndarray], np.ndarray]) -> Union[List[np.ndarray], np.ndarray]:
+        """"Resizes the images given.
+
+        Parameters
+        ----------
+        images : Union[List[np.ndarray], np.ndarray]
+            An iterable collection containing the image to be resized
+
+        Returns
+        -------
+        Collection of resized image data
+
+        """
+
+        # Get the type of the iterable
+        collection_type = type(images)
+
+        output = [
+            cv2.resize(
+                image,
+                dsize=self.destination_image_size,
+                interpolation=self.interpolation
+            )
+            for image
+            in images
+        ]
+
+        if collection_type == list:
+            pass
+        elif collection_type == np.ndarray:
+            output = np.array(output)
+        else:
+            raise Exception('Unrecognized format passed to the image resizer!')
 
         return output
