@@ -300,11 +300,51 @@ class BaseManager(BaseWorker):
     """
 
     def __init__(self):
-        """Initializes the manager."""
+        """Initializes the manager.
+
+        Goes over all the methods that start with 'on_' and calls the same event over all its workers.
+
+        """
 
         super().__init__()
 
         self.workers: List[BaseWorker] = []
+
+        # Call the events on each worker for each event starting with 'on_'
+        self._method_names: List[str] = [method for method in dir(self) if method.startswith('on_')]
+        for method_name in self._method_names:
+            setattr(self, method_name, self._event_helper(method_name))
+        pass
+
+    def _event_helper(self, method_name: str):
+        """Helper function that returns a generic event function.
+
+        Parameters
+        ----------
+        method_name : str
+            The name of the method for which event is being generated
+
+        Returns
+        -------
+        An event function
+        """
+
+        def _event(info: Dict = None):
+
+            """An event function.
+
+            Parameters
+            ----------
+            info : dict
+                The information needed
+
+            """
+
+            for worker in this.workers:
+                getattr(worker, method_name)(info)
+
+        this = self
+        return _event
 
     def get_worker(self, index: int):
         """Returns the worker given its index.
@@ -326,297 +366,3 @@ class BaseManager(BaseWorker):
         """Creates and initializes workers."""
 
         pass
-
-    # General events
-
-    def on_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of training.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_begin(info)
-
-    def on_end(self, info: Dict = None):
-        """Method to be called at the event of end of training.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_end(info)
-
-    def on_epoch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each training epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_epoch_begin(info)
-
-    def on_epoch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each training epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information that has to be passed to the callback
-
-        """
-
-        for worker in self.workers:
-            worker.on_epoch_end(info)
-
-    # Training event methods
-
-    def on_train_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of training.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_begin(info)
-
-    def on_train_end(self, info: Dict = None):
-        """Method to be called at the event of end of training.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_end(info)
-
-    def on_train_epoch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each training epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_epoch_begin(info)
-
-    def on_train_epoch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each training epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_epoch_end(info)
-
-    def on_batch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each training batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_batch_begin(info)
-
-    def on_batch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each training batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_batch_end(info)
-
-    def on_train_batch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each training batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_batch_begin(info)
-
-    def on_train_batch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each training batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_train_batch_end(info)
-
-    # Validation event methods
-
-    def on_val_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of validation.
-
-        Parameters
-        ----------
-        info : dict
-            The information that has to be passed to the callback
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_begin(info)
-
-    def on_val_end(self, info: Dict = None):
-        """Method to be called at event of the end of validation.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_end(info)
-
-    def on_val_batch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each validation batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_batch_begin(info)
-
-    def on_val_batch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each validation batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_batch_end(info)
-
-    def on_val_epoch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each validation epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_epoch_begin(info)
-
-    def on_val_epoch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each validation epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_val_epoch_end(info)
-
-    # Test event methods
-
-    def on_test_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of testing.
-
-        Parameters
-        ----------
-        info : dict
-            The information that has to be passed to the callback
-
-        """
-
-        for worker in self.workers:
-            worker.on_test_begin(info)
-
-    def on_test_end(self, info: Dict = None):
-        """Method to be called at event of the end of testing.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_test_end(info)
-
-    def on_test_batch_begin(self, info: Dict = None):
-        """Method to be called at the event of beginning of each testing batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_test_batch_begin(info)
-
-    def on_test_batch_end(self, info: Dict = None):
-        """Method to be called at the event of end of each testing batch.
-
-        Parameters
-        ----------
-        info : dict
-            The information needed
-
-        """
-
-        for worker in self.workers:
-            worker.on_test_batch_end(info)
