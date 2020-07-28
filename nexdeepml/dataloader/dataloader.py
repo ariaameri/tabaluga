@@ -53,6 +53,9 @@ class DataManager(base.BaseManager):
         # Create general and train, val, test metadata
         self.create_metadata()
 
+        # Create workers
+        self.create_workers()
+
     def create_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
@@ -189,6 +192,9 @@ class DataLoaderManager(base.BaseManager):
         self._iterator_count = 0
         self.batch_size: int
 
+        # Create workers
+        self.create_workers()
+
     def modify_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
@@ -222,11 +228,6 @@ class DataLoaderManager(base.BaseManager):
         """
 
         return True
-
-    def create_workers(self) -> None:
-        """Creates and initializes the DataLoaders it manages."""
-
-        pass
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
