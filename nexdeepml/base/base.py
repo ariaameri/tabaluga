@@ -322,6 +322,11 @@ class BaseManager(BaseWorker):
 
         return self.workers[index]
 
+    def create_workers(self):
+        """Creates and initializes workers."""
+
+        pass
+
     # General events
 
     def on_begin(self, info: Dict = None):
