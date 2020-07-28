@@ -234,7 +234,7 @@ class DataLoader(base.BaseWorker):
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int
-        self.number_of_iterations: int
+        self.number_of_iterations: float  # Keeping it float to take care of the very last batch
 
         # Book keeping for iterator
         self._iterator_count = 0
@@ -284,7 +284,7 @@ class DataLoader(base.BaseWorker):
         """
 
         self.batch_size = batch_size
-        self.number_of_iterations = len(self.metadata) // batch_size
+        self.number_of_iterations = len(self.metadata) / batch_size
 
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
@@ -311,7 +311,7 @@ class DataLoader(base.BaseWorker):
 
         """
 
-        return self.number_of_iterations
+        return int(self.number_of_iterations)
 
     def __next__(self):
         """Returns the next set of images.
@@ -322,9 +322,11 @@ class DataLoader(base.BaseWorker):
 
         """
 
-        # if the batch size is more that the amount of data left, go to beginning
-        if self._iterator_count >= self.number_of_iterations:
+        # if the batch size is more that the amount of data left, go to beginning and return None
+        if self._iterator_count > self.number_of_iterations:
             self._iterator_count = 0
+            return None
+
         # Find the correct begin index and slice the metadata
         begin_index = self._iterator_count * self.batch_size
         metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
@@ -349,7 +351,7 @@ class DataLoader(base.BaseWorker):
         """
 
         # Check if item count is sensible
-        assert item < self.number_of_iterations, \
+        assert item <= self.number_of_iterations, \
             f'Requested number of images to be loaded goes beyond the end of available data.'
 
         # Find the corresponding metadata
