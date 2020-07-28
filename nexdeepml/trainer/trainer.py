@@ -4,9 +4,10 @@ import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
 from typing import Union, List, Dict
+from abc import ABC, abstractmethod
 
 
-class Trainer(base.BaseWorker):
+class Trainer(base.BaseWorker, ABC):
     """A class to help with training a neural network."""
 
     def __init__(self, config: ConfigParser):
@@ -65,10 +66,11 @@ class Trainer(base.BaseWorker):
 
             self.batch += 1
 
+    @abstractmethod
     def train_one_batch(self) -> Dict:
         """Trains the neural network for one batch."""
 
-        pass
+        raise NotImplementedError
 
     def val_one_epoch(self) -> Dict:
         """Performs validation for the neural network for one epoch."""
@@ -92,10 +94,11 @@ class Trainer(base.BaseWorker):
 
             self.batch += 1
 
+    @abstractmethod
     def val_one_batch(self) -> Dict:
         """Performs validation for the neural network for one batch."""
 
-        pass
+        raise NotImplementedError
 
     def one_epoch(self) -> Dict:
         """Performs the training and validation for one epoch."""
