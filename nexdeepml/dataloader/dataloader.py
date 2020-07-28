@@ -45,6 +45,14 @@ class DataManager(base.BaseManager):
         self.val_metadata: pd.DataFrame
         self.train_metadata: pd.DataFrame
 
+        # Train, val, and test DataLoaderManager placeholders
+        self.workers['train']: DataLoaderManager
+        self.workers['val']: DataLoaderManager
+        self.workers['test']: DataLoaderManager
+
+        # Create general and train, val, test metadata
+        self.create_metadata()
+
     def create_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
