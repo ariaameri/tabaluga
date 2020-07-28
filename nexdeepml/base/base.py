@@ -309,7 +309,7 @@ class BaseManager(BaseWorker):
 
         super().__init__()
 
-        self.workers: OrderedDict[BaseWorker] = OrderedDict()
+        self.workers: OrderedDict = OrderedDict()
 
         # Call the events on each worker for each event starting with 'on_'
         self._method_names: List[str] = [method for method in dir(self) if method.startswith('on_')]
