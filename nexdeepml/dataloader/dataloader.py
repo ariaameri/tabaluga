@@ -1,3 +1,5 @@
+from abc import ABC, abstractmethod
+
 from ..base import base
 from ..util.config import ConfigParser
 import os
@@ -6,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 
-class DataManager(base.BaseManager):
+class DataManager(base.BaseManager, ABC):
     """This abstract class manages the DataLoader or DataLoader Managers.
 
     It is responsible to distribute the train/validation/test metadata among the data loaders."""
@@ -165,7 +167,7 @@ class DataManager(base.BaseManager):
              in [self.train_metadata, self.val_metadata, self.test_metadata]]
 
 
-class DataLoaderManager(base.BaseManager):
+class DataLoaderManager(base.BaseManager, ABC):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
     def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
@@ -274,6 +276,7 @@ class DataLoaderManager(base.BaseManager):
 
         return data
 
+    @abstractmethod
     def __getitem__(self, item: int):
         """Returns the item-th batch of the data.
 
@@ -291,7 +294,7 @@ class DataLoaderManager(base.BaseManager):
         raise NotImplementedError
 
 
-class DataLoader(base.BaseWorker):
+class DataLoader(base.BaseWorker, ABC):
     """This abstract class loads the data."""
 
     def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
@@ -365,6 +368,7 @@ class DataLoader(base.BaseWorker):
         self.batch_size = batch_size
         self.number_of_iterations = len(self.metadata) / batch_size
 
+    @abstractmethod
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
 
