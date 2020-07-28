@@ -153,6 +153,15 @@ class DataManager(base.BaseManager):
              for df
              in [self.train_metadata, self.val_metadata, self.test_metadata]]
 
+    def create_workers(self) -> None:
+        """Creates and initializes DataLoaderManagers."""
+
+        # Create the train, val, and test DataLoaderManager's
+        # Their config is empty currently
+        self.workers['train'] = DataLoaderManager(ConfigParser(), self.train_metadata)
+        self.workers['val'] = DataLoaderManager(ConfigParser(), self.val_metadata)
+        self.workers['test'] = DataLoaderManager(ConfigParser(), self.test_metadata)
+
 
 class DataLoaderManager(base.BaseManager):
     """This abstract class manages the data loaders and gets input from DataManager."""
