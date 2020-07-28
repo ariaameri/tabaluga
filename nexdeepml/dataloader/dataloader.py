@@ -161,15 +161,6 @@ class DataManager(base.BaseManager):
              for df
              in [self.train_metadata, self.val_metadata, self.test_metadata]]
 
-    def create_workers(self) -> None:
-        """Creates and initializes DataLoaderManagers."""
-
-        # Create the train, val, and test DataLoaderManager's
-        # Their config is empty currently
-        self.workers['train'] = DataLoaderManager(ConfigParser(), self.train_metadata)
-        self.workers['val'] = DataLoaderManager(ConfigParser(), self.val_metadata)
-        self.workers['test'] = DataLoaderManager(ConfigParser(), self.test_metadata)
-
 
 class DataLoaderManager(base.BaseManager):
     """This abstract class manages the data loaders and gets input from DataManager."""
@@ -193,6 +184,10 @@ class DataLoaderManager(base.BaseManager):
 
         # Modify the metadata
         self.modify_metadata()
+
+        # Book keeping for batch size and iterator
+        self._iterator_count = 0
+        self.batch_size: int
 
     def modify_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
@@ -233,19 +228,66 @@ class DataLoaderManager(base.BaseManager):
 
         pass
 
+    def set_batch_size(self, batch_size: int) -> None:
+        """Sets the batch size and thus finds the total number of batches in one epoch.
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        self.batch_size = batch_size
+        self.number_of_iterations = len(self.metadata) / batch_size
+
+        # Set batch size of all the workers
+        for _, worker in self.workers.items():
+            worker.set_batch_size(batch_size)
+
     def __len__(self) -> int:
         """Returns the length of the instance.
-
-        This returns the length of the first worker.
 
         IMPORTANT: The length of all workers must be the same.
 
         """
 
-        # Get the index of the first worker
-        index = list(self.workers.keys())[0]
+        return int(self.number_of_iterations)
 
-        return len(self.workers[index])
+    def __next__(self):
+        """Returns the next set of data.
+
+        Returns
+        -------
+        A collection of next set of data
+
+        """
+
+        # if the batch size is more that the amount of data left, go to beginning and return None
+        if self._iterator_count > self.number_of_iterations:
+            self._iterator_count = 0
+            return None
+
+        # Load the data
+        data = self.__getitem__(self._iterator_count)
+
+        return data
+
+    def __getitem__(self, item: int):
+        """Returns the item-th batch of the data.
+
+        Parameters
+        ----------
+        item : int
+            The index of the batch of the data to be returned
+
+        Returns
+        -------
+        A list of the data loaded
+
+        """
+
+        pass
 
 
 class DataLoader(base.BaseWorker):
@@ -363,12 +405,8 @@ class DataLoader(base.BaseWorker):
             self._iterator_count = 0
             return None
 
-        # Find the correct begin index and slice the metadata
-        begin_index = self._iterator_count * self.batch_size
-        metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
-
-        # Load the images
-        data = self.load_data(metadata)
+        # Load the data
+        data = self.__getitem__(self._iterator_count)
 
         return data
 
@@ -382,7 +420,7 @@ class DataLoader(base.BaseWorker):
 
         Returns
         -------
-        A list of the image data loaded
+        A list of the data loaded
 
         """
 
