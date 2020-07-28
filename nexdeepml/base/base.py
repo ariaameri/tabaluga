@@ -360,4 +360,4 @@ class BaseManager(BaseWorker):
     def create_workers(self):
         """Creates and initializes workers."""
 
-        pass
+        raise NotImplementedError
