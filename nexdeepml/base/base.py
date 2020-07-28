@@ -1,5 +1,6 @@
 from typing import List, Dict, Union
 from collections import OrderedDict
+from abc import ABC, abstractmethod
 
 
 class BaseWorker:
@@ -283,7 +284,7 @@ class BaseWorker:
         pass
 
 
-class BaseManager(BaseWorker):
+class BaseManager(BaseWorker, ABC):
     """This abstract class servers as the parent of all manager classes.
 
     All managers are assumed to have self.workers: List[BaseWorker].
@@ -357,6 +358,7 @@ class BaseManager(BaseWorker):
 
         return self.workers[index]
 
+    @abstractmethod
     def create_workers(self):
         """Creates and initializes workers."""
 
