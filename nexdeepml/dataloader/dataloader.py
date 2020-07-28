@@ -220,6 +220,25 @@ class DataLoaderManager(base.BaseManager):
 
         return True
 
+    def create_workers(self) -> None:
+        """Creates and initializes the DataLoaders it manages."""
+
+        pass
+
+    def __len__(self) -> int:
+        """Returns the length of the instance.
+
+        This returns the length of the first worker.
+
+        IMPORTANT: The length of all workers must be the same.
+
+        """
+
+        # Get the index of the first worker
+        index = list(self.workers.keys())[0]
+
+        return len(self.workers[index])
+
 
 class DataLoader(base.BaseWorker):
     """This abstract class loads the data."""
