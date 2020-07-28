@@ -11,7 +11,7 @@ class BaseWorker:
 
     # General events
 
-    def on_epoch_begin(self, info: Dict):
+    def on_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
@@ -23,7 +23,7 @@ class BaseWorker:
 
         pass
 
-    def on_epoch_end(self, info: Dict):
+    def on_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
@@ -35,7 +35,7 @@ class BaseWorker:
 
         pass
 
-    def on_begin(self, info: Dict):
+    def on_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of training.
 
         Parameters
@@ -47,7 +47,7 @@ class BaseWorker:
 
         pass
 
-    def on_end(self, info: Dict):
+    def on_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
 
         Parameters
@@ -71,7 +71,7 @@ class BaseWorker:
 
     # Training event methods
 
-    def on_train_begin(self, info: Dict):
+    def on_train_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of training.
 
         Parameters
@@ -83,7 +83,7 @@ class BaseWorker:
 
         pass
 
-    def on_train_end(self, info: Dict):
+    def on_train_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
 
         Parameters
@@ -95,7 +95,7 @@ class BaseWorker:
 
         pass
 
-    def on_train_epoch_begin(self, info: Dict):
+    def on_train_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each epoch for training.
 
         Parameters
@@ -107,7 +107,7 @@ class BaseWorker:
 
         pass
 
-    def on_train_epoch_end(self, info: Dict):
+    def on_train_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each epoch for training.
 
         Parameters
@@ -119,7 +119,7 @@ class BaseWorker:
 
         pass
 
-    def on_batch_begin(self, info: Dict):
+    def on_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
@@ -131,7 +131,7 @@ class BaseWorker:
 
         pass
 
-    def on_batch_end(self, info: Dict):
+    def on_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
 
         Parameters
@@ -143,7 +143,7 @@ class BaseWorker:
 
         pass
 
-    def on_train_batch_begin(self, info: Dict):
+    def on_train_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
@@ -155,7 +155,7 @@ class BaseWorker:
 
         pass
 
-    def on_train_batch_end(self, info: Dict):
+    def on_train_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
 
         Parameters
@@ -169,7 +169,7 @@ class BaseWorker:
 
     # Validation event methods
 
-    def on_val_begin(self, info: Dict):
+    def on_val_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of validation.
 
         Parameters
@@ -181,7 +181,7 @@ class BaseWorker:
 
         pass
 
-    def on_val_end(self, info: Dict):
+    def on_val_end(self, info: Dict = None):
         """Method to be called at event of the end of validation.
 
         Parameters
@@ -193,7 +193,7 @@ class BaseWorker:
 
         pass
 
-    def on_val_epoch_begin(self, info: Dict):
+    def on_val_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation epoch.
 
         Parameters
@@ -205,7 +205,7 @@ class BaseWorker:
 
         pass
 
-    def on_val_epoch_end(self, info: Dict):
+    def on_val_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation epoch.
 
             Parameters
@@ -217,7 +217,7 @@ class BaseWorker:
 
         pass
 
-    def on_val_batch_begin(self, info: Dict):
+    def on_val_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation batch.
 
         Parameters
@@ -229,7 +229,7 @@ class BaseWorker:
 
         pass
 
-    def on_val_batch_end(self, info: Dict):
+    def on_val_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation batch.
 
             Parameters
@@ -243,7 +243,7 @@ class BaseWorker:
 
     # Test event methods
 
-    def on_test_begin(self, info: Dict):
+    def on_test_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of testing.
 
         Parameters
@@ -255,7 +255,7 @@ class BaseWorker:
 
         pass
 
-    def on_test_end(self, info: Dict):
+    def on_test_end(self, info: Dict = None):
         """Method to be called at event of the end of testing.
 
         Parameters
@@ -267,7 +267,7 @@ class BaseWorker:
 
         pass
 
-    def on_test_batch_begin(self, info: Dict):
+    def on_test_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each testing batch.
 
         Parameters
@@ -279,7 +279,7 @@ class BaseWorker:
 
         pass
 
-    def on_test_batch_end(self, info: Dict):
+    def on_test_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each testing batch.
 
         Parameters
@@ -324,7 +324,7 @@ class BaseManager(BaseWorker):
 
     # General events
 
-    def on_begin(self, info: Dict):
+    def on_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of training.
 
         Parameters
@@ -337,7 +337,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_begin(info)
 
-    def on_end(self, info: Dict):
+    def on_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
 
         Parameters
@@ -350,7 +350,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_end(info)
 
-    def on_epoch_begin(self, info: Dict):
+    def on_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
@@ -363,7 +363,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_epoch_begin(info)
 
-    def on_epoch_end(self, info: Dict):
+    def on_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
@@ -378,7 +378,7 @@ class BaseManager(BaseWorker):
 
     # Training event methods
 
-    def on_train_begin(self, info: Dict):
+    def on_train_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of training.
 
         Parameters
@@ -391,7 +391,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_train_begin(info)
 
-    def on_train_end(self, info: Dict):
+    def on_train_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
 
         Parameters
@@ -404,7 +404,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_train_end(info)
 
-    def on_train_epoch_begin(self, info: Dict):
+    def on_train_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
@@ -417,7 +417,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_train_epoch_begin(info)
 
-    def on_train_epoch_end(self, info: Dict):
+    def on_train_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
@@ -430,7 +430,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_train_epoch_end(info)
 
-    def on_batch_begin(self, info: Dict):
+    def on_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
@@ -443,7 +443,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_batch_begin(info)
 
-    def on_batch_end(self, info: Dict):
+    def on_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
 
         Parameters
@@ -456,7 +456,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_batch_end(info)
 
-    def on_train_batch_begin(self, info: Dict):
+    def on_train_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
@@ -469,7 +469,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_train_batch_begin(info)
 
-    def on_train_batch_end(self, info: Dict):
+    def on_train_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
 
         Parameters
@@ -484,7 +484,7 @@ class BaseManager(BaseWorker):
 
     # Validation event methods
 
-    def on_val_begin(self, info: Dict):
+    def on_val_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of validation.
 
         Parameters
@@ -497,7 +497,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_val_begin(info)
 
-    def on_val_end(self, info: Dict):
+    def on_val_end(self, info: Dict = None):
         """Method to be called at event of the end of validation.
 
         Parameters
@@ -510,7 +510,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_val_end(info)
 
-    def on_val_batch_begin(self, info: Dict):
+    def on_val_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation batch.
 
         Parameters
@@ -523,7 +523,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_val_batch_begin(info)
 
-    def on_val_batch_end(self, info: Dict):
+    def on_val_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation batch.
 
         Parameters
@@ -536,7 +536,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_val_batch_end(info)
 
-    def on_val_epoch_begin(self, info: Dict):
+    def on_val_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation epoch.
 
         Parameters
@@ -549,7 +549,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_val_epoch_begin(info)
 
-    def on_val_epoch_end(self, info: Dict):
+    def on_val_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation epoch.
 
         Parameters
@@ -564,7 +564,7 @@ class BaseManager(BaseWorker):
 
     # Test event methods
 
-    def on_test_begin(self, info: Dict):
+    def on_test_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of testing.
 
         Parameters
@@ -577,7 +577,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_test_begin(info)
 
-    def on_test_end(self, info: Dict):
+    def on_test_end(self, info: Dict = None):
         """Method to be called at event of the end of testing.
 
         Parameters
@@ -590,7 +590,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_test_end(info)
 
-    def on_test_batch_begin(self, info: Dict):
+    def on_test_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each testing batch.
 
         Parameters
@@ -603,7 +603,7 @@ class BaseManager(BaseWorker):
         for worker in self.workers:
             worker.on_test_batch_begin(info)
 
-    def on_test_batch_end(self, info: Dict):
+    def on_test_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each testing batch.
 
         Parameters
