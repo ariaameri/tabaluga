@@ -342,11 +342,11 @@ class DataLoader(base.BaseWorker):
         return int(self.number_of_iterations)
 
     def __next__(self):
-        """Returns the next set of images.
+        """Returns the next set of data.
 
         Returns
         -------
-        A list of next set of images : List[np.ndarray]
+        A collection of next set of data
 
         """
 
@@ -360,21 +360,21 @@ class DataLoader(base.BaseWorker):
         metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
 
         # Load the images
-        images = self.load_data(metadata)
+        data = self.load_data(metadata)
 
-        return images
+        return data
 
     def __getitem__(self, item: int):
-        """Returns the item-th batch of the image data.
+        """Returns the item-th batch of the data.
 
         Parameters
         ----------
         item : int
-            The index of the batch of the image data to be returned
+            The index of the batch of the data to be returned
 
         Returns
         -------
-        A list of the image data loaded : List[np.ndarray]
+        A list of the image data loaded
 
         """
 
@@ -387,6 +387,6 @@ class DataLoader(base.BaseWorker):
         metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
 
         # Load the images
-        images = self.load_data(metadata)
+        data = self.load_data(metadata)
 
-        return images
+        return data
