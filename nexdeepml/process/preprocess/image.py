@@ -16,28 +16,26 @@ class ImageNormalizer(preprocess.Preprocess):
 
         super().__init__()
 
-    def normalize(self, images: Union[List[np.ndarray], np.ndarray]) -> Union[List[np.ndarray], np.ndarray]:
+    def normalize(self, images: np.ndarray) -> np.ndarray:
         """"Normalizes the images given.
 
         It takes input images of dtype uint8 ranging from 0 to 255 and divides them by 255 with dtype of float.
 
         Parameters
         ----------
-        images : Union[List[np.ndarray], np.ndarray]
-            An iterable collection containing the image data of dtype uint8
+        images : np.ndarray
+            A numpy array containing the image data of dtype uint8
 
         Returns
         -------
-        Collection of image data of dtype float
+        Numpy array of image data of dtype float
 
         """
 
         # Get the type of the iterable
         collection_type = type(images)
 
-        if collection_type == list:
-            output = [image / 255. for image in images]
-        elif collection_type == np.ndarray:
+        if collection_type == np.ndarray:
             output = images / 255.
         else:
             raise Exception('Unrecognized format passed to the image normalizer!')
@@ -68,17 +66,17 @@ class ImageResizer(preprocess.Preprocess):
 
         super().__init__()
 
-    def resize(self, images: Union[List[np.ndarray], np.ndarray]) -> Union[List[np.ndarray], np.ndarray]:
+    def resize(self, images: np.ndarray) -> np.ndarray:
         """"Resizes the images given.
 
         Parameters
         ----------
-        images : Union[List[np.ndarray], np.ndarray]
-            An iterable collection containing the image to be resized
+        images : np.ndarray
+            A numpy array containing the image to be resized
 
         Returns
         -------
-        Collection of resized image data
+        Numpy array of resized image data
 
         """
 
@@ -95,9 +93,7 @@ class ImageResizer(preprocess.Preprocess):
             in images
         ]
 
-        if collection_type == list:
-            pass
-        elif collection_type == np.ndarray:
+        if collection_type == np.ndarray:
             output = np.array(output)
         else:
             raise Exception('Unrecognized format passed to the image resizer!')

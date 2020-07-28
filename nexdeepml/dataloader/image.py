@@ -25,7 +25,7 @@ class ImageLoader(dataloader.DataLoader):
         # Modify the metadata
         self.modify_metadata()
 
-    def load_data(self, metadata: pd.DataFrame) -> List[np.ndarray]:
+    def load_data(self, metadata: pd.DataFrame) -> np.ndarray:
         """Loads images provided in the metadata data frame.
 
         Parameters
@@ -35,7 +35,7 @@ class ImageLoader(dataloader.DataLoader):
 
         Returns
         -------
-        List of images : List[np.ndarray]
+        Numpy array of images : np.ndarray
 
         NOTE: This function returns a list of numpy arrays and not a single numpy array.
                 This is because images might be of different sizes and may need to be
@@ -43,7 +43,7 @@ class ImageLoader(dataloader.DataLoader):
 
         """
 
-        images = [plt.imread(row['path']) for index, row in metadata.iterrows()]
+        images = np.array([plt.imread(row['path']) for index, row in metadata.iterrows()])
 
         return images
 
