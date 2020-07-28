@@ -288,7 +288,7 @@ class DataLoaderManager(base.BaseManager):
 
         """
 
-        pass
+        raise NotImplementedError
 
 
 class DataLoader(base.BaseWorker):
@@ -379,7 +379,7 @@ class DataLoader(base.BaseWorker):
 
         """
 
-        pass
+        raise NotImplementedError
 
     def __len__(self) -> int:
         """Gives the total number of iterations this data loader will go through.
