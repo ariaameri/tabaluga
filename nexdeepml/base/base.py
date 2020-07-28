@@ -1,4 +1,4 @@
-from typing import List, Dict
+from typing import List, Dict, Union
 from collections import OrderedDict
 
 
@@ -347,19 +347,23 @@ class BaseManager(BaseWorker):
         this = self
         return _event
 
-    def get_worker(self, index: int):
+    def get_worker(self, index: Union[str, int]) -> BaseWorker:
         """Returns the worker given its index.
 
         Parameters
         ----------
-        index : int
-            The index of the worker in class' worker list
+        index : Union[str, int]
+            The index or name of the worker in class' worker ordered dictionary
 
         Returns
         -------
         worker : BaseWorker
             Reference to the worker inquired
         """
+
+        # Take care of numerical index
+        if type(index) == int:
+            index = list(self.workers)[index]
 
         return self.workers[index]
 
