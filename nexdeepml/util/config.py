@@ -5,7 +5,7 @@ import yaml
 class ConfigParser:
     """A class that will contain config values and subclasses."""
 
-    def __init__(self, config_dict: Dict):
+    def __init__(self, config_dict: Dict = None):
         """Initializes the class based on the input config dictionary.
 
         Parameters
@@ -13,6 +13,10 @@ class ConfigParser:
         config_dict : Dict
             A dictionary containing all the configurations
         """
+
+        # Check if no input was given
+        if config_dict is None:
+            config_dict = {}
 
         for key, value in config_dict.items():
             setattr(self, key, self._init_helper(value))
