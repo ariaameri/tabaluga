@@ -36,27 +36,27 @@ class TQDMCallback(Callback):
         self._train_tqdm: TQDMLogger
         self._val_tqdm: TQDMLogger
 
-    def on_train_begin(self, info: Dict):
+    def on_train_begin(self, info: Dict = None):
         """Creates the tqdm train instance."""
 
         self._train_tqdm: TQDMLogger = TQDMLogger(self._tqdm_config)
 
-    def on_train_end(self, info: Dict):
+    def on_train_end(self, info: Dict = None):
         """Closes the tqdm train instance."""
 
         self._train_tqdm.close()
 
-    def on_val_begin(self, info: Dict):
+    def on_val_begin(self, info: Dict = None):
         """Creates the tqdm validation instance."""
 
         self._val_tqdm: TQDMLogger = TQDMLogger(self._tqdm_config)
 
-    def on_val_end(self, info: Dict):
+    def on_val_end(self, info: Dict = None):
         """Closes the tqdm validation instance."""
 
         self._val_tqdm.close()
 
-    def on_epoch_begin(self, info: Dict):
+    def on_epoch_begin(self, info: Dict = None):
         """Sets the total number of iterations and resets the tqdm train progress bar.
 
         Parameters
@@ -70,7 +70,7 @@ class TQDMCallback(Callback):
         total_iterations: int = info['total_iterations']
         self._train_tqdm.reset(total_iterations)
 
-    def on_batch_end(self, info: Dict):
+    def on_batch_end(self, info: Dict = None):
         """Updates the tqdm train progress bar.
 
         Parameters
@@ -85,7 +85,7 @@ class TQDMCallback(Callback):
         batch_size: int = info.pop('batch_size')
         self._train_tqdm.update(batch_size, info)
 
-    def on_val_epoch_begin(self, info: Dict):
+    def on_val_epoch_begin(self, info: Dict = None):
         """Sets the total number of iterations and resets the tqdm validation progress bar.
 
         Parameters
@@ -99,7 +99,7 @@ class TQDMCallback(Callback):
         total_iterations: int = info['total_iterations']
         self._val_tqdm.reset(total_iterations)
 
-    def on_val_batch_end(self, info: Dict):
+    def on_val_batch_end(self, info: Dict = None):
         """Updates the tqdm validation progress bar.
 
         Parameters
