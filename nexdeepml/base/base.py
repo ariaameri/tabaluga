@@ -59,16 +59,6 @@ class BaseWorker:
         """
 
         pass
-        """Method to be called at the event of end of each training epoch.
-
-        Parameters
-        ----------
-        info : dict
-            The information that has to be passed to the callback
-
-        """
-
-        pass
 
     # Training event methods
 
