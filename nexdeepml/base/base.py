@@ -1,4 +1,5 @@
 from typing import List, Dict
+from collections import OrderedDict
 
 
 class BaseWorker:
@@ -308,7 +309,7 @@ class BaseManager(BaseWorker):
 
         super().__init__()
 
-        self.workers: List[BaseWorker] = []
+        self.workers: OrderedDict[BaseWorker] = OrderedDict()
 
         # Call the events on each worker for each event starting with 'on_'
         self._method_names: List[str] = [method for method in dir(self) if method.startswith('on_')]
@@ -340,7 +341,7 @@ class BaseManager(BaseWorker):
 
             """
 
-            for worker in this.workers:
+            for _, worker in this.workers.items():
                 getattr(worker, method_name)(info)
 
         this = self
