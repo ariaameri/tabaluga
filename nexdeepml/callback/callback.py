@@ -150,3 +150,34 @@ class TQDMCallback(Callback):
 
         batch_size: int = info.pop('batch_size')
         self._val_tqdm.update(batch_size, info)
+
+
+# TODO: Does this have to extend Callback or CallbackManager?
+class ManagerCallback(Callback):
+    """This abstract class initializes a single Manager and calls its events."""
+
+    def __init__(self, config: ConfigParser, trainer):
+        """Initializes the instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this callback instance and the manager class.
+        trainer : Trainer
+            Reference to the trainer instance
+
+        """
+
+        super().__init__(config, trainer)
+
+        self._config = config
+
+        # self.worker
+
+        self.create_worker()
+
+    def create_worker(self):
+        """Creates and initializes a Manager instance."""
+
+        pass
+
