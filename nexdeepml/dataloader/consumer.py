@@ -33,7 +33,7 @@ class SampleDataManager(DataManager):
 
         self.workers: OrderedDict[SampleDataLoaderManager]
 
-        super(SampleDataManager, self).__init__(config)
+        super().__init__(config)
 
     def create_workers(self):
         """Creates DataLoaderManagers (workers) for train, val, and test data."""
