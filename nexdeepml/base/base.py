@@ -3,13 +3,22 @@ from collections import OrderedDict
 from abc import ABC, abstractmethod
 
 
-class BaseEventWorker:
+class BaseWorker:
+    """Class to serve as the base of all workers."""
+
+    def __init__(self):
+        """Initializer of the instance."""
+
+        pass
+
+
+class BaseEventWorker(BaseWorker):
     """This abstract class servers as the parent of all worker classes."""
 
     def __init__(self):
         """Initializes the worker."""
 
-        pass
+        super().__init__()
 
     # General events
 
