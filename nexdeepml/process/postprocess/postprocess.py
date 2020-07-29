@@ -1,8 +1,9 @@
+from abc import ABC
 from ...util.config import ConfigParser
 from ...base import base
 
 
-class PostprocessManager(base.BaseEventManager):
+class PostprocessManager(base.BaseEventManager, ABC):
     """This abstract class manages the Post-Process instances."""
 
     def __init__(self, config: ConfigParser):
@@ -32,5 +33,3 @@ class Postprocess(base.BaseEventWorker):
         """
 
         super().__init__(config)
-
-
