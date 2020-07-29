@@ -316,7 +316,7 @@ class DataLoader(base.BaseWorker, ABC):
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int
-        self.number_of_iterations: float  # Keeping it float to take care of the very last batch
+        self.number_of_iterations: int
 
         # Book keeping for iterator
         self._iterator_count = 0
@@ -366,7 +366,7 @@ class DataLoader(base.BaseWorker, ABC):
         """
 
         self.batch_size = batch_size
-        self.number_of_iterations = len(self.metadata) / batch_size
+        self.number_of_iterations = len(self.metadata) // batch_size
 
     @abstractmethod
     def load_data(self, metadata: pd.DataFrame):
@@ -394,7 +394,7 @@ class DataLoader(base.BaseWorker, ABC):
 
         """
 
-        return int(self.number_of_iterations)
+        return self.number_of_iterations
 
     def __next__(self):
         """Returns the next set of data.
@@ -430,7 +430,7 @@ class DataLoader(base.BaseWorker, ABC):
         """
 
         # Check if item count is sensible
-        assert item <= self.number_of_iterations, \
+        assert item < self.number_of_iterations, \
             f'Requested number of images to be loaded goes beyond the end of available data.'
 
         # Find the corresponding metadata
