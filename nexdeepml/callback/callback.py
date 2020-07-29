@@ -2,10 +2,11 @@ from ..base import base
 from ..util.config import ConfigParser
 from typing import Dict
 from ..logger.logger import TQDMLogger
+from abc import ABC
 
 
 class Callback(base.BaseWorker):
-    """A class that is the base/parent class of any callbacks to be defined."""
+    """An abstract class that is the base/parent class of any callbacks to be defined."""
 
     def __init__(self):
         """Initializes the callback class."""
@@ -13,8 +14,8 @@ class Callback(base.BaseWorker):
         super().__init__()
 
 
-class CallbackManager(base.BaseManager):
-    """"A class that manages Callback instances and calls their events on the occurrence of events."""
+class CallbackManager(base.BaseManager, ABC):
+    """"An abstract class that manages Callback instances and calls their events on the occurrence of events."""
 
     def __init__(self):
         """Initializes the callback manager class."""
