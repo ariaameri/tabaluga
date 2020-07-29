@@ -17,8 +17,9 @@ class Trainer(base.BaseWorker, ABC):
 
         self._config: ConfigParser = config
 
-        # Total number of epochs, current epoch, and current batch number
+        # Total number of epochs, batch size, current epoch, and current batch number
         self.epochs: int = config.epochs
+        self.batch_size: int
         self.epoch: int = 0
         self.batch: int = 0
 
