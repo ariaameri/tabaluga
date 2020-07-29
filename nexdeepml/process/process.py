@@ -1,12 +1,21 @@
+from abc import ABC
 from ..base import base
 from .preprocess import preprocess
 from .postprocess import postprocess
+from ..util.config import ConfigParser
 
 
-class ProcessManager(base.BaseEventManager):
+class ProcessManager(base.BaseEventManager, ABC):
     """This abstract class manages the Pre- and Post-Process instances or Managers."""
 
-    def __init__(self):
-        """Initializes the class."""
+    def __init__(self, config: ConfigParser):
+        """Initializes the class.
 
-        super().__init__()
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this instance and its workers.
+
+        """
+
+        super().__init__(config)

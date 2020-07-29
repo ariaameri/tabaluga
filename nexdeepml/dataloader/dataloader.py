@@ -22,10 +22,7 @@ class DataManager(base.BaseEventManager, ABC):
             The configurations for the data manager.
         """
 
-        super().__init__()
-
-        # Save the config
-        self._config = config
+        super().__init__(config)
 
         # Folders containing the data
         self._folders: List[str] = []
@@ -201,10 +198,9 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             The metadata for the data to be loaded
         """
 
-        super().__init__()
+        super().__init__(config)
 
-        # Set the config and metadata
-        self._config = config
+        # Set the metadata
         self.metadata = metadata
 
         # Modify the metadata
@@ -328,10 +324,9 @@ class DataLoader(base.BaseEventWorker, ABC):
             The metadata for the data to be loaded
         """
 
-        super().__init__()
+        super().__init__(config)
 
-        # Set the config and metadata
-        self._config: ConfigParser = config
+        # Set the metadata
         self.metadata: pd.DataFrame = metadata
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch

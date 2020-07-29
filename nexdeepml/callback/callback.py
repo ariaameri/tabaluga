@@ -22,10 +22,9 @@ class Callback(base.BaseEventWorker):
 
         """
 
-        super().__init__()
+        super().__init__(config)
 
         # Set the attributes
-        self._config = config
         self.trainer = trainer
 
 
@@ -44,10 +43,9 @@ class CallbackManager(base.BaseEventManager, ABC):
 
         """
 
-        super().__init__()
+        super().__init__(config)
 
         # Set the attributes
-        self._config = config
         self.trainer = trainer
 
 
@@ -64,7 +62,7 @@ class TQDMCallback(Callback):
 
         """
 
-        super().__init__()
+        super().__init__(tqdm_config)
 
         # Save tqdm config
         self._tqdm_config: ConfigParser = tqdm_config

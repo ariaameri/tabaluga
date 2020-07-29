@@ -13,9 +13,7 @@ class Trainer(base.BaseEventWorker, ABC):
     def __init__(self, config: ConfigParser):
         """Initializer for the this instance of the class"""
 
-        super().__init__()
-
-        self._config: ConfigParser = config
+        super().__init__(config)
 
         # Total number of epochs, batch size, current epoch, and current batch number
         self.epochs: int = config.epochs
