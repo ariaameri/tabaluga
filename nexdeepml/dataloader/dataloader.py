@@ -144,7 +144,7 @@ class DataManager(base.BaseManager, ABC):
         # Get count of each set
         total_data_count = len(self.metadata)
         test_count = int(total_data_count * self._test_ratio)
-        val_count = int((total_data_count - test_count) * self._test_ratio)
+        val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
 
         # Find the indices of each set
