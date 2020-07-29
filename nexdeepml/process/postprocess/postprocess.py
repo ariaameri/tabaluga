@@ -2,7 +2,7 @@ from ...util.config import ConfigParser
 from ...base import base
 
 
-class PostprocessManager(base.BaseManager):
+class PostprocessManager(base.BaseEventManager):
     """This abstract class manages the Post-Process instances."""
 
     def __init__(self):
@@ -11,7 +11,7 @@ class PostprocessManager(base.BaseManager):
         super().__init__()
 
 
-class Postprocess(base.BaseWorker):
+class Postprocess(base.BaseEventWorker):
     """A class that is the base/parent class of any post-process to be defined."""
 
     def __init__(self):

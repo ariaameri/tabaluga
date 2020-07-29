@@ -2,7 +2,7 @@ from ..util.config import ConfigParser
 from ..base import base
 
 
-class ModelManager(base.BaseManager):
+class ModelManager(base.BaseEventManager):
     """Abstract class that manages neural network models."""
 
     def __init__(self):
@@ -11,7 +11,7 @@ class ModelManager(base.BaseManager):
         super().__init__()
 
 
-class Model(base.BaseWorker):
+class Model(base.BaseEventWorker):
     """Abstract class that contains the neural network model."""
 
     def __init__(self):

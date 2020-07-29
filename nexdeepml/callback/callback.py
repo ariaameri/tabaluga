@@ -7,7 +7,7 @@ from ..dataloader import dataloader
 # from ..trainer import trainer
 
 
-class Callback(base.BaseWorker):
+class Callback(base.BaseEventWorker):
     """An abstract class that is the base/parent class of any callbacks to be defined."""
 
     def __init__(self, config: ConfigParser = None, trainer=None):
@@ -29,7 +29,7 @@ class Callback(base.BaseWorker):
         self.trainer = trainer
 
 
-class CallbackManager(base.BaseManager, ABC):
+class CallbackManager(base.BaseEventManager, ABC):
     """"An abstract class that manages Callback instances and calls their events on the occurrence of events."""
 
     def __init__(self, config: ConfigParser, trainer):

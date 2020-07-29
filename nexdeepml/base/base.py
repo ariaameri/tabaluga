@@ -3,7 +3,7 @@ from collections import OrderedDict
 from abc import ABC, abstractmethod
 
 
-class BaseWorker:
+class BaseEventWorker:
     """This abstract class servers as the parent of all worker classes."""
 
     def __init__(self):
@@ -284,7 +284,7 @@ class BaseWorker:
         pass
 
 
-class BaseManager(BaseWorker, ABC):
+class BaseEventManager(BaseEventWorker, ABC):
     """This abstract class servers as the parent of all manager classes.
 
     All managers are assumed to have self.workers: List[BaseWorker].
@@ -338,7 +338,7 @@ class BaseManager(BaseWorker, ABC):
         this = self
         return _event
 
-    def get_worker(self, index: Union[str, int]) -> BaseWorker:
+    def get_worker(self, index: Union[str, int]) -> BaseEventWorker:
         """Returns the worker given its index.
 
         Parameters
@@ -348,7 +348,7 @@ class BaseManager(BaseWorker, ABC):
 
         Returns
         -------
-        worker : BaseWorker
+        worker : BaseEventWorker
             Reference to the worker inquired
         """
 

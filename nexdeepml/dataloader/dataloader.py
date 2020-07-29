@@ -8,7 +8,7 @@ import pandas as pd
 import numpy as np
 
 
-class DataManager(base.BaseManager, ABC):
+class DataManager(base.BaseEventManager, ABC):
     """This abstract class manages the DataLoader or DataLoader Managers.
 
     It is responsible to distribute the train/validation/test metadata among the data loaders."""
@@ -187,7 +187,7 @@ class DataManager(base.BaseManager, ABC):
             worker.set_batch_size(batch_size)
 
 
-class DataLoaderManager(base.BaseManager, ABC):
+class DataLoaderManager(base.BaseEventManager, ABC):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
     def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
@@ -314,7 +314,7 @@ class DataLoaderManager(base.BaseManager, ABC):
         raise NotImplementedError
 
 
-class DataLoader(base.BaseWorker, ABC):
+class DataLoader(base.BaseEventWorker, ABC):
     """This abstract class loads the data."""
 
     def __init__(self, config: ConfigParser, metadata: pd.DataFrame):

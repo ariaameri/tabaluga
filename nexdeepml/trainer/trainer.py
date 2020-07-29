@@ -7,7 +7,7 @@ from typing import Union, List, Dict
 from abc import ABC, abstractmethod
 
 
-class Trainer(base.BaseWorker, ABC):
+class Trainer(base.BaseEventWorker, ABC):
     """A class to help with training a neural network."""
 
     def __init__(self, config: ConfigParser):
