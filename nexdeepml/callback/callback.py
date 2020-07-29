@@ -1,33 +1,69 @@
 from ..base import base
 from ..util.config import ConfigParser
-from typing import Dict
+from typing import Dict, List
 from ..logger.logger import TQDMLogger
 from abc import ABC
+from ..dataloader import dataloader
+# from ..trainer import trainer
 
 
 class Callback(base.BaseWorker):
     """An abstract class that is the base/parent class of any callbacks to be defined."""
 
-    def __init__(self):
-        """Initializes the callback class."""
+    def __init__(self, config: ConfigParser = None, trainer=None):
+        """Initializes the callback class.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration for this instance and the rest of the instances it will initialize
+        trainer : Trainer
+            Reference to the trainer instance
+
+        """
 
         super().__init__()
+
+        # Set the attributes
+        self._config = config
+        self.trainer = trainer
 
 
 class CallbackManager(base.BaseManager, ABC):
     """"An abstract class that manages Callback instances and calls their events on the occurrence of events."""
 
-    def __init__(self):
-        """Initializes the callback manager class."""
+    def __init__(self, config: ConfigParser, trainer):
+        """Initializes the callback manager class.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration for this instance and the rest of the instances it will initialize
+        trainer : Trainer
+            Reference to the trainer instance
+
+        """
 
         super().__init__()
+
+        # Set the attributes
+        self._config = config
+        self.trainer = trainer
 
 
 class TQDMCallback(Callback):
     """Creates and manages an instance of tqdm to take care of progress bar for training/testing the network."""
 
     def __init__(self, tqdm_config: ConfigParser):
-        """Initialize the callback for tqdm progress bar."""
+        """Initialize the callback for tqdm progress bar.
+
+        Parameters
+        ----------
+        tqdm_config : ConfigParser
+            The configuration for this instance
+
+        """
+
         super().__init__()
 
         # Save tqdm config
