@@ -41,6 +41,9 @@ class DataManager(base.BaseManager, ABC):
         self._test_ratio: float = config.test_ratio if config.test_ratio is not None else 0
         self._val_ratio: float = config.val_ratio if config.val_ratio is not None else 0
 
+        # Declare batch size
+        self.batch_size: int
+
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
         self.test_metadata: pd.DataFrame
@@ -166,6 +169,22 @@ class DataManager(base.BaseManager, ABC):
             [df.assign(original_index=df.index).reset_index(drop=True)
              for df
              in [self.train_metadata, self.val_metadata, self.test_metadata]]
+
+    def set_batch_size(self, batch_size: int) -> None:
+        """Sets the batch size and thus finds the total number of batches in one epoch.
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        self.batch_size = batch_size
+
+        # Set batch size of all the workers
+        for _, worker in self.workers.items():
+            worker.set_batch_size(batch_size)
 
 
 class DataLoaderManager(base.BaseManager, ABC):
