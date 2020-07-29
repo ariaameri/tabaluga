@@ -5,6 +5,7 @@ from ..logger.logger import TQDMLogger
 from abc import ABC
 from ..dataloader import dataloader
 # from ..trainer import trainer
+from collections import OrderedDict
 
 
 class Callback(base.BaseEventWorker):
@@ -170,11 +171,11 @@ class ManagerCallback(Callback):
 
         self._config = config
 
-        # self.worker
+        self.workers: OrderedDict = OrderedDict()
 
-        self.create_worker()
+        self.create_workers()
 
-    def create_worker(self):
+    def create_workers(self):
         """Creates and initializes a Manager instance."""
 
         pass
