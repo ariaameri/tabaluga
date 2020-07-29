@@ -148,6 +148,7 @@ class DataManager(base.BaseManager, ABC):
         train_count = total_data_count - test_count - val_count
 
         # Find the indices of each set
+        np.random.seed(self._seed)
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
             else np.random.permutation(total_data_count)
