@@ -31,7 +31,7 @@ class SampleDataManager(DataManager):
             The configuration needed for this instance
         """
 
-        self.workers: OrderedDict[SampleDataLoaderManager]
+        self.workers: OrderedDict
 
         super().__init__(config)
 
