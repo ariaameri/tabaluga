@@ -1,5 +1,6 @@
 from typing import Dict, Any
 import yaml
+import re
 
 
 class ConfigParser:
@@ -61,9 +62,18 @@ class ConfigParser:
     def __str__(self) -> str:
         """Method to help with the visualization of the configuration in YAML style."""
 
+        # Get dictionary representation of the current instance
         config = self._str_helper(self)
 
-        return yaml.dump(config)
+        # Get yaml string representation
+        out_string = yaml.dump(config)
+
+        # Add bullet at the beginning of each class, indent the lists, and make indentations with tabs
+        out_string = out_string.replace("-", "  -")
+        out_string = re.sub(r' {2}', '\t', out_string)
+        out_string = re.sub(r'(\n|^)(\s*)(\w)', r'\1\2' + f'\u2022 ' + r'\3', out_string)
+
+        return out_string
 
     def _str_helper(self, config: Any) -> Dict:
         """Method to help with visualization of the configurations.
