@@ -49,7 +49,7 @@ class ConfigParser:
 
         if type(config) == dict:
             return ConfigParser(config)
-        if type(config) == list:
+        elif type(config) == list:
             out = []
             for item in config:
                 out.append(self._init_helper(item))
