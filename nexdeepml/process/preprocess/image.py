@@ -14,7 +14,7 @@ class ImageNormalizer(preprocess.Preprocess):
     def __init__(self):
         """Initializes the class."""
 
-        super().__init__()
+        super().__init__(ConfigParser())
 
     def normalize(self, images: np.ndarray) -> np.ndarray:
         """"Normalizes the images given.
