@@ -68,7 +68,19 @@ class ConfigParser:
 
         return out_string
 
-    def _str_helper(self, config: Any) -> Dict:
+    def print(self, depth: int = -1):
+        """Print the configuration up to certain depth.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which the string representation should go down the configuration
+
+        """
+
+        print(self.str_representation(depth=depth))
+
+    def dict_representation(self, config: Any = None) -> Dict:
         """Method to help with visualization of the configurations.
 
         Parameters
@@ -82,15 +94,19 @@ class ConfigParser:
             Configurations in a dictionary such as the one with json/yaml
         """
 
+        # If no config is given, perform everything on the current instance
+        if config is None:
+            config = self
+
         # Check for the type of the input and act accordingly
         if type(config) == ConfigParser:
             out = {}
             for key, item in config.__dict__.items():
-                out[key] = self._str_helper(item)
+                out[key] = self.dict_representation(item)
         elif type(config) == list:
             out = []
             for item in config:
-                out.append(self._str_helper(item))
+                out.append(self.dict_representation(item))
         else:
             out = config
 
