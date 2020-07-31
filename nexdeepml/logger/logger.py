@@ -46,7 +46,7 @@ class Logger(BaseWorker):
         self._level: int = config.level if config.level is not None else logging.INFO
 
         # Get the logger
-        self._logger = logging.getLogger(config.name if config.name is not None else self._counter[0])
+        self._logger = logging.getLogger(config.name if config.name is not None else str(self._counter[0]))
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
