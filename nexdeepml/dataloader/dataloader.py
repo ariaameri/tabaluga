@@ -38,8 +38,8 @@ class DataManager(base.BaseEventManager, ABC):
         self._test_ratio: float = config.test_ratio if config.test_ratio is not None else 0
         self._val_ratio: float = config.val_ratio if config.val_ratio is not None else 0
 
-        # Declare batch size
-        self.batch_size: int
+        # Set batch size
+        self.batch_size: int = config.batch_size
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
