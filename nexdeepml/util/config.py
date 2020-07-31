@@ -7,6 +7,18 @@ import numpy as np
 class ConfigParser:
     """A class that will contain config values and subclasses."""
 
+    # Set static variables
+    begin_configparser = f'\u2022'
+    config_color = f'\033[38;5;209m'
+    begin_list = f'-'
+    # begin_list_color = f'{CCC.foreground.set_88_256.chartreuse4}'
+    begin_list_color = f'\033[38;5;70m'
+    begin_list = f'{begin_list_color}{begin_list}\033[0m'
+    vertical_bar = f'\u22EE'
+    # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
+    vertical_bar_color = f'\033[37m'
+    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar}\033[0m'
+
     def __init__(self, config_dict: Dict = None):
         """Initializes the class based on the input config dictionary.
 
@@ -146,7 +158,7 @@ class ConfigParser:
         if issubclass(type(config), ConfigParser):
             for key, item in config.__dict__.items():
 
-                out_string += f'{begin_configparser} \033[38;5;209m{key}\033[0m'  # Write the attribute name in orange
+                out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
                 out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
                 out_string += f'\n'
 
@@ -156,7 +168,7 @@ class ConfigParser:
                 # Indent the result
                 out_substring = re.sub(
                     r'(^|\n)(?!$)',
-                    r'\1' + f'\033[37m\u22EE\033[0m' + r'\t',
+                    r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
                     out_substring
                 )
 
@@ -170,9 +182,9 @@ class ConfigParser:
                 out_subsubstring = self.str_representation(item, depth)
                 # Write begin_list at the beginning in green
                 out_substring += \
-                    f'\033[38;5;70m{begin_list}\033[0m {out_subsubstring}' \
+                    f'{self.begin_list} {out_subsubstring}' \
                     if type(item) != ConfigParser \
-                    else f'\033[38;5;70m{begin_configparser}\033[0m {out_subsubstring[2:]}'
+                    else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_subsubstring[2:]}'
 
             out_string += out_substring
 
