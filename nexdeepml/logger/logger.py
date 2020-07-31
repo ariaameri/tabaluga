@@ -222,9 +222,11 @@ class TQDMLogger(Logger, io.StringIO):
         # Find the length of the total epochs
         # and reformat the string accordingly
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
-        message += f'Epoch {msg_dict["epoch"]:{ep_len}d}/{self._n_epochs}: '
+        message += f'Epoch {msg_dict["epoch"]:{ep_len}d}/{self._n_epochs}'
+        message += f': ' if len(msg_dict) > 1 else ' '
 
-        message += f'loss: {msg_dict["loss"]: .5e}'
+        if 'loss' in msg_dict.keys():
+            message += f'loss: {msg_dict["loss"]: .5e}'
 
         if 'val_loss' in msg_dict.keys():
             message += f', val_loss: {msg_dict["val_loss"]: .5e}'
