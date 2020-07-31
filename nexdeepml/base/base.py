@@ -882,13 +882,15 @@ class Workers:
 
         print(self.str_representation(depth))
 
-    def str_representation(self, depth: int = -1) -> str:
+    def str_representation(self, depth: int = -1, config_enable: bool = False) -> str:
         """Returns the string representation of the current instance and the its workers in depth.
 
         Parameters
         ----------
         depth : int, optional
             The depth until which we want to print the workers. If not given, will go until the end
+        config_enable : bool, optional
+            Whether to give the configuration string representation as well
 
         Returns
         -------
@@ -912,10 +914,22 @@ class Workers:
                 f'{self.vertical_bar_color}->{CCC.reset.all} ' \
                 f'{self.worker_name_color}{worker_name}{CCC.reset.all}: ' \
                 f'{self.worker_desc_color}{self.__dict__[worker_name]}{CCC.reset.all}\n'
+
+            # Check if we should put config representation as well
+            if config_enable is True:
+                config_string = worker._config.str_representation(depth=2)
+                config_string = \
+                    re.sub(
+                        r'(^|\n)(?!$)',
+                        r'\1' + f'{self.vertical_bar_with_color}' + f'\t\t',
+                        config_string
+                    )
+                out_string += config_string
+
             # Check if the worker has worker and we have to go deep
             if issubclass(type(worker), BaseWorker) and 'workers' in worker.__dict__:
                 # Get worker's string representation
-                worker_string = worker.workers.str_representation(depth - 1)
+                worker_string = worker.workers.str_representation(depth=depth - 1, config_enable=config_enable)
                 # Indent the representation and draw vertical lines for visual clarity and add to the original string
                 worker_string = \
                     re.sub(
@@ -930,43 +944,6 @@ class Workers:
 
     def str_with_config_representation(self, depth: int = -1):
 
-        if depth == 0:
-            return ''
-
-        out_string = ''
-        # Find the number of digits to use for representing the workers
-        length_worker_digit = \
-            int(np.ceil(np.log10(len(self._workers_name_order)))) if len(self._workers_name_order) != 0 else 1
-
-        for index, worker_name in enumerate(self._workers_name_order):
-            worker = self.__dict__[worker_name]
-            # Construct current worker's string
-            out_string += \
-                f'{self.index_color}{index:{length_worker_digit}d}{CCC.reset.all} ' \
-                f'{self.vertical_bar_color}->{CCC.reset.all} ' \
-                f'{self.worker_name_color}{worker_name}{CCC.reset.all}: ' \
-                f'{self.worker_desc_color}{self.__dict__[worker_name]}{CCC.reset.all}\n'
-            config_string = worker._config.str_representation(1)
-            config_string = \
-                re.sub(
-                    r'(^|\n)(?!$)',
-                    r'\1' + f'{self.vertical_bar_with_color}' + f'\t\t',
-                    config_string
-                )
-            out_string += config_string
-
-            # Check if the worker has worker and we have to go deep
-            if issubclass(type(worker), BaseWorker) and 'workers' in worker.__dict__:
-                # Get worker's string representation
-                worker_string = worker.workers.str_with_config_representation(depth - 1)
-                # Indent the representation and draw vertical lines for visual clarity and add to the original string
-                worker_string = \
-                    re.sub(
-                        r'(^|\n)(?!$)',
-                        r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
-                        worker_string
-                    ) \
-                    if worker_string != '' else ''
-                out_string += worker_string
+        out_string = self.str_representation(depth=depth, config_enable=True)
 
         return out_string
