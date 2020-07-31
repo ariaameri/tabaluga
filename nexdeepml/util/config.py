@@ -213,3 +213,36 @@ class ConfigParser:
         """
 
         return not bool(self.__dict__)
+
+    def update(self, name: str, value):
+        """Update an entry in the config and return a new ConfigParser.
+
+        Parameters
+        ----------
+        name : str
+            The name of the attribute to change
+                For example, this can be 'some_param' or can be 'parent.parent.some_child_param'
+        value : Any
+            The value that must be set for the updated attribute
+
+        Returns
+        -------
+        An instance of ConfigParser class with the updated attribute
+
+        """
+
+        # Split the name to see if should go deeper in the attributes
+        split = name.split('.')
+        # list_entry = re.search(r'(\w+)\[(\d+)\]', split[0])
+
+        # In case we have to change an attribute here at depth zero
+        if len(split) == 1:
+            parameters = {**self.__dict__, **{name: value}}  # Either update or create new attribute
+            return ConfigParser(parameters)
+        # In case we have to go deeper to change an attribute
+        else:
+            parameters = {i: d for i, d in self.__dict__.items() if i != split[0]}
+            # Find if we should update or create new attribute
+            chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else ConfigParser({})
+            parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
+            return ConfigParser(parameters)
