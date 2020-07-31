@@ -16,7 +16,7 @@ class SampleDataLoaderManager(DataLoaderManager):
 
     def __getitem__(self, item):
 
-        return list(self.workers.items())[0][1][item]
+        return self.workers[0][item]
 
 
 class SampleDataManager(DataManager):
