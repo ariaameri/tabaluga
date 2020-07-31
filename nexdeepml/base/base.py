@@ -2,6 +2,8 @@ from ..util.config import ConfigParser
 from typing import List, Dict, Union
 from collections import OrderedDict
 from abc import ABC, abstractmethod
+import numpy as np
+import re
 
 
 class BaseWorker:
@@ -683,3 +685,222 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         for _, worker in self.workers.items():
             worker.on_test_batch_end(info)
+
+
+class Workers:
+    """A class to contain all workers in order for the manager classes."""
+
+    def __init__(self):
+        """Initializer of the instance."""
+
+        # Keep the workers oder list as a list of strings
+        self._workers_name_order: List[str] = []
+
+        # Book keeping for iteration
+        self._current_iteration_count: int = 0
+
+    def register_worker(self, name: str, worker: BaseWorker, rank: int = -1):
+        """Registers a new worker (or manager).
+
+        Parameters
+        ----------
+        name : str
+            The name of the worker (or manager)
+        worker : BaseWorker
+            The reference to the worker (or manager)
+        rank : int, optional
+            Rank of the worker (or manager) in the list. If not given, will insert at the end
+
+        """
+
+        # Check if the name of the workers are unique, conforming, and a subclass of BaseWorker
+        if name in self._workers_name_order:
+            raise Exception('Worker name exists! Please choose another name.')
+        if re.match(r'^[a-zA-Z](\w|\d)+$', name) is None:
+            raise Exception('Worker name should only consist of alphanumeric values starting with a letter.')
+        # if inspect.isclass(worker) is False or issubclass(type(worker), BaseWorker) is False:
+        #     raise Exception('Worker has to be an instance of the BaseWorker class.')
+
+        # Add the worker as attribute and add it in the order list
+        if rank == -1:
+            self._workers_name_order.append(name)
+        else:
+            self._workers_name_order.insert(rank, name)
+
+        self.__dict__[name] = worker
+
+    def replace_worker(self, name: str, worker: BaseWorker) -> None:
+        """Replaces an existing worker.
+
+        Parameters
+        ----------
+        name : str
+            The name of the worker to be replaced
+        worker : BaseWorker
+            The worker reference to be replaced
+
+        """
+
+        if name in self.__dict__:
+            self.__dict__[name] = worker
+        else:
+            raise Exception(f'Could not find the worker with the name {name} to replace it!')
+
+    def __len__(self):
+        """Get the total number of workers."""
+
+        return len(self._workers_name_order)
+
+    def __iter__(self):
+        """Method for making the class iterable."""
+
+        return self
+
+    def __next__(self):
+        """Iterate over the workers"""
+
+        # If we have not run out of workers
+        if self._current_iteration_count < len(self._workers_name_order):
+
+            # Get the worker
+            worker = getattr(self, self._workers_name_order[self._current_iteration_count])
+
+            self._current_iteration_count += 1
+
+            return worker
+
+        else:
+
+            self._current_iteration_count = 0
+            raise StopIteration
+
+    def __getitem__(self, item) -> Union[BaseWorker, None]:
+        """Get a worker.
+
+        item can be string, return worker by name, or int, return worker by rank.
+        """
+
+        item_type = type(item)
+
+        # If the query is with string, return based on name
+        if item_type == str:
+            # Check if the worker name exists
+            if item in self.__dict__:
+                worker = getattr(self, item)
+                return worker
+
+        # If the query is with int, return based on rank
+        if item_type == int:
+            # Check if the number is within range
+            if item < len(self._workers_name_order):
+                worker = getattr(self, self._workers_name_order[item])
+                return worker
+
+        # if everything else fail
+        return None
+
+    def get_rank(self, worker_name: str) -> int:
+        """Get the rank of the worker by their name.
+
+        Parameters
+        ----------
+        worker_name : str
+            The name of the worker
+
+        Returns
+        -------
+        The rank of the worker
+
+        """
+
+        # If the worker name exists, return it; otherwise, return -1
+        if worker_name in self.__dict__:
+            return self._workers_name_order.index(worker_name)
+        else:
+            return -1
+
+    def __setattr__(self, key, value):
+        """Set a new worker."""
+
+        # Use a terrible way of setting class variables.
+        # All class variables have to start with _
+        # No worker name can start with _
+        if key[0] == '_':
+            self.__dict__[key] = value
+        else:
+            self.register_worker(key, value)
+
+    def __setitem__(self, key, value):
+        """Set an item like a dictionary."""
+
+        self.__setattr__(key, value)
+
+    def __str__(self) -> str:
+        """Get a string representation of the instance."""
+
+        out_string = ''
+        # Find the number of digits to use for representing the workers
+        length_worker_digit = \
+            int(np.ceil(np.log10(len(self._workers_name_order)))) if len(self._workers_name_order) != 0 else 1
+        # Create the output string
+        for index, worker_name in enumerate(self._workers_name_order):
+            out_string += f'{index:{length_worker_digit}d} -> {worker_name}: {self.__dict__[worker_name]}\n'
+
+        return out_string
+
+    def print(self, depth: int = -1):
+        """Prints the workers and goes in depth.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which we want to print the workers. If not given, will go until the end.
+
+        """
+
+        print(self.str_representation(depth))
+
+    def str_representation(self, depth: int = -1) -> str:
+        """Returns the string representation of the current instance and the its workers in depth.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which we want to print the workers. If not given, will go until the end
+
+        Returns
+        -------
+        String representation of the current instance and its workers in depth
+
+        """
+
+        if depth == 0:
+            return ''
+
+        out_string = ''
+        # Find the number of digits to use for representing the workers
+        length_worker_digit = \
+            int(np.ceil(np.log10(len(self._workers_name_order)))) if len(self._workers_name_order) != 0 else 1
+
+        for index, worker_name in enumerate(self._workers_name_order):
+            worker = self.__dict__[worker_name]
+            # Construct current worker's string
+            out_string += \
+                f'\033[38;5;28m{index:{length_worker_digit}d}\033[0m ' \
+                f'\033[37m->\033[0m ' \
+                f'\033[34m{worker_name}\033[0m: \033[38;5;245m{self.__dict__[worker_name]}\033[0m\n'
+            # Check if the worker has worker and we have to go deep
+            if issubclass(type(worker), BaseWorker) and 'workers' in worker.__dict__:
+                # Get worker's string representation
+                worker_string = worker.workers.str_representation(depth - 1)
+                # Indent the representation and draw vertical lines for visual clarity and add to the original string
+                worker_string = \
+                    re.sub(
+                        r'(^|\n)(?!$)',
+                        r'\1' + f'\033[37m\u22EE\033[0m' + r'\t',
+                        worker_string
+                    ) \
+                    if worker_string != '' else ''
+                out_string += worker_string
+
+        return out_string
