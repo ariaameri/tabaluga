@@ -39,8 +39,7 @@ class Logger(BaseWorker):
 
         """
 
-        # Save the config
-        self._config = config
+        super().__init__(config)
 
         # The level at which we log
         self._level: int = config.level if config.level is not None else logging.INFO
@@ -68,8 +67,6 @@ class Logger(BaseWorker):
                 config.format if config.format is not None else '%(asctime)s - %(name)s - %(levelname)s: %(message)s'
             ))
         self._logger.addHandler(self._handler)
-
-        super().__init__()
 
     def info(self, msg: str) -> None:
         """Writes the message given as an info.
