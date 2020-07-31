@@ -43,23 +43,33 @@ class SampleDataManager(DataManager):
     def on_epoch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, update the batch size of the train data loader."""
 
-        self.workers['train'].set_batch_size(info['batch_size'])
+        self.workers['train'].set_batch_size(self.batch_size)
+
+        number_of_iterations = len(self.workers['train'])
+
+        return self.batch_size, number_of_iterations
 
     def on_val_epoch_begin(self, info: Dict = None):
         """On beginning of val epoch, update the batch size of the val data loader."""
 
-        self.workers['val'].set_batch_size(info['batch_size'])
+        self.workers['val'].set_batch_size(self.batch_size)
+
+        number_of_iterations = len(self.workers['val'])
+
+        return self.batch_size, number_of_iterations
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, load the batch data and put it in the trainer."""
 
-        trainer = info['trainer']
         batch = info['batch']  # The batch number
-        trainer.train_data = self.workers['train'][batch]
+        train_data = self.workers['train'][batch]
+
+        return train_data
 
     def on_val_batch_begin(self, info: Dict = None):
         """On beginning of val epoch, load the batch data and put it in the trainer."""
 
-        trainer = info['trainer']
         batch = info['batch']
-        trainer.val_data = self.workers['val'][batch]
+        val_data = self.workers['val'][batch]
+
+        return val_data
