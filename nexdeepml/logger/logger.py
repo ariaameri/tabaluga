@@ -141,7 +141,10 @@ class TQDMLogger(Logger, io.StringIO):
     def __init__(self, config: ConfigParser):
 
         # Making sure the logger is going to write to the console
-        assert config.console is True, "console config is not True for TQDM!"
+        config = config.update('console', True)
+
+        # Make sure it does not write any prefix
+        config = config.update('format', '')
 
         self._config = config
 
