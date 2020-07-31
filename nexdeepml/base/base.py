@@ -425,7 +425,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_begin(info)
 
     def on_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
@@ -438,7 +439,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_end(info)
 
     def on_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training epoch.
@@ -451,7 +453,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_epoch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_epoch_begin(info)
 
     def on_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training epoch.
@@ -464,7 +467,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_epoch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_epoch_end(info)
 
     # Training event methods
 
@@ -479,7 +483,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_begin(info)
 
     def on_train_end(self, info: Dict = None):
         """Method to be called at the event of end of training.
@@ -492,7 +497,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_end(info)
 
     def on_train_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training epoch.
@@ -505,7 +511,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_epoch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_epoch_begin(info)
 
     def on_train_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training epoch.
@@ -518,7 +525,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_epoch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_epoch_end(info)
 
     def on_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
@@ -531,7 +539,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_batch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_batch_begin(info)
 
     def on_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
@@ -544,7 +553,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_batch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_batch_end(info)
 
     def on_train_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
@@ -557,7 +567,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_batch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_batch_begin(info)
 
     def on_train_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each training batch.
@@ -570,7 +581,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_train_batch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_train_batch_end(info)
 
     # Validation event methods
 
@@ -585,7 +597,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_begin(info)
 
     def on_val_end(self, info: Dict = None):
         """Method to be called at event of the end of validation.
@@ -598,7 +611,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_end(info)
 
     def on_val_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation batch.
@@ -611,7 +625,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_batch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_batch_begin(info)
 
     def on_val_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation batch.
@@ -624,7 +639,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_batch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_batch_end(info)
 
     def on_val_epoch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each validation epoch.
@@ -637,7 +653,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_epoch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_epoch_begin(info)
 
     def on_val_epoch_end(self, info: Dict = None):
         """Method to be called at the event of end of each validation epoch.
@@ -650,7 +667,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_val_epoch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_val_epoch_end(info)
 
     # Test event methods
 
@@ -665,7 +683,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_test_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_begin(info)
 
     def on_test_end(self, info: Dict = None):
         """Method to be called at event of the end of testing.
@@ -678,7 +697,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_test_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_end(info)
 
     def on_test_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each testing batch.
@@ -691,7 +711,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_test_batch_begin(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_batch_begin(info)
 
     def on_test_batch_end(self, info: Dict = None):
         """Method to be called at the event of end of each testing batch.
@@ -704,7 +725,8 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         for worker in self.workers:
-            worker.on_test_batch_end(info)
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_batch_end(info)
 
 
 class Workers:
