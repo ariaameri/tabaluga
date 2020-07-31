@@ -1,4 +1,5 @@
 from ..util.config import ConfigParser
+from ..base.base import BaseWorker, BaseEventManager
 from typing import Dict, List
 import logging
 import sys
@@ -8,7 +9,7 @@ import io
 from datetime import datetime
 
 
-class Logger:
+class Logger(BaseWorker):
     """An abstract base/parent class for all logger classes."""
 
     # Keep track of how many logger instances we have
@@ -66,6 +67,8 @@ class Logger:
                 config.format if config.format is not None else '%(asctime)s - %(name)s - %(levelname)s: %(message)s'
             ))
         self._logger.addHandler(self._handler)
+
+        super().__init__()
 
     def info(self, msg: str) -> None:
         """Writes the message given as an info.
