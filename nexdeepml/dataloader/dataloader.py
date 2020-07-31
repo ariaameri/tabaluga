@@ -180,7 +180,7 @@ class DataManager(base.BaseEventManager, ABC):
         self.batch_size = batch_size
 
         # Set batch size of all the workers
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.set_batch_size(batch_size)
 
 
@@ -261,7 +261,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         self.number_of_iterations = len(self.metadata) / batch_size
 
         # Set batch size of all the workers
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.set_batch_size(batch_size)
 
     def __len__(self) -> int:

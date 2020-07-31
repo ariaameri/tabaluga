@@ -1,6 +1,5 @@
 from ..util.config import ConfigParser
 from typing import List, Dict, Union
-from collections import OrderedDict
 from abc import ABC, abstractmethod
 import numpy as np
 import re
@@ -331,7 +330,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         super().__init__(config)
 
-        self.workers: OrderedDict = OrderedDict()
+        self.workers: Workers = Workers()
 
         # Call the events on each worker for each event starting with 'on_'
         # self._method_names: List[str] = [method for method in dir(self) if method.startswith('on_')]
@@ -362,13 +361,13 @@ class BaseEventManager(BaseEventWorker, ABC):
 
             """
 
-            for _, worker in this.workers.items():
+            for worker in this.workers:
                 getattr(worker, method_name)(info)
 
         this = self
         return _event
 
-    def get_worker(self, index: Union[str, int]) -> BaseEventWorker:
+    def get_worker(self, index: Union[str, int]) -> BaseWorker:
         """Returns the worker given its index.
 
         Parameters
@@ -381,10 +380,6 @@ class BaseEventManager(BaseEventWorker, ABC):
         worker : BaseEventWorker
             Reference to the worker inquired
         """
-
-        # Take care of numerical index
-        if type(index) == int:
-            index = list(self.workers)[index]
 
         return self.workers[index]
 
@@ -404,7 +399,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_begin(info)
 
     def on_end(self, info: Dict = None):
@@ -417,7 +412,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_end(info)
 
     def on_epoch_begin(self, info: Dict = None):
@@ -430,7 +425,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_epoch_begin(info)
 
     def on_epoch_end(self, info: Dict = None):
@@ -443,7 +438,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_epoch_end(info)
 
     # Training event methods
@@ -458,7 +453,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_begin(info)
 
     def on_train_end(self, info: Dict = None):
@@ -471,7 +466,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_end(info)
 
     def on_train_epoch_begin(self, info: Dict = None):
@@ -484,7 +479,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_epoch_begin(info)
 
     def on_train_epoch_end(self, info: Dict = None):
@@ -497,7 +492,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_epoch_end(info)
 
     def on_batch_begin(self, info: Dict = None):
@@ -510,7 +505,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_batch_begin(info)
 
     def on_batch_end(self, info: Dict = None):
@@ -523,7 +518,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_batch_end(info)
 
     def on_train_batch_begin(self, info: Dict = None):
@@ -536,7 +531,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_batch_begin(info)
 
     def on_train_batch_end(self, info: Dict = None):
@@ -549,7 +544,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_train_batch_end(info)
 
     # Validation event methods
@@ -564,7 +559,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_begin(info)
 
     def on_val_end(self, info: Dict = None):
@@ -577,7 +572,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_end(info)
 
     def on_val_batch_begin(self, info: Dict = None):
@@ -590,7 +585,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_batch_begin(info)
 
     def on_val_batch_end(self, info: Dict = None):
@@ -603,7 +598,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_batch_end(info)
 
     def on_val_epoch_begin(self, info: Dict = None):
@@ -616,7 +611,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_epoch_begin(info)
 
     def on_val_epoch_end(self, info: Dict = None):
@@ -629,7 +624,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_val_epoch_end(info)
 
     # Test event methods
@@ -644,7 +639,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_test_begin(info)
 
     def on_test_end(self, info: Dict = None):
@@ -657,7 +652,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_test_end(info)
 
     def on_test_batch_begin(self, info: Dict = None):
@@ -670,7 +665,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_test_batch_begin(info)
 
     def on_test_batch_end(self, info: Dict = None):
@@ -683,7 +678,7 @@ class BaseEventManager(BaseEventWorker, ABC):
 
         """
 
-        for _, worker in self.workers.items():
+        for worker in self.workers:
             worker.on_test_batch_end(info)
 
 

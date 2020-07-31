@@ -171,7 +171,7 @@ class ManagerCallback(Callback):
 
         self._config = config
 
-        self.workers: OrderedDict = OrderedDict()
+        self.workers: base.Workers = base.Workers()
 
         self.create_workers()
 
