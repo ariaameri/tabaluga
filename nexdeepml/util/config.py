@@ -64,15 +64,7 @@ class ConfigParser:
         """Method to help with the visualization of the configuration in YAML style."""
 
         # Get dictionary representation of the current instance
-        config = self._str_helper(self)
-
-        # Get yaml string representation
-        out_string = yaml.dump(config)
-
-        # Add bullet at the beginning of each class, indent the lists, and make indentations with tabs
-        out_string = out_string.replace("-", "  -")
-        out_string = re.sub(r' {2}', '\t', out_string)
-        out_string = re.sub(r'(\n|^)(\s*)(\w)', r'\1\2' + f'\u2022 ' + r'\3', out_string)
+        out_string = self.str_representation(depth=2)
 
         return out_string
 
@@ -103,6 +95,76 @@ class ConfigParser:
             out = config
 
         return out
+
+    def str_representation(self, config: Any = None, depth: int = -1):
+        """Helper function to create a string representation of the instance.
+
+        Parameters
+        ----------
+        config : {ConfigParser, list, str}, optional
+            Configuration reference to create string from
+        depth : int, optional
+            The depth until which the string representation should go down the configuration
+
+        Returns
+        -------
+        String containing the representation of the configuration given
+
+        """
+
+        # Set what to add at the beginning of each type
+        begin_configparser = f'\u2022'
+        begin_list = f'-'
+
+        # Check if we have reach the root of the recursion, i.e. depth is zero
+        if depth == 0:
+            return ''
+
+        # The final string to be returned
+        out_string = ''
+
+        # If no config is given, perform everything on the current instance
+        if config is None:
+            config = self
+
+        if type(config) == ConfigParser:
+            for key, item in config.__dict__.items():
+
+                out_string += f'{begin_configparser} \033[38;5;209m{key}\033[0m'  # Write the attribute name in orange
+                out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
+                out_string += f'\n'
+
+                # Find the corresponding string for the item
+                out_substring = self.str_representation(item, depth - 1)
+
+                # Indent the result
+                out_substring = re.sub(
+                    r'(^|\n)(?!$)',
+                    r'\1' + f'\033[37m\u22EE\033[0m' + r'\t',
+                    out_substring
+                )
+
+                out_string += out_substring
+
+        elif type(config) == list:
+
+            # The final string of this section
+            out_substring = ''
+            for item in config:
+                out_subsubstring = self.str_representation(item, depth)
+                # Write begin_list at the beginning in green
+                out_substring += \
+                    f'\033[38;5;70m{begin_list}\033[0m {out_subsubstring}' \
+                    if type(item) != ConfigParser \
+                    else f'\033[38;5;70m{begin_configparser}\033[0m {out_subsubstring[2:]}'
+
+            out_string += out_substring
+
+        else:
+            return str(config) + f'\n'
+
+        # The final result
+        return out_string
 
     def __getattr__(self, item):
         """Method to help with getting an attribute.
