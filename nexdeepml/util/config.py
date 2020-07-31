@@ -143,7 +143,7 @@ class ConfigParser:
         if config is None:
             config = self
 
-        if type(config) == ConfigParser:
+        if issubclass(type(config), ConfigParser):
             for key, item in config.__dict__.items():
 
                 out_string += f'{begin_configparser} \033[38;5;209m{key}\033[0m'  # Write the attribute name in orange
