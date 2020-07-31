@@ -152,7 +152,7 @@ class TQDMCallback(Callback):
 
 
 # TODO: Does this have to extend Callback or CallbackManager?
-class ManagerCallback(Callback):
+class ManagerCallback(Callback, base.BaseEventManager):
     """This abstract class initializes a single Manager and calls its events."""
 
     def __init__(self, config: ConfigParser, trainer):
