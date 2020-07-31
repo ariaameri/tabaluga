@@ -1,6 +1,7 @@
 from typing import Dict, Any
 import yaml
 import re
+import numpy as np
 
 
 class ConfigParser:
