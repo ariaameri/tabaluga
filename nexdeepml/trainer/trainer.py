@@ -42,66 +42,52 @@ class Trainer(base.BaseEventManager, ABC):
 
         pass
 
-    def train_one_epoch(self) -> Dict:
-        """Trains the neural network for one epoch."""
+    def train(self) -> List[Dict]:
+        """Performs the training and validation.
 
-        # Make dummy training history dictionary
-        train_dict = {}
+        Returns
+        -------
+        A List[Dict] containing the history of the train/validation process
 
-        self.batch = 0
+        """
 
-        while True:
+        # Create history list for keeping the history of the net
+        history = []
 
-            self.on_batch_begin()
-            self.on_train_batch_begin()
+        self.epoch = 0
 
-            # Check if no more train data is available
-            if self.train_data is None:
-                return train_dict
+        # Everything is beginning
+        self.on_begin()
 
-            train_dict = self.train_one_batch()
+        while self.epoch < self.epochs:
 
-            self.on_train_batch_end()
-            self.on_batch_end()
+            # Epoch has started
+            self.on_epoch_begin()
 
-            self.batch += 1
+            # Do one epoch
+            epoch_history = self.one_epoch()
 
-    @abstractmethod
-    def train_one_batch(self) -> Dict:
-        """Trains the neural network for one batch."""
+            # Epoch has ended
+            self.on_epoch_end()
 
-        raise NotImplementedError
+            # This is the end of the epoch, so, epoch number is incremented
+            # Also, history is recorder
+            self.epoch += 1
+            history.append(epoch_history)
 
-    def val_one_epoch(self) -> Dict:
-        """Performs validation for the neural network for one epoch."""
+        # Everything is finished
+        self.on_end()
 
-        # Make dummy training history dictionary
-        val_dict = {}
-
-        self.batch = 0
-
-        while True:
-
-            self.on_val_batch_begin()
-
-            # Check if no more val data is available
-            if self.val_data is None:
-                return val_dict
-
-            val_dict = self.val_one_batch()
-
-            self.on_val_batch_end()
-
-            self.batch += 1
-
-    @abstractmethod
-    def val_one_batch(self) -> Dict:
-        """Performs validation for the neural network for one batch."""
-
-        raise NotImplementedError
+        return history
 
     def one_epoch(self) -> Dict:
-        """Performs the training and validation for one epoch."""
+        """Performs the training and validation for one epoch.
+
+        Returns
+        -------
+        A dictionary containing the history of the process
+
+        """
 
         # Training
         if self.epoch == 0:
@@ -133,34 +119,72 @@ class Trainer(base.BaseEventManager, ABC):
 
         return epoch_dict
 
-    def train(self) -> List[Dict]:
-        """Performs the training and validation."""
+    def train_one_epoch(self) -> Dict:
+        """Trains the neural network for one epoch.
 
-        # Create history list for keeping the history of the net
-        history = []
+        Returns
+        -------
+        A dictionary containing the history of the process
 
-        self.epoch = 0
+        """
 
-        # Everything is beginning
-        self.on_begin()
+        # Make dummy output dictionary
+        train_dict = {}
 
-        while self.epoch < self.epochs:
+        for self.batch in range(self.number_of_iterations):
 
-            # Epoch has started
-            self.on_epoch_begin()
+            self.on_batch_begin()
+            self.on_train_batch_begin()
 
-            # Do one epoch
-            epoch_history = self.one_epoch()
+            train_dict = self.train_one_batch()
 
-            # Epoch has ended
-            self.on_epoch_end()
+            self.on_train_batch_end()
+            self.on_batch_end()
 
-            # This is the end of the epoch, so, epoch number is incremented
-            # Also, history is recorder
-            self.epoch += 1
-            history.append(epoch_history)
+        return train_dict
 
-        # Everything is finished
-        self.on_end()
+    def val_one_epoch(self) -> Dict:
+        """Performs validation for the neural network for one epoch.
 
-        return history
+        Returns
+        -------
+        A dictionary containing the history of the process
+
+        """
+
+        # Make dummy training history dictionary
+        val_dict = {}
+
+        for self.batch in range(self.number_of_iterations):
+
+            self.on_val_batch_begin()
+
+            val_dict = self.val_one_batch()
+
+            self.on_val_batch_end()
+
+        return val_dict
+
+    @abstractmethod
+    def train_one_batch(self) -> Dict:
+        """Trains the neural network for one batch.
+
+        Returns
+        -------
+        A dictionary containing the history of the process
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def val_one_batch(self) -> Dict:
+        """Performs validation for the neural network for one batch.
+
+        Returns
+        -------
+        A dictionary containing the history of the process
+
+        """
+
+        raise NotImplementedError
