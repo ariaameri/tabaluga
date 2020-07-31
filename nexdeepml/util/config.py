@@ -177,10 +177,14 @@ class ConfigParser:
             out_string += out_substring
 
         else:
-            return str(config) + f'\n'
+            return self._identity_str_representation(config) + f'\n'
 
         # The final result
         return out_string
+
+    def _identity_str_representation(self, value):
+
+        return str(value)
 
     def __getattr__(self, item):
         """Method to help with getting an attribute.
