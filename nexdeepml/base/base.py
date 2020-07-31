@@ -20,6 +20,18 @@ class BaseWorker:
 
         self._config = config
 
+    def print_config(self, depth: int = -1):
+        """Prints the configuration of the instance.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which we want to print the workers. If not given, will go until the end
+
+        """
+
+        print(self._config.str_representation(depth=depth))
+
 
 class BaseEventWorker(BaseWorker):
     """This abstract class servers as the parent of all worker classes."""
@@ -382,6 +394,18 @@ class BaseEventManager(BaseEventWorker, ABC):
         """
 
         return self.workers[index]
+
+    def print_workers(self, depth: int = -1):
+        """Prints the representation of the workers.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which we want to print the workers. If not given, will go until the end
+
+        """
+
+        print(self.workers.str_representation(depth=depth))
 
     @abstractmethod
     def create_workers(self):
