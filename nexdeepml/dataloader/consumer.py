@@ -36,9 +36,9 @@ class SampleDataManager(DataManager):
     def create_workers(self):
         """Creates DataLoaderManagers (workers) for train, val, and test data."""
 
-        self.workers['train'] = SampleDataLoaderManager(self._config, self.train_metadata)
-        self.workers['val'] = SampleDataLoaderManager(self._config, self.val_metadata)
-        self.workers['test'] = SampleDataLoaderManager(self._config, self.test_metadata)
+        self.workers['train'] = SampleDataLoaderManager(self._config.train, self.train_metadata)
+        self.workers['val'] = SampleDataLoaderManager(self._config.val, self.val_metadata)
+        self.workers['test'] = SampleDataLoaderManager(self._config.test, self.test_metadata)
 
     def on_epoch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, update the batch size of the train data loader."""
