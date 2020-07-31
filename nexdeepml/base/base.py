@@ -833,13 +833,7 @@ class Workers:
     def __str__(self) -> str:
         """Get a string representation of the instance."""
 
-        out_string = ''
-        # Find the number of digits to use for representing the workers
-        length_worker_digit = \
-            int(np.ceil(np.log10(len(self._workers_name_order)))) if len(self._workers_name_order) != 0 else 1
-        # Create the output string
-        for index, worker_name in enumerate(self._workers_name_order):
-            out_string += f'{index:{length_worker_digit}d} -> {worker_name}: {self.__dict__[worker_name]}\n'
+        out_string = self.str_representation(depth=1)
 
         return out_string
 
