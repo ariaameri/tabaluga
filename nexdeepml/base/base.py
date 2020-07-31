@@ -3,6 +3,7 @@ from typing import List, Dict, Union
 from abc import ABC, abstractmethod
 import numpy as np
 import re
+from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 
 
 class BaseWorker:
@@ -709,6 +710,14 @@ class BaseEventManager(BaseEventWorker, ABC):
 class Workers:
     """A class to contain all workers in order for the manager classes."""
 
+    # Set static variables
+    vertical_bar = f'\u22EE'
+    vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
+    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar}{CCC.reset.all}'
+    index_color = f'{CCC.foreground.set_88_256.green4}'
+    worker_name_color = f'{CCC.foreground.set_8_16.blue}'
+    worker_desc_color = f'{CCC.foreground.set_88_256.grey54}'
+
     def __init__(self):
         """Initializer of the instance."""
 
@@ -899,9 +908,10 @@ class Workers:
             worker = self.__dict__[worker_name]
             # Construct current worker's string
             out_string += \
-                f'\033[38;5;28m{index:{length_worker_digit}d}\033[0m ' \
-                f'\033[37m->\033[0m ' \
-                f'\033[34m{worker_name}\033[0m: \033[38;5;245m{self.__dict__[worker_name]}\033[0m\n'
+                f'{self.index_color}{index:{length_worker_digit}d}{CCC.reset.all} ' \
+                f'{self.vertical_bar_color}->{CCC.reset.all} ' \
+                f'{self.worker_name_color}{worker_name}{CCC.reset.all}: ' \
+                f'{self.worker_desc_color}{self.__dict__[worker_name]}{CCC.reset.all}\n'
             # Check if the worker has worker and we have to go deep
             if issubclass(type(worker), BaseWorker) and 'workers' in worker.__dict__:
                 # Get worker's string representation
@@ -910,7 +920,7 @@ class Workers:
                 worker_string = \
                     re.sub(
                         r'(^|\n)(?!$)',
-                        r'\1' + f'\033[37m\u22EE\033[0m' + r'\t',
+                        r'\1' + f'{self.vertical_bar_with_color}' + f'\t',
                         worker_string
                     ) \
                     if worker_string != '' else ''
