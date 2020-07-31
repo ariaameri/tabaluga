@@ -1,5 +1,6 @@
 from ..util.config import ConfigParser
 from ..base.base import BaseWorker, BaseEventManager
+from abc import ABC
 from typing import Dict, List
 import logging
 import sys
@@ -118,6 +119,22 @@ class Logger(BaseWorker):
 
         self._level = level
         self._handler.level = level
+
+
+class LoggerManager(BaseEventManager, ABC):
+    """"An abstract class that manages Logger instances and calls their events on the occurrence of events."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the logger manager class.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration for this instance and the rest of the instances it will initialize
+
+        """
+
+        super().__init__(config)
 
 
 class TQDMLogger(Logger, io.StringIO):
