@@ -1,4 +1,6 @@
 from ..util.config import ConfigParser
+from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
 from abc import ABC
 from typing import Dict, List
@@ -159,7 +161,26 @@ class TQDMLogger(Logger, io.StringIO):
 
         self._tqdm = tqdm(
             position=self._counter[0],
-            bar_format='{percentage:3.0f}%|{bar}{r_bar} {desc}',
+            bar_format=''
+                       f'{CCC.foreground.set_88_256.grey74}'
+                       '{percentage:3.0f}% '
+                       f'{CCC.foreground.set_88_256.cornflowerblue}'
+                       '|'
+                       f'{CCC.foreground.set_88_256.steelblue4}'
+                       '{bar}'
+                       f'{CCC.foreground.set_88_256.cornflowerblue}'
+                       '| '
+                       f'{CCC.foreground.set_88_256.gold1}'
+                       '{n_fmt}'
+                       f'{CCC.foreground.set_88_256.grey}'
+                       '/'
+                       f'{CCC.foreground.set_88_256.orange2}'
+                       '{total_fmt} '
+                       f'{CCC.foreground.set_88_256.grey50}' 
+                       '[{elapsed}<{remaining}, ' '{rate_fmt}{postfix}] '
+                       f'{CCC.reset.all}'
+                       '{desc}'
+                       '\b\b',
             file=self  # Write to this log handler instead of stderr
         )
         # Bookkeeping for tqdm
