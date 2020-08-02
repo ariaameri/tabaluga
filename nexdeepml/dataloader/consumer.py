@@ -40,7 +40,7 @@ class SampleDataManager(DataManager):
         self.workers['val'] = SampleDataLoaderManager(self._config.val, self.val_metadata)
         self.workers['test'] = SampleDataLoaderManager(self._config.test, self.test_metadata)
 
-    def on_epoch_begin(self, info: Dict = None):
+    def on_train_epoch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, update the batch size of the train data loader."""
 
         self.workers['train'].set_batch_size(self.batch_size)
