@@ -206,9 +206,10 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Modify the metadata
         self.modify_metadata()
 
-        # Book keeping for batch size and iterator
+        # Book keeping for iterator, batch size and number of iterations (batches in an epoch)
         self._iterator_count = 0
-        self.batch_size: int
+        self.batch_size: int = -1
+        self.number_of_iterations: int = -1
 
         # Create workers
         self.create_workers()
@@ -258,11 +259,20 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         self.batch_size = batch_size
-        self.number_of_iterations = len(self.metadata) / batch_size
 
-        # Set batch size of all the workers
+        # Book keeping for the returned number of iterations from workers
+        number_of_iterations_workers = []
+
+        # Set batch size of all the workers and get their number_of_iterations
         for worker in self.workers:
-            worker.set_batch_size(batch_size)
+            number_of_iterations_workers.append(worker.set_batch_size(batch_size))
+
+        # Check if all the returned number of iterations are the same
+        assert all([no == number_of_iterations_workers[0] for no in number_of_iterations_workers]) is True, \
+            'Returned number_of_iterations from all DataLoader\'s must be the same.'
+
+        # Set the number of iterations
+        self.number_of_iterations = number_of_iterations_workers[0]
 
     def __len__(self) -> int:
         """Returns the length of the instance.
@@ -271,7 +281,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        return int(self.number_of_iterations)
+        return self.number_of_iterations
 
     def __next__(self):
         """Returns the next set of data.
@@ -330,8 +340,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         self.metadata: pd.DataFrame = metadata
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
-        self.batch_size: int
-        self.number_of_iterations: int
+        self.batch_size: int = -1
+        self.number_of_iterations: int = -1
 
         # Book keeping for iterator
         self._iterator_count = 0
@@ -370,7 +380,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return True
 
-    def set_batch_size(self, batch_size: int) -> None:
+    def set_batch_size(self, batch_size: int) -> int:
         """Sets the batch size and thus finds the total number of batches in one epoch.
 
         Parameter
@@ -382,6 +392,8 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         self.batch_size = batch_size
         self.number_of_iterations = len(self.metadata) // batch_size
+
+        return self.number_of_iterations
 
     @abstractmethod
     def load_data(self, metadata: pd.DataFrame):
