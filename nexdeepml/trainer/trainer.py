@@ -16,7 +16,7 @@ class Trainer(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Total number of epochs, total batch count, batch size, current epoch, and current batch number
-        self.epochs: int = config.epochs
+        self.epochs: int = self._config.epochs
         self.number_of_iterations: int = -1  # Has to be set by the data loader
         self.batch_size: int = -1  # Has to be set by the data loader
         self.epoch: int = 0
@@ -88,6 +88,10 @@ class Trainer(base.BaseEventManager, ABC):
         A dictionary containing the history of the process
 
         """
+
+        # Make dummy variables
+        train_dict = {}
+        val_dict = {}
 
         # Training
         if self.epoch == 0:
