@@ -124,7 +124,31 @@ class Logger(BaseWorker):
 
         """
 
-        self._logger.info(msg)
+        # Adds colored 'info: ' to the beginning of the message
+        info_message = f'{CCC.foreground.set_88_256.green3}' \
+                       f'info: ' \
+                       f'{CCC.reset.all}'
+        info_message += msg
+
+        self._logger.info(info_message)
+
+    def warning(self, msg: str) -> None:
+        """Writes the message given as a warning.
+
+        Parameters
+        ----------
+        msg : str
+            The message to be written as warning
+
+        """
+
+        # Adds colored 'warning: ' to the beginning of the message
+        warning_message = f'{CCC.foreground.set_88_256.red1}'\
+                          f'warning: '\
+                          f'{CCC.reset.all}'
+        warning_message += msg
+
+        self._logger.warning(warning_message)
 
     def error(self, msg: str) -> None:
         """Writes the message given as an error.
@@ -136,7 +160,13 @@ class Logger(BaseWorker):
 
         """
 
-        self._logger.error(msg)
+        # Adds colored 'ERROR: ' to the beginning of the message and color the message as well
+        error_message = f'{CCC.background.set_8_16.red}{CCC.foreground.set_8_16.white}'\
+                        f'ERROR: '
+        error_message += msg
+        error_message += f'{CCC.reset.all}'
+
+        self._logger.error(error_message)
 
     def debug(self, msg: str) -> None:
         """Writes the message given as an debug.
@@ -148,7 +178,13 @@ class Logger(BaseWorker):
 
         """
 
-        self._logger.debug(msg)
+        # Adds colored 'debug: ' to the beginning of the message
+        debug_message = f'{CCC.foreground.set_88_256.indianred2}'\
+                        f'debug: '\
+                        f'{CCC.reset.all}'
+        debug_message += msg
+
+        self._logger.debug(debug_message)
 
     def set_level(self, level: int) -> None:
         """Sets the level of logging.
