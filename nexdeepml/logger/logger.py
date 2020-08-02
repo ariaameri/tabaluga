@@ -65,11 +65,54 @@ class Logger(BaseWorker):
 
         # Set the level, format, and attach
         self._handler.setLevel(config.level if config.level is not None else logging.INFO)
+        self._format = config.format if config.format is not None else self._create_format()
         self._handler.setFormatter(
             logging.Formatter(
-                config.format if config.format is not None else '%(asctime)s - %(name)s - %(levelname)s: %(message)s'
+                self._format
             ))
         self._logger.addHandler(self._handler)
+
+    def _create_format(self) -> str:
+        """Creates a custom logger format and returns the string.
+
+        Returns
+        -------
+        The string containing the customized logger format
+
+        """
+
+        format = ''
+
+        if self.console is False:
+            format += f'{CCC.foreground.set_88_256.grey50}' + '%(asctime)s '
+            format += f'{CCC.foreground.set_88_256.grey42}' + '- '
+        else:
+            format += f'{CCC.foreground.set_88_256.dodgerblue3}' + f'{SUC.rightwards_arrow_to_bar} '
+        format += f'{CCC.foreground.set_88_256.gold1}' + '%(name)s'
+        format += f'{CCC.foreground.set_88_256.grey42}' + ' '
+        format += f'{CCC.reset.all}' + '%(message)s'
+
+        return format
+
+    def report(self, msg: str) -> None:
+        """Writes the message given as a report.
+
+        A report is logged the same as info but with different declaration
+
+        Parameters
+        ----------
+        msg : str
+            The message to be written as report
+
+        """
+
+        # Adds colored 'report: ' to the beginning of the message
+        report_message = f'{CCC.foreground.set_88_256.green4}'\
+                         f'report: '\
+                         f'{CCC.reset.all}'
+        report_message += msg
+
+        self._logger.info(report_message)
 
     def info(self, msg: str) -> None:
         """Writes the message given as an info.
