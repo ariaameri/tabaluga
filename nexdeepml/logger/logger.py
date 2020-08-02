@@ -139,6 +139,14 @@ class TQDMLogger(Logger, io.StringIO):
     # TODO: Write the doc for the config argument
 
     def __init__(self, config: ConfigParser):
+        """Initialize the tqdm logger instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this callback instance and the data manager class.
+
+        """
 
         # Making sure the logger is going to write to the console
         config = config.update('console', True)
