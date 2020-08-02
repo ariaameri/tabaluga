@@ -1,5 +1,5 @@
 from ..util.config import ConfigParser
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Type
 from abc import ABC, abstractmethod
 import numpy as np
 import re
@@ -749,14 +749,14 @@ class Workers:
         # Book keeping for iteration
         self._current_iteration_count: int = 0
 
-    def register_worker(self, name: str, worker: BaseWorker, rank: int = -1):
+    def register_worker(self, name: str, worker: Type[BaseWorker], rank: int = -1):
         """Registers a new worker (or manager).
 
         Parameters
         ----------
         name : str
             The name of the worker (or manager)
-        worker : BaseWorker
+        worker : Type[BaseWorker]
             The reference to the worker (or manager)
         rank : int, optional
             Rank of the worker (or manager) in the list. If not given, will insert at the end
@@ -779,14 +779,14 @@ class Workers:
 
         self.__dict__[name] = worker
 
-    def replace_worker(self, name: str, worker: BaseWorker) -> None:
+    def replace_worker(self, name: str, worker: Type[BaseWorker]) -> None:
         """Replaces an existing worker.
 
         Parameters
         ----------
         name : str
             The name of the worker to be replaced
-        worker : BaseWorker
+        worker : Type[BaseWorker]
             The worker reference to be replaced
 
         """
@@ -824,7 +824,7 @@ class Workers:
             self._current_iteration_count = 0
             raise StopIteration
 
-    def __getitem__(self, item) -> Union[BaseWorker, None]:
+    def __getitem__(self, item) -> Union[Type[BaseWorker], None]:
         """Get a worker.
 
         item can be string, return worker by name, or int, return worker by rank.
