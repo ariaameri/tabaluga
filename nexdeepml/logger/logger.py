@@ -19,6 +19,9 @@ class Logger(BaseWorker):
     # Keep track of how many logger instances we have
     _counter: List[int] = [0]
 
+    # Keep track of supported logger functionality/abilities
+    log_abilities = ['debug', 'report', 'info', 'warning', 'error']
+
     # TODO: Figure out the way configurations have to be passed to the class
 
     def __init__(self, config: ConfigParser):
@@ -71,6 +74,17 @@ class Logger(BaseWorker):
                 self._format
             ))
         self._logger.addHandler(self._handler)
+
+    def get_abilities(self) -> List[str]:
+        """Method to return the list of abilities for the logger.
+
+        Returns
+        -------
+        A list of all the levels at which this logger can perform
+
+        """
+
+        return self.log_abilities
 
     def _create_format(self) -> str:
         """Creates a custom logger format and returns the string.
