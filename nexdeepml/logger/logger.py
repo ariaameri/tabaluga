@@ -10,6 +10,7 @@ from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
+from copy import deepcopy
 
 
 class Logger(BaseWorker):
@@ -253,28 +254,81 @@ class TQDMLogger(Logger, io.StringIO):
                 val_loss: float, optional
         """
 
+        def _generate_message_set(msg_set_dict: Dict) -> str:
+            """Function to help generate the set of messages for training, validation, ... .
+
+            Parameters
+            ----------
+            msg_set_dict : dict
+                The dictionary containing the information needed. Some are
+                    _title: containing the title of the set
+
+            Returns
+            -------
+            The generated string of the information set
+            """
+
+            message = ''
+
+            if len(msg_set_dict) > 1:
+                message += f'\t' * 2
+                title = str(msg_set_dict.pop('_title'))
+                message += f'{CCC.foreground.set_88_256.deepskyblue5}{SUC.right_facing_armenian_eternity_sign} '
+                message += f'{CCC.foreground.set_88_256.deepskyblue3}{title}'
+                message += f'{CCC.reset.all}'
+                message += f'\n'
+                for key, value in sorted(msg_set_dict.items()):
+                    message += f'\t' * 3
+                    message += f'{SUC.horizontal_bar} '
+                    message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
+                               f'{CCC.reset.all}: ' \
+                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
+                               f'{CCC.reset.all}' \
+                               f'\n'
+
+            return message
+
+        # Make a copy of the dictionary to modify it
+        msg_dict_copy = deepcopy(msg_dict)
+
         message = ''
 
         if msg_dict is None:
             return message
 
         # Find the length of the total epochs
+        # get and remove the 'epoch' item from the dictionary
         # and reformat the string accordingly
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
-        message += f'Epoch {msg_dict["epoch"]:{ep_len}d}/{self._n_epochs}'
-        message += f': ' if len(msg_dict) > 1 else ' '
+        epoch = msg_dict_copy.pop('epoch')
+        message += f'\n'
+        message += f'\t' * 1
+        message += f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
+        message += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
+                   f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
+                   f'{CCC.foreground.set_88_256.grey}/' \
+                   f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
+                   f'{CCC.reset.all}'
+        message += f'\n'
 
-        if 'loss' in msg_dict.keys():
-            message += f'loss: {msg_dict["loss"]: .5e}'
+        # Check if we have training values for logging, starting with 'train_'
+        # get the item from the dictionary and delete it
+        # Generate the message set and add it to the total message
+        train_items = {key[len('train_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
+                       if key.startswith('train_')}
 
-        if 'val_loss' in msg_dict.keys():
-            message += f', val_loss: {msg_dict["val_loss"]: .5e}'
+        message += _generate_message_set({"_title": "Training", **train_items})
 
-        # Print the rest in msg
-        for key in [key for key in msg_dict.keys() if key != 'epoch' and key != 'loss' and key != 'val_loss']:
-            message += f', {key}: {msg_dict[key]}'
+        # Check if we have validation values for logging, starting with 'train_'
+        # get the item from the dictionary and delete it
+        # Generate the message set and add it to the total message
+        val_items = {key[len('val_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
+                     if key.startswith('val_')}
 
-        message += ' '
+        message += _generate_message_set({"_title": "Validation", **val_items})
+
+        # Print the rest of the message set
+        message += _generate_message_set({"_title": "Others", **msg_dict_copy})
 
         return message
 
