@@ -149,10 +149,8 @@ class TQDMLogger(Logger, io.StringIO):
         """
 
         # Making sure the logger is going to write to the console
-        config = config.update('console', True)
-
         # Make sure it does not write any prefix
-        config = config.update('format', '')
+        config = config.update('console', True).update('format', '')
 
         self._config = config
 
