@@ -121,7 +121,7 @@ class Logger(BaseWorker):
 
         # Check if the logger has the mentioned level
         assert level in self.log_abilities, \
-            f'Level of logging, {level}, not accepted.\nSupported levels are {", ".join(self._logger.get_abilities())}.'
+            f'Level of logging, {level}, not accepted.\nSupported levels are {", ".join(self.get_abilities())}.'
 
         # Log
         getattr(self, level)(msg)
