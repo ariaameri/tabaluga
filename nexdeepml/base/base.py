@@ -1,4 +1,5 @@
 from ..util.config import ConfigParser
+from ..logger.logger import Logger
 from typing import List, Dict, Union, Type
 from abc import ABC, abstractmethod
 import numpy as np
@@ -19,9 +20,13 @@ class BaseWorker:
 
         """
 
+        # Set the configuration
         self._config = config
 
-    def print_config(self, depth: int = -1):
+        # Set the logger handler placeholder
+        self._logger: Type[Logger]
+
+    def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
 
         Parameters
@@ -32,6 +37,53 @@ class BaseWorker:
         """
 
         print(self._config.str_representation(depth=depth))
+
+    def _log(self, msg: str, level: str = 'debug') -> None:
+        """Logs the given message at the given level.
+
+        Parameters
+        ----------
+        msg : str
+            String message to log
+        level : str
+            The level at which the message should be logged
+        """
+
+        # Modify the message
+        message = self._modify_log_message(msg, level)
+
+        # Log
+        self._logger.log(message, level)
+
+    def _modify_log_message(self, msg: str, level: str = 'debug') -> str:
+        """Modifies the log message according to the level and returns it.
+
+        Parameters
+        ----------
+        msg : str
+            String message to log
+        level : str
+            The level at which the message should be logged
+
+        Returns
+        -------
+        The modified message string
+
+        """
+
+        return msg
+
+    def set_logger(self, logger: Type[Logger]) -> None:
+        """Set the instance of the general logger for this worker.
+
+        Parameters
+        ----------
+        logger : Type[Logger]
+            An instance of the Logger class of general logging
+
+        """
+
+        self._logger = logger
 
 
 class BaseManager(BaseWorker):
