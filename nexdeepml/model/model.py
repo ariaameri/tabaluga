@@ -1,8 +1,9 @@
+from abc import ABC
 from ..util.config import ConfigParser
 from ..base import base
 
 
-class ModelManager(base.BaseEventManager):
+class ModelManager(base.BaseEventManager, ABC):
     """Abstract class that manages neural network models."""
 
     def __init__(self):
