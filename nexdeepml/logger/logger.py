@@ -108,6 +108,24 @@ class Logger(BaseWorker):
 
         return format
 
+    def log(self, msg: str, level: str = 'debug') -> None:
+        """Logs the given message at the given level.
+
+        Parameters
+        ----------
+        msg : str
+            String message to log
+        level : str
+            The level at which the message should be logged
+        """
+
+        # Check if the logger has the mentioned level
+        assert level in self.log_abilities, \
+            f'Level of logging, {level}, not accepted.\nSupported levels are {", ".join(self._logger.get_abilities())}.'
+
+        # Log
+        getattr(self, level)(msg)
+
     def report(self, msg: str) -> None:
         """Writes the message given as a report.
 
