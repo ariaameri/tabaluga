@@ -413,9 +413,8 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
         """
 
-        super().__init__(config)
-
-        self.workers: Workers = Workers()
+        BaseEventWorker.__init__(self, config)
+        BaseManager.__init__(self, config)
 
         # Call the events on each worker for each event starting with 'on_'
         # self._method_names: List[str] = [method for method in dir(self) if method.startswith('on_')]
