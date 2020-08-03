@@ -815,13 +815,13 @@ class Workers:
     def __init__(self):
         """Initializer of the instance."""
 
-        # Keep the workers oder list as a list of strings
+        # Keep the workers order list as a list of strings
         self._workers_name_order: List[str] = []
 
         # Book keeping for iteration
         self._current_iteration_count: int = 0
 
-    def register_worker(self, name: str, worker: Type[BaseWorker], rank: int = -1):
+    def register_worker(self, name: str, worker: Type[BaseWorker], rank: int = -1) -> None:
         """Registers a new worker (or manager).
 
         Parameters
@@ -868,17 +868,17 @@ class Workers:
         else:
             raise Exception(f'Could not find the worker with the name {name} to replace it!')
 
-    def __len__(self):
+    def __len__(self) -> int:
         """Get the total number of workers."""
 
         return len(self._workers_name_order)
 
-    def __iter__(self):
+    def __iter__(self) -> Workers:
         """Method for making the class iterable."""
 
         return self
 
-    def __next__(self):
+    def __next__(self) -> Type[BaseWorker]:
         """Iterate over the workers"""
 
         # If we have not run out of workers
@@ -941,7 +941,7 @@ class Workers:
         else:
             return -1
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key, value) -> None:
         """Set a new worker."""
 
         # Use a terrible way of setting class variables.
@@ -952,7 +952,7 @@ class Workers:
         else:
             self.register_worker(key, value)
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key, value) -> None:
         """Set an item like a dictionary."""
 
         self.__setattr__(key, value)
@@ -964,7 +964,7 @@ class Workers:
 
         return out_string
 
-    def print(self, depth: int = -1):
+    def print(self, depth: int = -1) -> None:
         """Prints the workers and goes in depth.
 
         Parameters
@@ -1036,7 +1036,7 @@ class Workers:
 
         return out_string
 
-    def str_with_config_representation(self, depth: int = -1):
+    def str_with_config_representation(self, depth: int = -1) -> str:
 
         out_string = self.str_representation(depth=depth, config_enable=True)
 
