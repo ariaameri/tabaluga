@@ -140,10 +140,6 @@ class ConfigParser:
 
         """
 
-        # Set what to add at the beginning of each type
-        begin_configparser = f'\u2022'
-        begin_list = f'-'
-
         # Check if we have reach the root of the recursion, i.e. depth is zero
         if depth == 0:
             return ''
