@@ -21,6 +21,13 @@ class SampleImageProcessManager(ProcessManager):
 
         self.create_workers()
 
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image process manager'
+    #
+    #     return string
+
     def create_workers(self):
         """Creates the pre- and post-processing managers as workers."""
 

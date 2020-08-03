@@ -21,6 +21,13 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         self.create_workers()
 
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image preprocess manager'
+    #
+    #     return string
+
     def create_workers(self):
         """Creates Preprocess instances."""
 

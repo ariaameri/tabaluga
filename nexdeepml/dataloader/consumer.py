@@ -11,6 +11,13 @@ class SampleDataLoaderManager(DataLoaderManager):
     def __init__(self, config, metadata):
         super().__init__(config, metadata)
 
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image data loader manager'
+    #
+    #     return string
+
     def create_workers(self):
         self.workers['image_loader'] = ImageLoader(self._config, self.metadata)
 
@@ -32,6 +39,13 @@ class SampleDataManager(DataManager):
         """
 
         super().__init__(config)
+
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image data manager'
+    #
+    #     return string
 
     def create_workers(self):
         """Creates DataLoaderManagers (workers) for train, val, and test data."""

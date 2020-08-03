@@ -25,6 +25,13 @@ class ImageLoader(dataloader.DataLoader):
         # Modify the metadata
         self.modify_metadata()
 
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image data loader'
+    #
+    #     return string
+
     def load_data(self, metadata: pd.DataFrame) -> np.ndarray:
         """Loads images provided in the metadata data frame.
 

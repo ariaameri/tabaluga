@@ -16,6 +16,13 @@ class ImageNormalizer(preprocess.Preprocess):
 
         super().__init__(ConfigParser())
 
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image normalizer by dividing by 255.'
+    #
+    #     return string
+
     def normalize(self, images: np.ndarray) -> np.ndarray:
         """"Normalizes the images given.
 
@@ -65,6 +72,13 @@ class ImageResizer(preprocess.Preprocess):
         self.interpolation = config.interpolation if config.interpolation is not None else cv2.INTER_AREA
 
         super().__init__(config)
+
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image resizer to {self.destination_image_size}'
+    #
+    #     return string
 
     def resize(self, images: np.ndarray) -> np.ndarray:
         """"Resizes the images given.
