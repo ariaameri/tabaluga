@@ -34,6 +34,22 @@ class BaseWorker:
         print(self._config.str_representation(depth=depth))
 
 
+class BaseManager(BaseWorker):
+    """Class to server as the base of all managers."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializer of the instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed
+
+        """
+
+        super().__init__(config)
+
+
 class BaseEventWorker(BaseWorker):
     """This abstract class servers as the parent of all worker classes."""
 
@@ -322,7 +338,7 @@ class BaseEventWorker(BaseWorker):
         pass
 
 
-class BaseEventManager(BaseEventWorker, ABC):
+class BaseEventManager(BaseEventWorker, BaseManager, ABC):
     """This abstract class servers as the parent of all manager classes.
 
     All managers are assumed to have self.workers: List[BaseWorker].
