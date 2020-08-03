@@ -90,11 +90,11 @@ class BaseWorker:
         self._logger = logger
 
 
-class BaseManager(BaseWorker):
+class BaseManager(BaseWorker, ABC):
     """Class to server as the base of all managers."""
 
-    def __init__(self, config: ConfigParser):
-        """Initializer of the instance.
+    def __init__(self, config: ConfigParser = None):
+        """Initializer of the instance/manager.
 
         Parameters
         ----------
@@ -104,6 +104,58 @@ class BaseManager(BaseWorker):
         """
 
         super().__init__(config)
+
+        self.workers: Workers = Workers()
+
+    def get_worker(self, index: Union[str, int]) -> Type[BaseWorker]:
+        """Returns the worker given its index.
+
+        Parameters
+        ----------
+        index : Union[str, int]
+            The index or name of the worker in class' worker ordered dictionary
+
+        Returns
+        -------
+        worker : BaseEventWorker
+            Reference to the worker inquired
+        """
+
+        return self.workers[index]
+
+    def print_workers(self, depth: int = -1):
+        """Prints the representation of the workers.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth until which we want to print the workers. If not given, will go until the end
+
+        """
+
+        print(self.workers.str_representation(depth=depth))
+
+    @abstractmethod
+    def create_workers(self):
+        """Creates and initializes workers."""
+
+        raise NotImplementedError
+
+    def set_logger(self, logger: Type[Logger]) -> None:
+        """Set the instance of the general logger for this worker.
+
+        Parameters
+        ----------
+        logger : Type[Logger]
+            An instance of the Logger class of general logging
+
+        """
+
+        super().set_logger(logger)
+
+        # Set logger for the workers
+        for worker in self.workers:
+            worker.set_logger(logger=self._logger)
 
 
 class BaseEventWorker(BaseWorker):
@@ -451,40 +503,8 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         this = self
         return _event
 
-    def get_worker(self, index: Union[str, int]) -> Type[BaseWorker]:
-        """Returns the worker given its index.
+    # def str_with_config_representation(self, depth: int = -1):
 
-        Parameters
-        ----------
-        index : Union[str, int]
-            The index or name of the worker in class' worker ordered dictionary
-
-        Returns
-        -------
-        worker : BaseEventWorker
-            Reference to the worker inquired
-        """
-
-        return self.workers[index]
-
-    def print_workers(self, depth: int = -1):
-        """Prints the representation of the workers.
-
-        Parameters
-        ----------
-        depth : int, optional
-            The depth until which we want to print the workers. If not given, will go until the end
-
-        """
-
-        print(self.workers.str_representation(depth=depth))
-
-    @abstractmethod
-    def create_workers(self):
-        """Creates and initializes workers."""
-
-        raise NotImplementedError
-    
     def on_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of training.
 
