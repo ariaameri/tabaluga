@@ -12,7 +12,7 @@ class ModelManager(base.BaseEventManager, ABC):
         super().__init__()
 
 
-class Model(base.BaseEventWorker):
+class Model(base.BaseWorker, ABC):
     """Abstract class that contains the neural network model."""
 
     def __init__(self):
