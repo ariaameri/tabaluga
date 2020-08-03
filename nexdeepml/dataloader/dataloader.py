@@ -283,6 +283,11 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return self.number_of_iterations
 
+    def __iter__(self):
+        """Returns an iterable, self."""
+
+        return self
+
     def __next__(self):
         """Returns the next set of data.
 
@@ -295,7 +300,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # if the batch size is more that the amount of data left, go to beginning and return None
         if self._iterator_count > self.number_of_iterations:
             self._iterator_count = 0
-            return None
+            return StopIteration
 
         # Load the data
         data = self.__getitem__(self._iterator_count)
@@ -423,6 +428,11 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self.number_of_iterations
 
+    def __iter__(self):
+        """Returns an iterable, self."""
+
+        return self
+
     def __next__(self):
         """Returns the next set of data.
 
@@ -435,7 +445,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         # if the batch size is more that the amount of data left, go to beginning and return None
         if self._iterator_count > self.number_of_iterations:
             self._iterator_count = 0
-            return None
+            raise StopIteration
 
         # Load the data
         data = self.__getitem__(self._iterator_count)
