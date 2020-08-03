@@ -396,7 +396,7 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         this = self
         return _event
 
-    def get_worker(self, index: Union[str, int]) -> BaseWorker:
+    def get_worker(self, index: Union[str, int]) -> Type[BaseWorker]:
         """Returns the worker given its index.
 
         Parameters
