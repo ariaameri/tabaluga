@@ -1,10 +1,14 @@
+from __future__ import annotations
 from ..util.config import ConfigParser
-from ..logger.logger import Logger
 from typing import List, Dict, Union, Type
 from abc import ABC, abstractmethod
 import numpy as np
 import re
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+# Take care of circular imports
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from ..logger.logger import Logger
 
 
 class BaseWorker:
