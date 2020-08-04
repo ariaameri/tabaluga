@@ -3,7 +3,7 @@ from ..util.config import ConfigParser
 import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
-from typing import Union, List, Dict
+from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 
 
@@ -27,10 +27,10 @@ class Trainer(base.BaseEventManager, ABC):
         self.val_data: np.ndarray = None
 
         # Set placeholder for callbacks
-        self.callback: CallbackManager = self.create_callback()
+        self.callback: Type[CallbackManager] = self.create_callback()
 
         # Set placeholder for model
-        self.model: ModelManager = self.create_model()
+        self.model: Type[ModelManager] = self.create_model()
 
         # Create history list for keeping the history of the net
         self.history = []
@@ -38,12 +38,12 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_info_dict = {}
         self.val_info_dict = {}
 
-    def create_callback(self) -> Union[CallbackManager, Callback]:
+    def create_callback(self) -> Union[Type[CallbackManager], Type[Callback]]:
         """Creates an instance of the callback and returns it."""
 
         pass
 
-    def create_model(self) -> Union[ModelManager, Model]:
+    def create_model(self) -> Union[Type[ModelManager], Type[Model]]:
         """Creates an instance of the model and returns it."""
 
         pass
