@@ -32,6 +32,12 @@ class Trainer(base.BaseEventManager, ABC):
         # Set placeholder for model
         self.model: ModelManager = self.create_model()
 
+        # Create history list for keeping the history of the net
+        self.history = []
+        # Make dummy variables
+        self.train_info_dict = {}
+        self.val_info_dict = {}
+
     def create_callback(self) -> Union[CallbackManager, Callback]:
         """Creates an instance of the callback and returns it."""
 
@@ -50,9 +56,6 @@ class Trainer(base.BaseEventManager, ABC):
         A List[Dict] containing the history of the train/validation process
 
         """
-
-        # Create history list for keeping the history of the net
-        history = []
 
         self.epoch = 0
 
@@ -73,12 +76,12 @@ class Trainer(base.BaseEventManager, ABC):
             # This is the end of the epoch, so, epoch number is incremented
             # Also, history is recorder
             self.epoch += 1
-            history.append(epoch_history)
+            self.history.append(epoch_history)
 
         # Everything is finished
         self.on_end()
 
-        return history
+        return self.history
 
     def one_epoch(self) -> Dict:
         """Performs the training and validation for one epoch.
@@ -89,16 +92,12 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
-        # Make dummy variables
-        train_dict = {}
-        val_dict = {}
-
         # Training
         if self.epoch == 0:
             self.on_train_begin()
 
         self.on_train_epoch_begin()
-        train_dict = self.train_one_epoch()
+        train_info_dict = self.train_one_epoch()
         self.on_train_epoch_end()
 
         if self.epoch == (self.epochs - 1):
@@ -109,7 +108,7 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_begin()
 
         self.on_val_epoch_begin()
-        val_dict = self.val_one_epoch()
+        val_info_dict = self.val_one_epoch()
         self.on_val_epoch_end()
 
         if self.epoch == (self.epochs - 1):
@@ -117,8 +116,8 @@ class Trainer(base.BaseEventManager, ABC):
 
         epoch_dict = {
             'epoch': self.epoch,
-            **train_dict,
-            **val_dict
+            **train_info_dict,
+            **val_info_dict
         }
 
         return epoch_dict
@@ -132,20 +131,17 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
-        # Make dummy output dictionary
-        train_dict = {}
-
         for self.batch in range(self.number_of_iterations):
 
             self.on_batch_begin()
             self.on_train_batch_begin()
 
-            train_dict = self.train_one_batch()
+            self.train_info_dict = self.train_one_batch()
 
             self.on_train_batch_end()
             self.on_batch_end()
 
-        return train_dict
+        return self.train_info_dict
 
     def val_one_epoch(self) -> Dict:
         """Performs validation for the neural network for one epoch.
@@ -156,18 +152,15 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
-        # Make dummy training history dictionary
-        val_dict = {}
-
         for self.batch in range(self.number_of_iterations):
 
             self.on_val_batch_begin()
 
-            val_dict = self.val_one_batch()
+            self.val_info_dict = self.val_one_batch()
 
             self.on_val_batch_end()
 
-        return val_dict
+        return self.val_info_dict
 
     @abstractmethod
     def train_one_batch(self) -> Dict:
