@@ -291,8 +291,7 @@ class TQDMLogger(Logger, io.StringIO):
                        f'{CCC.foreground.set_88_256.grey50}' 
                        '[{elapsed}<{remaining}, ' '{rate_fmt}{postfix}] '
                        f'{CCC.reset.all}'
-                       '{desc}'
-                       '\b\b',
+                       '{desc}',
             file=self  # Write to this log handler instead of stderr
         )
         # Bookkeeping for tqdm
@@ -349,7 +348,7 @@ class TQDMLogger(Logger, io.StringIO):
         self._tqdm.update(update_count)
 
         message = self._generate_message(msg_dict)
-        self._tqdm.set_description(message)
+        self._tqdm.set_description_str(message)
 
     def _generate_message(self, msg_dict: Dict) -> str:
         """Generates a string based on the input to be used as tqdm bar description.
