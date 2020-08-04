@@ -1,0 +1,47 @@
+# Config file for set up of the deep learning framework
+
+trainer:
+  epochs:
+    10
+
+  model:
+    model:
+      d_in:
+        3
+
+  callback:
+    data_loader:
+      batch_size:
+        8
+      input_type:
+        folder_path
+      folders:
+        - /Users/aria/Documents
+        - /Users/aria/Downloads/chert
+        - /Users/aria/Pictures
+      test_ratio:
+        0
+      val_ratio:
+        .1
+      shuffle:
+        False
+
+    process:
+      preprocess:
+        resize:
+          destination_image_size: !!python/tuple [512, 512]
+
+    test:
+      - the_first
+      - the_second:
+          - this_has_surpise
+          - this_too
+      - the_third
+      - the_fourth
+
+    logger:
+      tqdm:
+        chert:
+          5
+        kolooche:
+          6
