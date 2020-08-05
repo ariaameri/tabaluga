@@ -121,7 +121,7 @@ class TheProgressBar:
         check = self.isatty()
 
         # Check if we are a foreground process
-        check &= os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
+        check &= os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
 
         return check
 
@@ -360,7 +360,7 @@ class TheProgressBar:
         # Make the bar string
         bar: str = self.bar_chars[-1] * whole_char_count  # Completed parts
         bar += self.bar_chars[remainder_char_idx - 1] if remainder_char_idx != 0 else ''  # Half-completed parts
-        bar += ' ' * (bar_length - len(bar)) # Not completed parts
+        bar += ' ' * (bar_length - len(bar))  # Not completed parts
 
         # Add the borders
         bar = f'|{bar}|'
