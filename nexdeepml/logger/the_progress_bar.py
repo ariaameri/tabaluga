@@ -285,9 +285,8 @@ class TheProgressBar:
         else:
             to_write += f'\n'
 
-        with self.print_lock:
-            self.original_sysout.write(to_write)
-            self.flush()
+        # Print the progress bar
+        self._direct_write(to_write)
 
     def _get_progressbar(self) -> str:
         """Returns a string containing the progress bar.
@@ -492,6 +491,20 @@ class TheProgressBar:
         freq = float(np.maximum(10., 2 * average_freq))
 
         return freq
+
+    def _direct_write(self, msg: str):
+        """Write the msg directly on the output with no buffers.
+
+        Parameters
+        ----------
+        msg : str
+            Message to be written
+
+        """
+
+        with self.print_lock:
+            self.original_sysout.write(msg)
+            self.flush()
 
     def write(self, msg: str) -> None:
         """Prints a message to the output.
