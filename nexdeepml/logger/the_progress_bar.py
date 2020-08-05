@@ -156,20 +156,17 @@ class TheProgressBar:
 
         # Calling 'print' will call this function twice.
         # First with the message and second with the new line character
+        if msg != f'\n':
+            self.buffer.append(msg)
+        else:
+            with self.print_lock:
+                # Create the message from the buffer and print it with extra new line character
+                msg = ''.join(msg for msg in self.buffer)
+                sys.__stdout__.write(f'{msg}\n')
 
-        # Add the item to the buffer
-        self.buffer.append(msg)
-
-        if msg == f'\n':
-            self.flush()
+                self.buffer = []
 
     def flush(self):
         """Flushes the screen."""
 
-        with self.print_lock:
-
-            msg = ''.join(msg for msg in self.buffer)
-            sys.__stdout__.write(msg)
-            sys.__stdout__.flush()
-
-            self.buffer = []
+        sys.__stdout__.flush()
