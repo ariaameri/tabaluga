@@ -118,10 +118,9 @@ class TheProgressBar:
         """
 
         # Check if we are connected to a terminal
-        check = self.isatty()
-
         # Check if we are a foreground process
-        check &= os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
+        check = self.isatty() \
+            and (os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno()))
 
         return check
 
