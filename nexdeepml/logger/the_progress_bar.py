@@ -92,7 +92,7 @@ class TheProgressBar:
         # Stop the run thread
         self.run_thread = None
 
-        sys.stdout = sys.__stdout__
+        sys.stdout = self.original_sysout
 
     def run(self):
         """Prints the progress bar and takes care of other controls.
