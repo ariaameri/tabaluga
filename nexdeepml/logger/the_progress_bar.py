@@ -5,6 +5,7 @@ from typing import List
 import numpy as np
 import time
 import os
+from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 
 
 class TheProgressBar:
@@ -564,3 +565,68 @@ class TheProgressBar:
         """Flushes the screen."""
 
         self.original_sysout.flush()
+
+
+class TheProgressBarColored(TheProgressBar):
+
+    def __init__(self):
+
+        super().__init__()
+
+    def _get_bar_prefix(self) -> str:
+        """Returns the string that comes before the bar.
+
+        Returns
+        -------
+        A string that comes before the bar
+
+        """
+
+        # The percentage of the progress
+        percent: float = self._get_percentage() * 100
+
+        bar_prefix = f'{CCC.foreground.set_88_256.grey74}' \
+                     f'{percent:6.2f}%' \
+                     f'{CCC.reset.all}'
+
+        return bar_prefix
+
+    def _get_bar_suffix(self) -> str:
+        """Returns the string that comes after the bar.
+
+        Returns
+        -------
+        A string that comes after the bar
+
+        """
+
+        bar_suffix: str = self._get_fractional_progress()  # Fractional progress e.g. 12/20
+        bar_suffix += f' '
+        bar_suffix += f'{CCC.foreground.set_88_256.grey27}' \
+                      f'[{self._get_item_per_second():.2f} it/s]'
+        bar_suffix += f'{CCC.reset.all}'
+
+        return bar_suffix
+
+    def _get_fractional_progress(self) -> str:
+        """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
+
+        Returns
+        -------
+        A string containing the fractional progress
+
+        """
+
+        # Get the length of chars of total number of items for better formatting
+        length_items = int(np.ceil(np.log10(self.number_of_items))) if self.number_of_items > 0 else 5
+
+        # Create the string
+        fractional_progress: str = f'{CCC.foreground.set_88_256.gold1}' \
+                                   f'{self.current_item: {length_items}d}'
+        fractional_progress += f'{CCC.foreground.set_88_256.grey46}' \
+                               f'/'
+        fractional_progress += f'{CCC.foreground.set_88_256.orange2}' + \
+                               f'{self.number_of_items}' if self.number_of_items > 0 else '?'
+        fractional_progress += f'{CCC.reset.all}'
+
+        return fractional_progress
