@@ -304,11 +304,19 @@ class TheProgressBar:
         bar_prefix = self._get_bar_prefix()
         bar_suffix = self._get_bar_suffix()
 
-        remaining_columns = int(np.minimum(columns - len(bar_prefix) - len(bar_suffix) - 2, 50))
+        remaining_columns = \
+            int(np.clip(
+                columns - len(bar_prefix) - len(bar_suffix) - 3 - len(self.description.split('\n')[0]),
+                30,
+                50
+            ))
 
         bar = self._get_bar(remaining_columns)
 
         progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
+
+        # Trim the progress bar to the number of columns of the console
+        progress_bar = progress_bar[:columns]
 
         return progress_bar
 
