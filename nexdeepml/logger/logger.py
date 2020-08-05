@@ -505,6 +505,9 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.activate()
 
+        # Redirect the stream handler of the this logger to use TPB
+        self._handler.setStream(self._the_progress_bar)
+
         return self
 
     def set_number_epochs(self, epochs: int) -> None:
@@ -540,6 +543,9 @@ class TheProgressBarLogger(Logger):
         """Finishes and closes the TheProgressBar instance."""
 
         self._the_progress_bar.deactivate()
+
+        # Redirect the stream handler of the this logger to use stdout
+        self._handler.setStream(sys.stdout)
 
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the TheProgressBar progress bar with description set to message.
@@ -624,7 +630,7 @@ class TheProgressBarLogger(Logger):
         message += f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
         message += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
                    f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
-                   f'{CCC.foreground.set_88_256.grey}/' \
+                   f'{CCC.foreground.set_88_256.grey27}/' \
                    f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
                    f'{CCC.reset.all}'
         message += f'\n'
