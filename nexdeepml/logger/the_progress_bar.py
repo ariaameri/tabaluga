@@ -267,8 +267,8 @@ class TheProgressBar:
 
         self.description = description
 
-    def _print_progressbar(self, return_to_beginning: bool = True):
-        """Clears the line and prints the progress bar
+    def _get_progressbar_with_spaces(self, return_to_beginning: bool = True) -> str:
+        """Retunrs the progress bar along with its cursor modifier ANSI escape codes
 
         Returns
         -------
@@ -281,18 +281,33 @@ class TheProgressBar:
         progress_bar = self._get_progressbar()
 
         # Clear the line and write it
-        to_write: str = self.cursor_modifier.get('clear_line')
-        to_write += f'{progress_bar}'
+        progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
+        progress_bar_with_space += f'{progress_bar}'
 
         if return_to_beginning:
             number_of_lines = progress_bar.count(f'\n')
-            to_write += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
-            to_write += f'\r'
+            progress_bar_with_space += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
+            progress_bar_with_space += f'\r'
         else:
-            to_write += f'\n'
+            progress_bar_with_space += f'\n'
+
+        return progress_bar_with_space
+
+    def _print_progressbar(self, return_to_beginning: bool = True):
+        """Clears the line and prints the progress bar
+
+        Returns
+        -------
+        return_to_beginning: bool, optional
+            Whether to return the cursor to the beginning of the progress bar
+
+        """
+
+        # Get the progress bar with spaces
+        progress_bar = self._get_progressbar_with_spaces(return_to_beginning=return_to_beginning)
 
         # Print the progress bar
-        self._direct_write(to_write)
+        self._direct_write(progress_bar)
 
     def _get_progressbar(self) -> str:
         """Returns a string containing the progress bar.
