@@ -75,6 +75,9 @@ class TheProgressBar:
         # Redirect stdout
         sys.stdout = self
 
+        # Hide cursor
+        self._direct_write(self.cursor_modifier.get("hide"))
+
         # Get the running daemon thread
         self.run_thread = threading.Thread(
             name='run_daemon_thread',
@@ -94,6 +97,9 @@ class TheProgressBar:
 
         # Print the progress bar and leave it
         self._print_progressbar(return_to_beginning=False)
+
+        # Show cursor
+        self._direct_write(self.cursor_modifier.get("show"))
 
         sys.stdout = self.original_sysout
 
