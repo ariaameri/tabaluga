@@ -160,6 +160,9 @@ class TheProgressBar:
 
         """
 
+        # Print the progress bar and leave it
+        self._print_progressbar(return_to_beginning=False)
+
         # Set the initial time
         self.init_time = self.last_update_time = time.time()
 
