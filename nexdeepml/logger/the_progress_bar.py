@@ -92,6 +92,9 @@ class TheProgressBar:
         # Stop the run thread
         self.run_thread = None
 
+        # Print the progress bar and leave it
+        self._print_progressbar(return_to_beginning=False)
+
         sys.stdout = self.original_sysout
 
     def run(self):
@@ -258,8 +261,15 @@ class TheProgressBar:
 
         self.description = description
 
-    def _print_progressbar(self):
-        """Clears the line and prints the progress bar"""
+    def _print_progressbar(self, return_to_beginning: bool = True):
+        """Clears the line and prints the progress bar
+
+        Returns
+        -------
+        return_to_beginning: bool, optional
+            Whether to return the cursor to the beginning of the progress bar
+
+        """
 
         # Get the progress bar
         progress_bar = self._get_progressbar()
@@ -268,11 +278,12 @@ class TheProgressBar:
         to_write: str = self.cursor_modifier.get('clear_line')
         to_write += f'{progress_bar}'
 
-        number_of_lines = progress_bar.count(f'\n')
-        to_write += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
-        to_write += f'\r'
-
-        # self.write(self.cursor_modifier.get('left', 80))
+        if return_to_beginning:
+            number_of_lines = progress_bar.count(f'\n')
+            to_write += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
+            to_write += f'\r'
+        else:
+            to_write += f'\n'
 
         with self.print_lock:
             self.original_sysout.write(to_write)
