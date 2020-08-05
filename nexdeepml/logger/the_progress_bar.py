@@ -102,9 +102,28 @@ class TheProgressBar:
 
         while self.run_thread:
 
-            # Print the progress bar and wait
-            self._print_progressbar()
+            # Print the progress bar only if it is focused on
+            if self._check_if_focused():
+                self._print_progressbar()
+
             time.sleep(1 / self._get_update_frequency())
+
+    def _check_if_focused(self) -> bool:
+        """Checks whether the terminal is focused on the progress bar so that it should be printed.
+
+        Returns
+        -------
+        A boolean stating whether or not the progress bar should be printed
+
+        """
+
+        # Check if we are connected to a terminal
+        check = self.isatty()
+
+        # Check if we are a foreground process
+        check &= os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
+
+        return check
 
     def set_number_items(self, number_of_items: int):
         """Set the total number of the items.
