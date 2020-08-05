@@ -547,7 +547,7 @@ class TheProgressBar:
 
         # Calling 'print' will call this function twice.
         # First with the message and second with the new line character
-        if msg == '\n':
+        if msg == '\n' or msg.endswith('\n'):
 
             with self.print_lock:
 
