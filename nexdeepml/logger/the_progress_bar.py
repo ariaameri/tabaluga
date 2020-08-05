@@ -69,8 +69,8 @@ class TheProgressBar:
 
         """
 
-        # Set the initial time
-        self.init_time = self.last_update_time = time.time()
+        # Reset the parameters
+        self.reset()
 
         # Redirect stdout
         sys.stdout = self
@@ -152,7 +152,13 @@ class TheProgressBar:
 
         """
 
-        pass
+        # Set the initial time
+        self.init_time = self.last_update_time = time.time()
+
+        # Reset the current item counter
+        self.current_item = 0
+
+        return self
 
     def update(self, count: int) -> None:
         """Updates the progress bar by adding 'count' to the number of items.
