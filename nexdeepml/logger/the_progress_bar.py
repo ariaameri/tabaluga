@@ -162,8 +162,9 @@ class TheProgressBar:
 
         """
 
-        # Print the progress bar and leave it
-        self._print_progressbar(return_to_beginning=False)
+        # Print the progress bar and leave it if we have done any progress
+        if self.current_item != 0:
+            self._print_progressbar(return_to_beginning=False)
 
         # Set the initial time
         self.init_time = self.last_update_time = time.time()
