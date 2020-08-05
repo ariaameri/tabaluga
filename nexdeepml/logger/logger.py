@@ -1,7 +1,9 @@
+from __future__ import annotations
 from ..util.config import ConfigParser
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
+from .the_progress_bar import TheProgressBarColored
 from abc import ABC
 from typing import Dict, List
 import logging
@@ -318,8 +320,6 @@ class TQDMLogger(Logger, io.StringIO):
     def reset(self, total: int) -> None:
         """Set the total number of iterations and resets the tqdm.
 
-        Also, the number is updated in self._config.total
-
         Parameters
         ----------
         total : int
@@ -453,3 +453,205 @@ class TQDMLogger(Logger, io.StringIO):
         Will write tqdm messages as infos."""
 
         self._logger.info(self.buf)
+
+
+class TheProgressBarLogger(Logger):
+    """A logger for the progress bar that takes the control of stdout.
+
+    WARNING: It does not exactly behave the same way as the Logger class. It is just a wrapper/manager
+                class for the TheProgressBarLogger class.
+    """
+    # TODO: Conform the TheProgressBarLogger or a new class with Logger class
+
+    def __init__(self, config: ConfigParser):
+        """Initialize the logger and the TheProgressBar instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this callback instance and the data manager class.
+
+        """
+
+        # Making sure the logger is going to write to the console
+        # Make sure it does not write any prefix
+        config = config.update('console', True).update('format', '')
+
+        super().__init__(config)
+
+        # Create the instance of the TheProgressBar
+        self._the_progress_bar = TheProgressBarColored()
+
+        # The number of total items and epochs
+        self._total: int = -1
+        self._n_epochs: int = -1
+
+    def __enter__(self):
+
+        self.activate()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
+        self.close()
+
+    def activate(self) -> TheProgressBarLogger:
+        """Activates the TheProgressBar instance.
+
+        Has to be called to initiate its running.
+
+        """
+
+        self._the_progress_bar.activate()
+
+        # Redirect the stream handler of the this logger to use TPB
+        self._handler.setStream(self._the_progress_bar)
+
+        return self
+
+    def set_number_epochs(self, epochs: int) -> None:
+        """Sets the total number of epochs.
+
+        Parameters
+        ----------
+        epochs : int
+            Number of epochs
+
+        """
+
+        # The number of total epochs
+        self._n_epochs: int = epochs
+
+    def reset(self, total: int) -> TheProgressBarLogger:
+        """Set the total number of iterations and resets the the_progress_bar.
+
+        Parameters
+        ----------
+        total : int
+            the total number of items expected.
+
+        """
+
+        self._the_progress_bar.reset()
+        self._the_progress_bar.set_number_items(total)
+        self._total = total
+
+        return self
+
+    def close(self) -> None:
+        """Finishes and closes the TheProgressBar instance."""
+
+        self._the_progress_bar.deactivate()
+
+        # Redirect the stream handler of the this logger to use stdout
+        self._handler.setStream(sys.stdout)
+
+    def update(self, update_count: int, msg_dict: Dict = None) -> None:
+        """Update the TheProgressBar progress bar with description set to message.
+
+        Parameters
+        ----------
+        update_count : int
+            The amount that should be added to the TheProgressBar instance.
+        msg_dict : Dict, optional
+            Contains the dictionary message to be set as the progress bar description.
+            Will be passed to the _generate_message method, read there for more info.
+        """
+
+        self._the_progress_bar.update(update_count)
+
+        message = self._generate_message(msg_dict)
+        self._the_progress_bar.set_description(message)
+
+    def _generate_message(self, msg_dict: Dict) -> str:
+        """Generates a string based on the input to be used as tqdm bar description.
+
+        If msg is None, empty string will be returned.
+
+        Parameters
+        ---------
+        msg_dict : Dict
+            Dictionary containing the information to be used. Contains:
+                epoch: int
+                loss: float
+                val_loss: float, optional
+        """
+
+        def _generate_message_set(msg_set_dict: Dict) -> str:
+            """Function to help generate the set of messages for training, validation, ... .
+
+            Parameters
+            ----------
+            msg_set_dict : dict
+                The dictionary containing the information needed. Some are
+                    _title: containing the title of the set
+
+            Returns
+            -------
+            The generated string of the information set
+            """
+
+            message = ''
+
+            if len(msg_set_dict) > 1:
+                message += f'\t' * 2
+                title = str(msg_set_dict.pop('_title'))
+                message += f'{CCC.foreground.set_88_256.deepskyblue5}{SUC.right_facing_armenian_eternity_sign} '
+                message += f'{CCC.foreground.set_88_256.deepskyblue3}{title}'
+                message += f'{CCC.reset.all}'
+                message += f'\n'
+                for key, value in sorted(msg_set_dict.items()):
+                    message += f'\t' * 3
+                    message += f'{SUC.horizontal_bar} '
+                    message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
+                               f'{CCC.reset.all}: ' \
+                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
+                               f'{CCC.reset.all}' \
+                               f'\n'
+
+            return message
+
+        # Make a copy of the dictionary to modify it
+        msg_dict_copy = deepcopy(msg_dict)
+
+        message = ''
+
+        if msg_dict is None:
+            return message
+
+        # Find the length of the total epochs
+        # get and remove the 'epoch' item from the dictionary
+        # and reformat the string accordingly
+        ep_len = int(np.ceil(np.log10(self._n_epochs)))
+        epoch = msg_dict_copy.pop('epoch')
+        message += f'\n'
+        message += f'\t' * 1
+        message += f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
+        message += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
+                   f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
+                   f'{CCC.foreground.set_88_256.grey27}/' \
+                   f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
+                   f'{CCC.reset.all}'
+        message += f'\n'
+
+        # Check if we have training values for logging, starting with 'train_'
+        # get the item from the dictionary and delete it
+        # Generate the message set and add it to the total message
+        train_items = {key[len('train_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
+                       if key.startswith('train_')}
+
+        message += _generate_message_set({"_title": "Training", **train_items})
+
+        # Check if we have validation values for logging, starting with 'train_'
+        # get the item from the dictionary and delete it
+        # Generate the message set and add it to the total message
+        val_items = {key[len('val_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
+                     if key.startswith('val_')}
+
+        message += _generate_message_set({"_title": "Validation", **val_items})
+
+        # Print the rest of the message set
+        message += _generate_message_set({"_title": "Others", **msg_dict_copy})
+
+        return message
