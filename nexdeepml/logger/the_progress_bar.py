@@ -331,7 +331,7 @@ class TheProgressBar:
         remaining_columns = \
             int(np.clip(
                 columns - len(bar_prefix) - len(bar_suffix) - 3 - len(self.description.split('\n')[0]),
-                30,
+                5,
                 50
             ))
 
@@ -340,7 +340,7 @@ class TheProgressBar:
         progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
 
         # Trim the progress bar to the number of columns of the console
-        progress_bar = progress_bar[:columns]
+        progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
 
         return progress_bar
 
