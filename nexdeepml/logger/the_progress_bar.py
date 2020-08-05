@@ -1,3 +1,4 @@
+from __future__ import annotations
 import threading
 import sys
 from typing import List
@@ -52,7 +53,7 @@ class TheProgressBar:
         self.average_item_per_update: float = -np.inf
         self.call_count: int = 0
 
-    def __enter__(self):
+    def __enter__(self) -> TheProgressBar:
 
         return self.activate()
 
@@ -60,7 +61,7 @@ class TheProgressBar:
 
         return self.deactivate()
 
-    def activate(self):
+    def activate(self) -> TheProgressBar:
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
 
         Returns
@@ -89,7 +90,7 @@ class TheProgressBar:
 
         return self
 
-    def deactivate(self):
+    def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
         # Stop the run thread
@@ -103,7 +104,7 @@ class TheProgressBar:
 
         sys.stdout = self.original_sysout
 
-    def run(self):
+    def run(self) -> None:
         """Prints the progress bar and takes care of other controls.
 
         Method to be run by the daemon progress bar thread.
@@ -133,7 +134,7 @@ class TheProgressBar:
 
         return check
 
-    def set_number_items(self, number_of_items: int):
+    def set_number_items(self, number_of_items: int) -> TheProgressBar:
         """Set the total number of the items.
 
         Parameters
@@ -151,7 +152,7 @@ class TheProgressBar:
 
         return self
 
-    def reset(self):
+    def reset(self) -> TheProgressBar:
         """Resets the progress bar and returns its instance.
 
         Returns
@@ -296,7 +297,7 @@ class TheProgressBar:
 
         return progress_bar_with_space
 
-    def _print_progressbar(self, return_to_beginning: bool = True):
+    def _print_progressbar(self, return_to_beginning: bool = True) -> None:
         """Clears the line and prints the progress bar
 
         Returns
@@ -343,7 +344,7 @@ class TheProgressBar:
 
         return progress_bar
 
-    def _get_terminal_size(self):
+    def _get_terminal_size(self) -> (int, int):
 
         env = os.environ
 
@@ -408,7 +409,7 @@ class TheProgressBar:
 
         return bar
 
-    def _get_bar_prefix(self):
+    def _get_bar_prefix(self) -> str:
         """Returns the string that comes before the bar.
 
         Returns
@@ -486,7 +487,7 @@ class TheProgressBar:
 
         return average_item_per_second
 
-    def _update_time_counter(self):
+    def _update_time_counter(self) -> None:
         """Updates the internal average time counter."""
 
         # Figure current item time
@@ -516,7 +517,7 @@ class TheProgressBar:
 
         return freq
 
-    def _direct_write(self, msg: str):
+    def _direct_write(self, msg: str) -> None:
         """Write the msg directly on the output with no buffers.
 
         Parameters
@@ -559,7 +560,7 @@ class TheProgressBar:
 
                 self.buffer = []
 
-    def flush(self):
+    def flush(self) -> None:
         """Flushes the screen."""
 
         self.original_sysout.flush()
