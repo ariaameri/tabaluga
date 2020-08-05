@@ -74,10 +74,23 @@ class TheProgressBar:
 
         # Redirect stdout
         sys.stdout = self
+
+        # Get the running daemon thread
+        self.run_thread = threading.Thread(
+            name='run_daemon_thread',
+            target=self.run,
+            args=(),
+            daemon=True
+        )
+        self.run_thread.start()
+
         return self
 
     def deactivate(self):
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
+
+        # Stop the run thread
+        self.run_thread = None
 
         sys.stdout = sys.__stdout__
 
