@@ -510,9 +510,9 @@ class TheProgressBar:
         # Calculated the average number of items processed per second
         average_freq: float = 1 / self.average_time_per_update
 
-        # Rule: update at least 10 times in a second unless needed to be faster
+        # Rule: update at least 2 times and at most 60 times in a second unless needed to be faster
         # Also be twice as fast as the update time difference
-        freq = float(np.maximum(10., 2 * average_freq))
+        freq = float(np.clip(2 * average_freq, 2, 60))
 
         return freq
 
