@@ -162,6 +162,8 @@ class TheProgressBar:
             with self.print_lock:
                 # Create the message from the buffer and print it with extra new line character
                 msg = ''.join(msg for msg in self.buffer)
+
+                sys.__stdout__.write(self.cursor_modifier.get('clear_until_end'))
                 sys.__stdout__.write(f'{msg}\n')
 
                 self.buffer = []
