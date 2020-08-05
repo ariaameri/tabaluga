@@ -537,17 +537,22 @@ class TheProgressBar:
 
         """
 
+        self.buffer.append(msg)
+
         # Calling 'print' will call this function twice.
         # First with the message and second with the new line character
-        if msg != f'\n':
-            self.buffer.append(msg)
-        else:
+        if msg == '\n':
+
             with self.print_lock:
+
+                # Add the progress bar at the end
+                self.buffer.append(self._get_progressbar_with_spaces())
+
                 # Create the message from the buffer and print it with extra new line character
-                msg = ''.join(msg for msg in self.buffer)
+                msg = ''.join(self.buffer)
 
                 self.original_sysout.write(self.cursor_modifier.get('clear_until_end'))
-                self.original_sysout.write(f'{msg}\n')
+                self.original_sysout.write(f'{msg}')
 
                 self.buffer = []
 
