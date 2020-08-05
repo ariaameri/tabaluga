@@ -1,7 +1,7 @@
 from .callback import CallbackManager, ManagerCallback
 from ..base.base import BaseWorker
 from ..dataloader.consumer import SampleDataManager
-from ..logger.consumer import SampleLoggerManager
+from ..logger.consumer import SampleLoggerManager, SampleTheProgressBarLoggerManager
 from ..util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
@@ -132,7 +132,8 @@ class SampleLoggerCallback(ManagerCallback):
     def create_workers(self):
         """Create the Logger instance"""
 
-        self.workers['logger'] = SampleLoggerManager(self._config)
+        # self.workers['logger'] = SampleLoggerManager(self._config)
+        self.workers['logger'] = SampleTheProgressBarLoggerManager(self._config)
 
     def on_train_epoch_begin(self, info: Dict = None):
 
