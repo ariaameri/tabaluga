@@ -69,8 +69,8 @@ class TheProgressBar:
 
         """
 
-        # Reset the parameters
-        self.reset()
+        # Set the initial time
+        self.init_time = self.last_update_time = time.time()
 
         # Redirect stdout
         sys.stdout = self
