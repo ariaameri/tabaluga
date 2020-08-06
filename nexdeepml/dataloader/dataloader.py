@@ -67,8 +67,8 @@ class DataManager(base.BaseEventManager, ABC):
         elif self._input_type == 'mongo':
             self._build_metadata_from_mongo()
 
-        # Regroup the metadata based on some criteria
-        self._regroup_metadata()
+        # Regroup the metadata based on the criteria of file name
+        self._regroup_metadata('filename')
 
         # Generate the train, validation, and test metadata
         self._generate_train_val_test_metadata()
@@ -141,17 +141,25 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
-    def _regroup_metadata(self) -> None:
+    def _regroup_metadata(self, criterion=None) -> None:
         """Groups the metadata.
 
         Each group of data (e.g. containing data and label) should have.
         Each group must have its own unique index, where indices are range.
         Each group will be recovered by metadata.loc[index]
 
+        Parameters
+        ----------
+        criterion : str or List[str]
+            The name of the columns based on which the metadata should be categorized
+
         """
 
+        if criterion is None:
+            return
+
         # Group based on the filename
-        metadata = self.metadata.groupby('filename').apply(lambda x: x.reset_index(drop=True))
+        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
 
         # Rename the indices to be range
         # Also rename the index level 0 name to be 'index' (instead of 'filename')
