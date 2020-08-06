@@ -67,6 +67,9 @@ class DataManager(base.BaseEventManager, ABC):
         elif self._input_type == 'mongo':
             self._build_metadata_from_mongo()
 
+        # Regroup the metadata based on some criteria
+        self._regroup_metadata()
+
         # Generate the train, validation, and test metadata
         self._generate_train_val_test_metadata()
 
@@ -138,11 +141,32 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
+    def _regroup_metadata(self) -> None:
+        """Groups the metadata.
+
+        Each group of data (e.g. containing data and label) should have.
+        Each group must have its own unique index, where indices are range.
+        Each group will be recovered by metadata.loc[index]
+
+        """
+
+        # Group based on the filename
+        metadata = self.metadata.groupby('filename').apply(lambda x: x.reset_index(drop=True))
+
+        # Rename the indices to be range
+        # Also rename the index level 0 name to be 'index' (instead of 'filename')
+        metadata = metadata.rename(
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+        )
+        metadata.index.names = [None, *metadata.index.names[1:]]
+
+        self.metadata = metadata
+
     def _generate_train_val_test_metadata(self) -> None:
         """The method creates train, validation, and test metadata."""
 
         # Get count of each set
-        total_data_count = len(self.metadata)
+        total_data_count = self.metadata.index.get_level_values(0).unique().size
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -157,15 +181,25 @@ class DataManager(base.BaseEventManager, ABC):
         train_indices = indices[(test_count+val_count):]
 
         # Create the train, validation, and test metadata
-        self.test_metadata = self.metadata.iloc[test_indices]
-        self.val_metadata = self.metadata.iloc[val_indices]
-        self.train_metadata = self.metadata.iloc[train_indices]
+        self.test_metadata = self.metadata.loc[test_indices]
+        self.val_metadata = self.metadata.loc[val_indices]
+        self.train_metadata = self.metadata.loc[train_indices]
 
         # Update the column names of the data frames
         [self.train_metadata, self.val_metadata, self.test_metadata] = \
-            [df.assign(original_index=df.index).reset_index(drop=True)
-             for df
-             in [self.train_metadata, self.val_metadata, self.test_metadata]]
+            [
+                df
+                .assign(original_index=df.index.get_level_values(0))
+                .rename(
+                    index={
+                        key: value
+                        for value, key
+                        in enumerate(df.index.get_level_values(0).unique(), start=0)
+                    }
+                )
+                for df
+                in [self.train_metadata, self.val_metadata, self.test_metadata]
+            ]
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
