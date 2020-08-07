@@ -10,16 +10,16 @@ class ConfigParser:
     """A class that will contain config values and subclasses."""
 
     # Set static variables
-    begin_configparser = f'\u2022'
-    config_color = f'\033[38;5;209m'
-    begin_list = f'-'
+    item_begin_symbol = f'\u2022'
+    item_color = f'\033[38;5;209m'
+    begin_list_symbol = f'-'
     # begin_list_color = f'{CCC.foreground.set_88_256.chartreuse4}'
     begin_list_color = f'\033[38;5;70m'
-    begin_list = f'{begin_list_color}{begin_list}\033[0m'
-    vertical_bar = f'\u22EE'
+    begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
+    vertical_bar_symbol = f'\u22EE'
     # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
     vertical_bar_color = f'\033[37m'
-    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar}\033[0m'
+    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar_symbol}\033[0m'
 
     def __init__(self, config_dict: Dict = None):
         """Initializes the class based on the input config dictionary.
@@ -153,7 +153,7 @@ class ConfigParser:
             """
 
             out_string = ''
-            out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
+            out_string += f'{self.item_begin_symbol} {self.item_color}{key}\033[0m'
             out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
             out_string += f'\n'
 
@@ -189,9 +189,9 @@ class ConfigParser:
 
             # Write begin_list at the beginning in green
             out_string = \
-                f'{self.begin_list} {out_string}'\
+                f'{self.begin_list_symbol} {out_string}'\
                 if type(item) != type(self) \
-                else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_string[2:]}'
+                else f'{self.begin_list_color}{self.item_begin_symbol}\033[0m {out_string[2:]}'
 
             return out_string
 
