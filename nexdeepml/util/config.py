@@ -327,7 +327,7 @@ class ConfigParser:
 
         return new_config
 
-    def get(self, item: str, default_value: str = None):
+    def get(self, item: str, default_value: Any = None) -> Any:
         """Gets an item in the instance or return the default_value if not found.
 
         Parameters
