@@ -31,12 +31,12 @@ class DataManager(base.BaseEventManager, ABC):
         self._input_type: str = config.input_type
 
         # Get random seed and shuffle boolean
-        self._seed = config.seed if config.seed is not None else None
-        self._shuffle: bool = config.shuffle if config.shuffle is not None else False
+        self._seed = config.seed
+        self._shuffle: bool = config.shuffle or False
 
         # Get test and validation ratios
-        self._test_ratio: float = config.test_ratio if config.test_ratio is not None else 0
-        self._val_ratio: float = config.val_ratio if config.val_ratio is not None else 0
+        self._test_ratio: float = config.test_ratio or 0
+        self._val_ratio: float = config.val_ratio or 0
 
         # Set batch size
         self.batch_size: int = config.batch_size

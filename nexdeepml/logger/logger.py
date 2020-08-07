@@ -50,10 +50,10 @@ class Logger(BaseWorker):
         super().__init__(config)
 
         # The level at which we log
-        self._level: int = config.level if config.level is not None else logging.INFO
+        self._level: int = config.level or logging.INFO
 
         # Get the logger
-        self._logger = logging.getLogger(config.name if config.name is not None else str(self._counter[0]))
+        self._logger = logging.getLogger(config.name or str(self._counter[0]))
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
@@ -66,11 +66,11 @@ class Logger(BaseWorker):
         else:
             file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             file_name = f'{file_name}.txt'
-            self._handler = logging.FileHandler(config.file_name if config.file_name is not None else file_name)
+            self._handler = logging.FileHandler(config.file_name or file_name)
 
         # Set the level, format, and attach
-        self._handler.setLevel(config.level if config.level is not None else logging.INFO)
-        self._format = config.format if config.format is not None else self._create_format()
+        self._handler.setLevel(config.level or logging.INFO)
+        self._format = config.format or self._create_format()
         self._handler.setFormatter(
             logging.Formatter(
                 self._format
