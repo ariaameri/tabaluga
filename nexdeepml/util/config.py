@@ -62,7 +62,7 @@ class ConfigParser:
         """
 
         if type(config) == dict:
-            return ConfigParser(config)
+            return self.__class__(config)
         elif type(config) == list:
             out = []
             for item in config:
@@ -111,7 +111,7 @@ class ConfigParser:
             config = self
 
         # Check for the type of the input and act accordingly
-        if type(config) == ConfigParser:
+        if type(config) is type(self):
             out = {}
             for key, item in config.__dict__.items():
                 out[key] = self.dict_representation(item)
@@ -151,7 +151,7 @@ class ConfigParser:
         if config is None:
             config = self
 
-        if issubclass(type(config), ConfigParser):
+        if issubclass(type(config), type(self)):
             for key, item in config.__dict__.items():
 
                 out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
@@ -179,7 +179,7 @@ class ConfigParser:
                 # Write begin_list at the beginning in green
                 out_substring += \
                     f'{self.begin_list} {out_subsubstring}' \
-                    if type(item) != ConfigParser \
+                    if type(item) != type(self) \
                     else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_subsubstring[2:]}'
 
             out_string += out_substring
@@ -250,11 +250,11 @@ class ConfigParser:
         # In case we have to change an attribute here at depth zero
         if len(split) == 1:
             parameters = {**self.__dict__, **{name: value}}  # Either update or create new attribute
-            return ConfigParser(parameters)
+            return self.__class__(parameters)
         # In case we have to go deeper to change an attribute
         else:
             parameters = {i: d for i, d in self.__dict__.items() if i != split[0]}
             # Find if we should update or create new attribute
-            chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else ConfigParser({})
+            chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else self.__class__({})
             parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
-            return ConfigParser(parameters)
+            return self.__class__(parameters)
