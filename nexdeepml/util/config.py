@@ -35,7 +35,7 @@ class ConfigParser:
             config_dict = {}
 
         for key, value in config_dict.items():
-            setattr(self, key, self._init_helper(value))
+            self.__dict__[key] = self._init_helper(value)
 
     @classmethod
     def create_from_file(cls, file_path: str):
