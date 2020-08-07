@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any
+from typing import Dict, Any, List
 import yaml
 import re
 from itertools import chain
@@ -112,9 +112,7 @@ class ConfigParser:
 
         # Check for the type of the input and act accordingly
         if type(config) is type(self):
-            out = {}
-            for key, item in config.__dict__.items():
-                out[key] = self.dict_representation(item)
+            out = {self.dict_representation(item) for key, item in config.__dict__.items()}
         elif type(config) == list:
             out = [self.dict_representation(item) for item in config]
         else:
@@ -138,50 +136,80 @@ class ConfigParser:
 
         """
 
+        def config_dict_string(key, item):
+            """Helper function to create the string from elements of a dictionary.
+
+            Parameters
+            ----------
+            key
+                Key of the dictionary element
+            item
+                Value of the dictionary element
+
+            Returns
+            -------
+            String representation of the item
+
+            """
+
+            out_string = ''
+            out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
+            out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
+            out_string += f'\n'
+
+            # Find the corresponding string for the item
+            out_substring = self.str_representation(item, depth - 1)
+
+            # Indent the result
+            out_substring = re.sub(
+                r'(^|\n)(?!$)',
+                r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
+                out_substring
+            )
+
+            out_string += out_substring
+
+            return out_string
+
+        def config_list_string(item):
+            """Helper function to create the string from elements of a list.
+
+            Parameters
+            ----------
+            item
+                Value of the list element
+
+            Returns
+            -------
+            String representation of the item
+
+            """
+
+            out_string = self.str_representation(item, depth)
+
+            # Write begin_list at the beginning in green
+            out_string = \
+                f'{self.begin_list} {out_string}'\
+                if type(item) != type(self) \
+                else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_string[2:]}'
+
+            return out_string
+
         # Check if we have reach the root of the recursion, i.e. depth is zero
         if depth == 0:
             return ''
 
         # The final string to be returned
-        out_string = ''
+        # out_string = ''
 
         # If no config is given, perform everything on the current instance
         if config is None:
             config = self
 
-        if issubclass(type(config), type(self)):
-            for key, item in sorted(config.__dict__.items()):
-
-                out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
-                out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
-                out_string += f'\n'
-
-                # Find the corresponding string for the item
-                out_substring = self.str_representation(item, depth - 1)
-
-                # Indent the result
-                out_substring = re.sub(
-                    r'(^|\n)(?!$)',
-                    r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
-                    out_substring
-                )
-
-                out_string += out_substring
-
+        if type(config) is type(self):
+            out_string = ''.join(config_dict_string(key, item) for key, item in sorted(config.__dict__.items()))
         elif type(config) == list:
-
-            # The final string of this section
-            out_substring = ''
-            for item in config:
-                out_subsubstring = self.str_representation(item, depth)
-                # Write begin_list at the beginning in green
-                out_substring += \
-                    f'{self.begin_list} {out_subsubstring}' \
-                    if type(item) != type(self) \
-                    else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_subsubstring[2:]}'
-
-            out_string += out_substring
-
+            out_string = ''.join(config_list_string(item) for item in config)
         else:
             return self._identity_str_representation(config) + f'\n'
 
@@ -239,7 +267,7 @@ class ConfigParser:
         """
 
         # Split the name to see if should go deeper in the attributes
-        split = name.split('.')
+        split: List[str] = name.split('.')
         # list_entry = re.search(r'(\w+)\[(\d+)\]', split[0])
 
         # In case we have to change an attribute here at depth zero
@@ -248,10 +276,11 @@ class ConfigParser:
             return self.__class__(parameters)
         # In case we have to go deeper to change an attribute
         else:
-            parameters = {i: d for i, d in self.__dict__.items() if i != split[0]}
+            root: str = split[0]
+            parameters = {key: value for key, value in self.__dict__.items() if key != root}
             # Find if we should update or create new attribute
-            chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else self.__class__({})
-            parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
+            chooser = self.__dict__[root] if root in self.__dict__.keys() else self.__class__({})
+            parameters = {**parameters, root: chooser.update('.'.join(split[1:]), value)}
             return self.__class__(parameters)
 
     def union(self, new_config: ConfigParser) -> ConfigParser:
