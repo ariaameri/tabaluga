@@ -265,6 +265,35 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Update the metadata
         self.metadata = self.metadata.iloc[selection]
 
+    def _regroup_metadata(self, criterion=None) -> None:
+        """Groups the metadata.
+
+        Each group of data (e.g. containing data and label) should have.
+        Each group must have its own unique index, where indices are range.
+        Each group will be recovered by metadata.loc[index]
+
+        Parameters
+        ----------
+        criterion : str or List[str]
+            The name of the columns based on which the metadata should be categorized
+
+        """
+
+        if criterion is None:
+            return
+
+        # Group based on the filename
+        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
+
+        # Rename the indices to be range
+        # Also rename the index level 0 name to be 'index' (instead of 'filename')
+        metadata = metadata.rename(
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+        )
+        metadata.index.names = [None, *metadata.index.names[1:]]
+
+        self.metadata = metadata
+
     def _check_file(self, file_path: str) -> bool:
         """"Helper function to check a single file.
 
