@@ -208,10 +208,7 @@ class ConfigParser:
         sets it and if it exists, raises an error.
         """
 
-        if name in self.__dict__:
-            raise Exception(f"Value of {name} exists. Cannot change value of {name} due to immutability.")
-        else:
-            self.__dict__[name] = value
+        raise Exception(f"Cannot change or add value of {name} due to immutability. Use `update` method instead.")
 
     def is_empty(self) -> bool:
         """EXPERIMENTAL: A checker method that tells whether this instance of config is empty or not
