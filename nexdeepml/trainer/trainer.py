@@ -1,5 +1,6 @@
 from ..base import base
 from ..util.config import ConfigParser
+from ..util.data_holder import DataHolder
 import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
@@ -23,8 +24,8 @@ class Trainer(base.BaseEventManager, ABC):
         self.batch: int = 0
 
         # Set placeholders for the train and validation data
-        self.train_data: np.ndarray = None
-        self.val_data: np.ndarray = None
+        self.train_data: DataHolder = DataHolder()
+        self.val_data: DataHolder = DataHolder()
 
         # Set placeholder for callbacks
         self.callback: Type[CallbackManager] = self.create_callback()

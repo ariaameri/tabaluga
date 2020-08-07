@@ -69,7 +69,7 @@ class ImageResizer(preprocess.Preprocess):
 
         self.destination_image_size = config.destination_image_size
 
-        self.interpolation = config.interpolation if config.interpolation is not None else cv2.INTER_AREA
+        self.interpolation = config.interpolation or cv2.INTER_AREA
 
         super().__init__(config)
 

@@ -887,6 +887,21 @@ class Workers:
         else:
             raise Exception(f'Could not find the worker with the name {name} to replace it!')
 
+    def append(self, worker: Type[BaseWorker], name: str = None) -> None:
+
+        def name_finder(guess: int = 0) -> str:
+
+            if str(guess) in workers_name_order:
+                return name_finder(guess+1)
+            else:
+                return str(guess)
+
+        if name is None:
+            workers_name_order = self._workers_name_order
+            name = name_finder(len(workers_name_order))
+
+        self.register_worker(name, worker)
+
     def __len__(self) -> int:
         """Get the total number of workers."""
 

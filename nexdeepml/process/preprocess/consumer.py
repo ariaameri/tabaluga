@@ -38,10 +38,13 @@ class SampleImagePreprocessManager(PreprocessManager):
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train image data."""
 
+        # data = info['data']['data']
         data = info['data']
 
-        processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        # processed_data = self.workers['image_resizer'].resize(data)
+        processed_data = data.map(self.workers['image_resizer'].resize)
+        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        processed_data = processed_data.map(self.workers['image_normalizer'].normalize)
 
         return processed_data
 
@@ -50,7 +53,9 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         data = info['data']
 
-        processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        # processed_data = self.workers['image_resizer'].resize(data)
+        processed_data = data.map(self.workers['image_resizer'].resize)
+        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        processed_data = processed_data.map(self.workers['image_normalizer'].normalize)
 
         return processed_data

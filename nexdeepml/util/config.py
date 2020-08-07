@@ -1,6 +1,8 @@
-from typing import Dict, Any
+from __future__ import annotations
+from typing import Dict, Any, List
 import yaml
 import re
+from itertools import chain
 import numpy as np
 
 
@@ -8,16 +10,16 @@ class ConfigParser:
     """A class that will contain config values and subclasses."""
 
     # Set static variables
-    begin_configparser = f'\u2022'
-    config_color = f'\033[38;5;209m'
-    begin_list = f'-'
+    item_begin_symbol = f'\u2022'
+    item_color = f'\033[38;5;209m'
+    begin_list_symbol = f'-'
     # begin_list_color = f'{CCC.foreground.set_88_256.chartreuse4}'
     begin_list_color = f'\033[38;5;70m'
-    begin_list = f'{begin_list_color}{begin_list}\033[0m'
-    vertical_bar = f'\u22EE'
+    begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
+    vertical_bar_symbol = f'\u22EE'
     # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
     vertical_bar_color = f'\033[37m'
-    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar}\033[0m'
+    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar_symbol}\033[0m'
 
     def __init__(self, config_dict: Dict = None):
         """Initializes the class based on the input config dictionary.
@@ -33,7 +35,7 @@ class ConfigParser:
             config_dict = {}
 
         for key, value in config_dict.items():
-            setattr(self, key, self._init_helper(value))
+            self.__dict__[key] = self._init_helper(value)
 
     @classmethod
     def create_from_file(cls, file_path: str):
@@ -62,11 +64,9 @@ class ConfigParser:
         """
 
         if type(config) == dict:
-            return ConfigParser(config)
+            return self.__class__(config)
         elif type(config) == list:
-            out = []
-            for item in config:
-                out.append(self._init_helper(item))
+            out = [self._init_helper(item) for item in config]
         else:
             out = config
 
@@ -111,14 +111,10 @@ class ConfigParser:
             config = self
 
         # Check for the type of the input and act accordingly
-        if type(config) == ConfigParser:
-            out = {}
-            for key, item in config.__dict__.items():
-                out[key] = self.dict_representation(item)
+        if type(config) is type(self):
+            out = {self.dict_representation(item) for key, item in config.__dict__.items()}
         elif type(config) == list:
-            out = []
-            for item in config:
-                out.append(self.dict_representation(item))
+            out = [self.dict_representation(item) for item in config]
         else:
             out = config
 
@@ -140,50 +136,80 @@ class ConfigParser:
 
         """
 
+        def config_dict_string(key, item):
+            """Helper function to create the string from elements of a dictionary.
+
+            Parameters
+            ----------
+            key
+                Key of the dictionary element
+            item
+                Value of the dictionary element
+
+            Returns
+            -------
+            String representation of the item
+
+            """
+
+            out_string = ''
+            out_string += f'{self.item_begin_symbol} {self.item_color}{key}\033[0m'
+            out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
+            out_string += f'\n'
+
+            # Find the corresponding string for the item
+            out_substring = self.str_representation(item, depth - 1)
+
+            # Indent the result
+            out_substring = re.sub(
+                r'(^|\n)(?!$)',
+                r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
+                out_substring
+            )
+
+            out_string += out_substring
+
+            return out_string
+
+        def config_list_string(item):
+            """Helper function to create the string from elements of a list.
+
+            Parameters
+            ----------
+            item
+                Value of the list element
+
+            Returns
+            -------
+            String representation of the item
+
+            """
+
+            out_string = self.str_representation(item, depth)
+
+            # Write begin_list at the beginning in green
+            out_string = \
+                f'{self.begin_list_symbol} {out_string}'\
+                if type(item) != type(self) \
+                else f'{self.begin_list_color}{self.item_begin_symbol}\033[0m {out_string[2:]}'
+
+            return out_string
+
         # Check if we have reach the root of the recursion, i.e. depth is zero
         if depth == 0:
             return ''
 
         # The final string to be returned
-        out_string = ''
+        # out_string = ''
 
         # If no config is given, perform everything on the current instance
         if config is None:
             config = self
 
-        if issubclass(type(config), ConfigParser):
-            for key, item in config.__dict__.items():
-
-                out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
-                out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
-                out_string += f'\n'
-
-                # Find the corresponding string for the item
-                out_substring = self.str_representation(item, depth - 1)
-
-                # Indent the result
-                out_substring = re.sub(
-                    r'(^|\n)(?!$)',
-                    r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
-                    out_substring
-                )
-
-                out_string += out_substring
-
+        if type(config) is type(self):
+            out_string = ''.join(config_dict_string(key, item) for key, item in sorted(config.__dict__.items()))
         elif type(config) == list:
-
-            # The final string of this section
-            out_substring = ''
-            for item in config:
-                out_subsubstring = self.str_representation(item, depth)
-                # Write begin_list at the beginning in green
-                out_substring += \
-                    f'{self.begin_list} {out_subsubstring}' \
-                    if type(item) != ConfigParser \
-                    else f'{self.begin_list_color}{self.begin_configparser}\033[0m {out_subsubstring[2:]}'
-
-            out_string += out_substring
-
+            out_string = ''.join(config_list_string(item) for item in config)
         else:
             return self._identity_str_representation(config) + f'\n'
 
@@ -210,10 +236,7 @@ class ConfigParser:
         sets it and if it exists, raises an error.
         """
 
-        if name in self.__dict__:
-            raise Exception(f"Value of {name} exists. Cannot change value of {name} due to immutability.")
-        else:
-            self.__dict__[name] = value
+        raise Exception(f"Cannot change or add value of {name} due to immutability. Use `update` method instead.")
 
     def is_empty(self) -> bool:
         """EXPERIMENTAL: A checker method that tells whether this instance of config is empty or not
@@ -244,17 +267,85 @@ class ConfigParser:
         """
 
         # Split the name to see if should go deeper in the attributes
-        split = name.split('.')
+        split: List[str] = name.split('.')
         # list_entry = re.search(r'(\w+)\[(\d+)\]', split[0])
 
         # In case we have to change an attribute here at depth zero
         if len(split) == 1:
             parameters = {**self.__dict__, **{name: value}}  # Either update or create new attribute
-            return ConfigParser(parameters)
+            return self.__class__(parameters)
         # In case we have to go deeper to change an attribute
         else:
-            parameters = {i: d for i, d in self.__dict__.items() if i != split[0]}
+            root: str = split[0]
+            parameters = {key: value for key, value in self.__dict__.items() if key != root}
             # Find if we should update or create new attribute
-            chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else ConfigParser({})
-            parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
-            return ConfigParser(parameters)
+            chooser = self.__dict__[root] if root in self.__dict__.keys() else self.__class__({})
+            parameters = {**parameters, root: chooser.update('.'.join(split[1:]), value)}
+            return self.__class__(parameters)
+
+    def union(self, new_config: ConfigParser) -> ConfigParser:
+        """method to take the union of two config instances and replace the currently existing ones.
+
+        Parameters
+        ----------
+        new_config : ConfigParser
+            A config instance to union with (and update) the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the union of the two config instances
+
+        """
+
+        # TODO: optimize
+
+        def union_helper(new, old, this):
+
+            if type(new) == type(old) == type(this):
+                return old.union(new)
+            else:
+                return new
+
+        if new_config is None:
+            return new_config
+
+        if type(new_config) is type(self):
+
+            out_delta = {
+                key: value
+                for key, value in chain(self.__dict__.items(), new_config.__dict__.items())
+                if (key in self.__dict__) ^ (key in new_config.__dict__)
+            }
+
+            out_intersection = {
+                key: union_helper(value, self.get(key), self)
+                for key, value in new_config.__dict__.items()
+                if (key in self.__dict__) and (key in new_config.__dict__)
+            }
+
+            new_config = self.__class__({**out_delta, **out_intersection})
+
+        return new_config
+
+    def get(self, item: str, default_value: Any = None) -> Any:
+        """Gets an item in the instance or return the default_value if not found.
+
+        Parameters
+        ----------
+        item : str
+            Item to be search for possibly containing the hierarchy
+        default_value : str, optional
+            Value to be returned if the item is not found. If not give, None will be returned
+
+        Returns
+        -------
+        The value of the found item or the default_value if not found.
+
+        """
+
+        # TODO: Improve
+
+        if item in self.__dict__:
+            return self.__dict__[item]
+        else:
+            return default_value
