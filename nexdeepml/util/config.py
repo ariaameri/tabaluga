@@ -257,6 +257,50 @@ class ConfigParser:
             parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
             return self.__class__(parameters)
 
+    def union(self, new_config: ConfigParser) -> ConfigParser:
+        """method to take the union of two config instances and replace the currently existing ones.
+
+        Parameters
+        ----------
+        new_config : ConfigParser
+            A config instance to union with (and update) the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the union of the two config instances
+
+        """
+
+        # TODO: optimize
+
+        def union_helper(new, old, this):
+
+            if type(new) == type(old) == type(this):
+                return old.union(new)
+            else:
+                return new
+
+        if new_config is None:
+            return new_config
+
+        if type(new_config) is type(self):
+
+            out_delta = {
+                key: value
+                for key, value in chain(self.__dict__.items(), new_config.__dict__.items())
+                if (key in self.__dict__) ^ (key in new_config.__dict__)
+            }
+
+            out_intersection = {
+                key: union_helper(value, self.get(key), self)
+                for key, value in new_config.__dict__.items()
+                if (key in self.__dict__) and (key in new_config.__dict__)
+            }
+
+            new_config = self.__class__({**out_delta, **out_intersection})
+
+        return new_config
+
     def get(self, item: str, default_value: str = None):
         """Gets an item in the instance or return the default_value if not found.
 
