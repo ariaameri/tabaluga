@@ -1,6 +1,8 @@
+from __future__ import annotations
 from typing import Dict, Any
 import yaml
 import re
+from itertools import chain
 import numpy as np
 
 
@@ -254,3 +256,26 @@ class ConfigParser:
             chooser = self.__dict__[split[0]] if split[0] in self.__dict__.keys() else self.__class__({})
             parameters = {**parameters, split[0]: chooser.update('.'.join(split[1:]), value)}
             return self.__class__(parameters)
+
+    def get(self, item: str, default_value: str = None):
+        """Gets an item in the instance or return the default_value if not found.
+
+        Parameters
+        ----------
+        item : str
+            Item to be search for possibly containing the hierarchy
+        default_value : str, optional
+            Value to be returned if the item is not found. If not give, None will be returned
+
+        Returns
+        -------
+        The value of the found item or the default_value if not found.
+
+        """
+
+        # TODO: Improve
+
+        if item in self.__dict__:
+            return self.__dict__[item]
+        else:
+            return default_value
