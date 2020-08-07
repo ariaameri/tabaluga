@@ -7,6 +7,10 @@ from .config import ConfigParser
 class DataHolder(ConfigParser):
     """A class to contain all data in order."""
 
+    # Set static variables
+    begin_configparser = f'\u2058'
+    config_color = f'\033[38;5;112m'
+
     def __init__(self, data_dict: Dict = None):
         """Initializes the class based on the input data dictionary.
 
