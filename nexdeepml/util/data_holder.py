@@ -43,9 +43,7 @@ class DataHolder(ConfigParser):
             if type(data) is type(self):
                 return data.map(function)
             elif type(data) == list:
-                out = []
-                for item in data:
-                    out.append(map_helper(item))
+                out = [map_helper(item) for item in data]
             else:
                 out = function(data)
 

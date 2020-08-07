@@ -64,9 +64,7 @@ class ConfigParser:
         if type(config) == dict:
             return self.__class__(config)
         elif type(config) == list:
-            out = []
-            for item in config:
-                out.append(self._init_helper(item))
+            out = [self._init_helper(item) for item in config]
         else:
             out = config
 
@@ -116,9 +114,7 @@ class ConfigParser:
             for key, item in config.__dict__.items():
                 out[key] = self.dict_representation(item)
         elif type(config) == list:
-            out = []
-            for item in config:
-                out.append(self.dict_representation(item))
+            out = [self.dict_representation(item) for item in config]
         else:
             out = config
 
