@@ -148,7 +148,7 @@ class ConfigParser:
             config = self
 
         if issubclass(type(config), type(self)):
-            for key, item in config.__dict__.items():
+            for key, item in sorted(config.__dict__.items()):
 
                 out_string += f'{self.begin_configparser} {self.config_color}{key}\033[0m'
                 out_string += f':' if depth != 1 else ''  # Only add ':' if we want to print anything in front
