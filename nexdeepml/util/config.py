@@ -33,11 +33,9 @@ class ConfigParser:
         if config_dict is None:
             return
 
-        _meta = config_dict.get('_meta', '')
-        self.__dict__['_meta'] = _meta
-        _value = config_dict.get('_value')
-        if _value is not None:
-            self.__dict__['_value'] = _value
+        _meta = config_dict.get('_meta')
+        if _meta is not None:
+            self.__dict__['_meta'] = _meta
 
         for key, value in config_dict.items():
             if key not in ['_meta', '_value']:
@@ -79,9 +77,7 @@ class ConfigParser:
         elif type(config) == list:
             out = [self._init_helper(item, False) for item in config]
         else:
-            out = self.__class__({'_value': config}) \
-                if (add_value is True and '_value' not in self.__dict__.keys()) \
-                else config
+            out = config
 
         return out
 
@@ -375,33 +371,9 @@ class ConfigParser:
 
     def _find_one_helper(self, filter_dict, bc, bc_meta):
 
-        def checker():
+        bc_meta = bc_meta + self.__dict__.get('_meta', '')
 
-            satisfied = True
-
-            bc_regex = filter_dict.get('_bc_regex')
-            if bc_regex is not None:
-                satisfied &= bool(re.search(bc_regex, bc))
-            if satisfied is False:
-                return False
-
-            bc_meta_regex = filter_dict.get('_bc_meta_regex')
-            if bc_meta_regex is not None:
-                satisfied &= bool(re.search(bc_meta_regex, bc_meta))
-            if satisfied is False:
-                return False
-
-            for key, function in filter_dict.items():
-                if key not in ['_bc_regex', '_bc_meta_regex']:
-                    satisfied &= function(self.__dict__.get(key))
-                if satisfied is False:
-                    return False
-
-            return satisfied
-
-        bc_meta = bc_meta + f'.{self.__dict__["_meta"]}'
-
-        if checker() is True:
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
             return self
 
         else:
@@ -416,8 +388,39 @@ class ConfigParser:
                             out = item._find_one_helper(filter_dict, bc + f'.{key}', bc_meta)
                             if out is not None:
                                 return out
+                else:
+                    out = self._filter_checker(filter_dict, bc + f'.{key}', bc_meta) and value
+                    if out is not False:
+                        new_dict = {**{'_meta': self.__dict__['_meta']}, **{key: out}} \
+                            if self.__dict__.get('_meta') \
+                            else {key: out}
+                        return self.__class__(new_dict)
 
         return None
+
+    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = ''):
+
+        satisfied = True
+
+        bc_regex = filter_dict.get('_bc_regex')
+        if bc_regex is not None:
+            satisfied &= bool(re.search(bc_regex, bc))
+        if satisfied is False:
+            return False
+
+        bc_meta_regex = filter_dict.get('_bc_meta_regex')
+        if bc_meta_regex is not None:
+            satisfied &= bool(re.search(bc_meta_regex, bc_meta))
+        if satisfied is False:
+            return False
+
+        for key, function in filter_dict.items():
+            if key not in ['_bc_regex', '_bc_meta_regex']:
+                satisfied &= function(self.__dict__.get(key))
+            if satisfied is False:
+                return False
+
+        return satisfied
 
     def filter(self, filter_dict: Dict = None):
 
@@ -429,33 +432,9 @@ class ConfigParser:
 
     def _filter_helper(self, filter_dict, bc, bc_meta):
 
-        def checker():
+        bc_meta = bc_meta + self.__dict__.get('_meta', '')
 
-            satisfied = True
-
-            bc_regex = filter_dict.get('_bc_regex')
-            if bc_regex is not None:
-                satisfied &= bool(re.search(bc_regex, bc))
-            if satisfied is False:
-                return False
-
-            bc_meta_regex = filter_dict.get('_bc_meta_regex')
-            if bc_meta_regex is not None:
-                satisfied &= bool(re.search(bc_meta_regex, bc_meta))
-            if satisfied is False:
-                return False
-
-            for key, function in filter_dict.items():
-                if key not in ['_bc_regex', '_bc_meta_regex']:
-                    satisfied &= function(self.__dict__.get(key))
-                if satisfied is False:
-                    return False
-
-            return satisfied
-
-        bc_meta = bc_meta + f'.{self.__dict__["_meta"]}'
-
-        if checker() is True:
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
             return self
 
         else:
@@ -465,20 +444,24 @@ class ConfigParser:
             for key, value in self.__dict__.items():
                 if type(value) is type(self):
                     out = value._filter_helper(filter_dict, bc + f'.{key}', bc_meta)
-                    if out is not None:
-                        new_dict = {**{key: out}, **new_dict}
                 elif type(value) is list:
-                    new_list = []
-                    for item in value:
-                        if type(item) is type(self):
-                            out = item._filter_helper(filter_dict, bc + f'.{key}', bc_meta)
-                            if out is not None:
-                                new_list.append(out)
-                    if len(new_list) > 0:
-                        new_dict = {**{key: new_list}, **new_dict}
+                    out = [item._filter_helper(filter_dict, bc + f'.{key}', bc_meta)
+                           for item
+                           in value
+                           if type(item) is type(self)]
+                    out = [item for item in out if item is not None]
 
-        if len(new_dict) > 0:
-            return self.__class__({**{'_meta': self.__dict__['_meta']}, **new_dict})
+                else:
+                    out = self._filter_checker(filter_dict, bc + f'.{key}', bc_meta) and value
+
+                if out:
+                    new_dict = {**{key: out}, **new_dict}
+
+        if new_dict:
+            new_dict = {**{'_meta': self.__dict__['_meta']}, **new_dict}\
+                        if self.__dict__.get('_meta') \
+                        else new_dict
+            return self.__class__(new_dict)
         else:
             return None
 
