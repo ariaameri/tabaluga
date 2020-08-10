@@ -175,7 +175,7 @@ class ConfigParser:
 
             # Indent the result
             out_substring = re.sub(
-                r'(^|\n)(?!$)',
+                r'((^|\n)(?!$)|^$)',
                 r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
                 out_substring
             )
@@ -204,7 +204,9 @@ class ConfigParser:
             out_string = \
                 f'{self.begin_list_symbol} {out_string}'\
                 if type(item) != type(self) \
-                else f'{self.begin_list_color}{self.item_begin_symbol}\033[0m {out_string[2:]}'
+                else re.sub(r'(^|\n)' + r'(' + f'{self.item_begin_symbol}' + r')',
+                            r'\1' + f'{self.begin_list_color}' + r'\2' + f'\033[0m',
+                            out_string)
 
             return out_string
 
