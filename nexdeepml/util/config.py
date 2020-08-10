@@ -3,7 +3,6 @@ from typing import Dict, Any, List
 import yaml
 import re
 from itertools import chain
-import numpy as np
 
 
 class ConfigParser:
@@ -32,10 +31,17 @@ class ConfigParser:
 
         # Check if no input was given
         if config_dict is None:
-            config_dict = {}
+            return
+
+        _meta = config_dict.get('_meta', '')
+        self.__dict__['_meta'] = _meta
+        _value = config_dict.get('_value')
+        if _value is not None:
+            self.__dict__['_value'] = _value
 
         for key, value in config_dict.items():
-            self.__dict__[key] = self._init_helper(value)
+            if key not in ['_meta', '_value']:
+                self.__dict__[key] = self._init_helper(value)
 
     @classmethod
     def create_from_file(cls, file_path: str):
@@ -54,21 +60,28 @@ class ConfigParser:
         # Return instance of the class
         return cls(config_dict)
 
-    def _init_helper(self, config: Any) -> Any:
+    def _init_helper(self, config: Any, add_value: bool = True) -> Any:
         """Helper method for the constructor to recursively construct the config class.
 
         Parameter
         ---------
         config : Any
             A sub-config of the main config dictionary.
+        add_value : bool, optional
+            A boolean indicating whether we should add the _value record
+
         """
 
-        if type(config) == dict:
+        if type(config) is type(self):
+            return config
+        elif type(config) == dict:
             return self.__class__(config)
         elif type(config) == list:
-            out = [self._init_helper(item) for item in config]
+            out = [self._init_helper(item, False) for item in config]
         else:
-            out = config
+            out = self.__class__({'_value': config}) \
+                if (add_value is True and '_value' not in self.__dict__.keys()) \
+                else config
 
         return out
 
