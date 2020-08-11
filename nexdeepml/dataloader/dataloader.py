@@ -265,7 +265,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Update the metadata
         self.metadata = self.metadata.iloc[selection]
 
-    def _regroup_metadata(self, criterion=None) -> None:
+    def _regroup_metadata(self, criterion=None, reset_index: bool = True) -> None:
         """Groups the metadata.
 
         Each group of data (e.g. containing data and label) should have.
@@ -276,21 +276,24 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         ----------
         criterion : str or List[str]
             The name of the columns based on which the metadata should be categorized
+        reset_index : bool, optional
+            Whether or not to reset the level-0 indexing to range. If not given, will reset
 
         """
 
         if criterion is None:
             return
 
-        # Group based on the filename
+        # Group based on the criterion
         metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
 
         # Rename the indices to be range
-        # Also rename the index level 0 name to be 'index' (instead of 'filename')
-        metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
-        )
-        metadata.index.names = [None, *metadata.index.names[1:]]
+        # Also rename the index level 0 name to be 'index' (instead of criterion)
+        if reset_index:
+            metadata = metadata.rename(
+                index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+            )
+            metadata.index.names = [None, *metadata.index.names[1:]]
 
         self.metadata = metadata
 
