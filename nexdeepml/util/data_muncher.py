@@ -5,7 +5,7 @@ from .config import ConfigParser
 import re
 
 
-class DataHolder(ConfigParser):
+class DataMuncher(ConfigParser):
     """A class to contain all data in order."""
 
     # Set static variables
@@ -60,5 +60,7 @@ class DataHolder(ConfigParser):
                           if type(value) is type(self)
                         }
                       }
+
+        # TODO: what if I want to get to a variable directly with filtering and update it?
 
         return self.__class__(final_dict)
