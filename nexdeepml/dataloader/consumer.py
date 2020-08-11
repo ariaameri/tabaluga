@@ -1,7 +1,7 @@
 from .dataloader import DataLoaderManager, DataManager
 from .image import ImageLoader
 from ..util.config import ConfigParser
-from ..util.data_holder import DataHolder
+from ..util.data_muncher import DataMuncher
 import numpy as np
 from typing import Dict, OrderedDict
 
@@ -102,4 +102,4 @@ class SampleDataLoaderManager(DataLoaderManager):
         images = self.workers['image_loader'][item]
         labels = self.workers['label_loader'][item]
 
-        return DataHolder({'data': images, 'labels': labels})
+        return DataMuncher({'data': images, 'labels': labels})
