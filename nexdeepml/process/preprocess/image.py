@@ -1,8 +1,10 @@
 from . import preprocess
 from ...util.config import ConfigParser
-from typing import List, Union
+from typing import List, Union, Dict
 import numpy as np
 import cv2
+import albumentations as A
+from abc import abstractmethod
 
 
 class ImageNormalizer(preprocess.Preprocess):
@@ -113,3 +115,57 @@ class ImageResizer(preprocess.Preprocess):
             raise Exception('Unrecognized format passed to the image resizer!')
 
         return output
+
+
+class ImageAugmentationAlbumentations(preprocess.Preprocess):
+    """Abstract class for image augmentation using the albumentations package."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the pre-process instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed
+
+        """
+
+        super().__init__(config)
+
+        # Build the Albumentations transformer
+        self.transformer: A.Compose = self.build_transformer()
+
+    @abstractmethod
+    def build_transformer(self) -> A.Compose:
+        """Abstract method to create the transformer for the albumentations package for image augmentation.
+
+        Returns
+        -------
+        An instance of the albumentations.Compose class to do the image augmentations.
+
+        """
+
+        pass
+
+    def transform(self, **images) -> Dict:
+        """Transforms/augment the input images.
+
+        Parameters
+        ----------
+        **images
+            Images to be augmented. They should be passed with their specific keywords
+
+        Returns
+        -------
+        The augmented images with the same keywords as passed.
+
+        """
+
+        # Do the augmentations
+        aug_images = self.transformer(**images)
+
+        return aug_images
+
+
+# TODO: add/look Augmentor package as well
+# TODO: add/look imgaug package as well
