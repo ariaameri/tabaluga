@@ -4,7 +4,7 @@ from types import FunctionType
 from .config import ConfigParser
 
 
-class DataHolder(ConfigParser):
+class DataMuncher(ConfigParser):
     """A class to contain all data in order."""
 
     # Set static variables
@@ -28,7 +28,7 @@ class DataHolder(ConfigParser):
 
         super().__init__(data_dict)
 
-    def map(self, function: FunctionType) -> DataHolder:
+    def map(self, function: FunctionType) -> DataMuncher:
         """Maps the function on the data and returns a new instance.
 
         Parameter
