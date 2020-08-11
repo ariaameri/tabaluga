@@ -3,6 +3,7 @@ from ..util.config import ConfigParser
 from abc import ABC
 import torch
 import numpy as np
+from .unet import unet
 
 
 class SamplePyTorchModelManager(model.ModelPyTorchManager):
@@ -21,7 +22,8 @@ class SamplePyTorchModelManager(model.ModelPyTorchManager):
         super().__init__(config)
 
         # Defining the models here for the pyTorch engine to capture its parameters
-        self.model1 = SamplePyTorchModel(self._config.model, 5, 2, 5)
+        # self.model1 = SamplePyTorchModel(self._config.model, 5, 2, 5)
+        self.model1 = unet.UNet(n_channels=3, n_classes=3)
 
         self.create_workers()
 
