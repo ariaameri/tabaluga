@@ -171,7 +171,7 @@ class ConfigParser:
 
             # Indent the result
             out_substring = re.sub(
-                r'((^|\n)(?!$)|^$)',
+                r'(^|\n)(?!$)',
                 r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
                 out_substring
             )
