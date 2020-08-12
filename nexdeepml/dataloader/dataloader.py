@@ -128,14 +128,19 @@ class DataManager(base.BaseEventManager, ABC):
                         for file_name in file_paths]
         folder_names = [os.path.split(folder_path)[1]
                         for folder_path in folder_paths]
-        file_names = [file_name.split('/')[-1]
-                      for file_name in file_paths]
+        file_names = [os.path.split(file_path)[1]
+                      for file_path in file_paths]
+        file_extension = [file_name.split('.')[1].lower()
+                          for file_name in file_names]
+        file_names = [file_name.split('.')[0]
+                      for file_name in file_names]
 
         # Create data frame of all the files in the folder
         self.metadata = pd.DataFrame({
             'folder_path': folder_paths,
             'folder_name': folder_names,
             'file_name': file_names,
+            'file_extension': file_extension,
             'path': file_paths
         })
 
