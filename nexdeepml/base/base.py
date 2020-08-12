@@ -910,6 +910,9 @@ class Workers:
     def __iter__(self) -> Workers:
         """Method for making the class iterable."""
 
+        # Set the iteration index to 0
+        self._current_iteration_count = 0
+
         return self
 
     def __next__(self) -> Type[BaseWorker]:
