@@ -90,12 +90,12 @@ class SampleDataLoaderManager(DataLoaderManager):
 
         super().modify_metadata()
 
-        self._regroup_metadata('folder')
+        self._regroup_metadata('folder_name', False)
 
     def create_workers(self):
 
-        self.workers['image_loader'] = ImageLoader(self._config, self.metadata.loc[0])
-        self.workers['label_loader'] = ImageLoader(self._config, self.metadata.loc[1])
+        self.workers['image_loader'] = ImageLoader(self._config, self.metadata.loc['img'])
+        self.workers['label_loader'] = ImageLoader(self._config, self.metadata.loc['labels'])
 
     def __getitem__(self, item):
 

@@ -3,7 +3,7 @@ from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List
-import matplotlib.pyplot as plt
+import cv2
 
 
 class ImageLoader(dataloader.DataLoader):
@@ -50,7 +50,13 @@ class ImageLoader(dataloader.DataLoader):
 
         """
 
-        images = np.array([plt.imread(row['path']) for index, row in metadata.iterrows()])
+        images = np.array(
+            [
+                cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
+                for index, row
+                in metadata.iterrows()
+            ]
+        )
 
         return images
 
