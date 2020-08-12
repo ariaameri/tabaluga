@@ -68,7 +68,7 @@ class DataManager(base.BaseEventManager, ABC):
             self._build_metadata_from_mongo()
 
         # Regroup the metadata based on the criteria of file name
-        self._regroup_metadata('filename')
+        self._regroup_metadata('file_name')
 
         # Generate the train, validation, and test metadata
         self._generate_train_val_test_metadata()
@@ -126,13 +126,21 @@ class DataManager(base.BaseEventManager, ABC):
         # Retrieve the folder path and file names
         folder_paths = [os.path.dirname(file_name)
                         for file_name in file_paths]
-        file_names = [file_name.split('/')[-1]
-                      for file_name in file_paths]
+        folder_names = [os.path.split(folder_path)[1]
+                        for folder_path in folder_paths]
+        file_names = [os.path.split(file_path)[1]
+                      for file_path in file_paths]
+        file_extension = [file_name.split('.')[1].lower()
+                          for file_name in file_names]
+        file_names = [file_name.split('.')[0]
+                      for file_name in file_names]
 
         # Create data frame of all the files in the folder
         self.metadata = pd.DataFrame({
-            'folder': folder_paths,
-            'filename': file_names,
+            'folder_path': folder_paths,
+            'folder_name': folder_names,
+            'file_name': file_names,
+            'file_extension': file_extension,
             'path': file_paths
         })
 
@@ -158,11 +166,11 @@ class DataManager(base.BaseEventManager, ABC):
         if criterion is None:
             return
 
-        # Group based on the filename
+        # Group based on the criterion
         metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
 
         # Rename the indices to be range
-        # Also rename the index level 0 name to be 'index' (instead of 'filename')
+        # Also rename the index level 0 name to be 'index' (instead of `criterion`)
         metadata = metadata.rename(
             index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
         )
@@ -265,7 +273,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Update the metadata
         self.metadata = self.metadata.iloc[selection]
 
-    def _regroup_metadata(self, criterion=None) -> None:
+    def _regroup_metadata(self, criterion=None, reset_index: bool = True) -> None:
         """Groups the metadata.
 
         Each group of data (e.g. containing data and label) should have.
@@ -276,21 +284,24 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         ----------
         criterion : str or List[str]
             The name of the columns based on which the metadata should be categorized
+        reset_index : bool, optional
+            Whether or not to reset the level-0 indexing to range. If not given, will reset
 
         """
 
         if criterion is None:
             return
 
-        # Group based on the filename
+        # Group based on the criterion
         metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
 
         # Rename the indices to be range
-        # Also rename the index level 0 name to be 'index' (instead of 'filename')
-        metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
-        )
-        metadata.index.names = [None, *metadata.index.names[1:]]
+        # Also rename the index level 0 name to be 'index' (instead of criterion)
+        if reset_index:
+            metadata = metadata.rename(
+                index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+            )
+            metadata.index.names = [None, *metadata.index.names[1:]]
 
         self.metadata = metadata
 
