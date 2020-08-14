@@ -25,14 +25,14 @@ class ImageNormalizer(preprocess.Preprocess):
     #
     #     return string
 
-    def normalize(self, images: np.ndarray) -> np.ndarray:
+    def process(self, data: np.ndarray) -> np.ndarray:
         """"Normalizes the images given.
 
         It takes input images of dtype uint8 ranging from 0 to 255 and divides them by 255 with dtype of float.
 
         Parameters
         ----------
-        images : np.ndarray
+        data : np.ndarray
             A numpy array containing the image data of dtype uint8
 
         Returns
@@ -42,10 +42,10 @@ class ImageNormalizer(preprocess.Preprocess):
         """
 
         # Get the type of the iterable
-        collection_type = type(images)
+        collection_type = type(data)
 
         if collection_type == np.ndarray:
-            output = images / 255.
+            output = data / 255.
         else:
             raise Exception('Unrecognized format passed to the image normalizer!')
 
@@ -82,12 +82,12 @@ class ImageResizer(preprocess.Preprocess):
     #
     #     return string
 
-    def resize(self, images: np.ndarray) -> np.ndarray:
+    def process(self, data: np.ndarray) -> np.ndarray:
         """"Resizes the images given.
 
         Parameters
         ----------
-        images : np.ndarray
+        data : np.ndarray
             A numpy array containing the image to be resized
 
         Returns
@@ -97,7 +97,7 @@ class ImageResizer(preprocess.Preprocess):
         """
 
         # Get the type of the iterable
-        collection_type = type(images)
+        collection_type = type(data)
 
         output = [
             cv2.resize(
@@ -106,7 +106,7 @@ class ImageResizer(preprocess.Preprocess):
                 interpolation=self.interpolation
             )
             for image
-            in images
+            in data
         ]
 
         if collection_type == np.ndarray:
@@ -147,12 +147,12 @@ class ImageAugmentationAlbumentations(preprocess.Preprocess):
 
         pass
 
-    def transform(self, **images) -> Dict:
+    def process(self, **data) -> Dict:
         """Transforms/augment the input images.
 
         Parameters
         ----------
-        **images
+        **data
             Images to be augmented. They should be passed with their specific keywords
 
         Returns
@@ -162,7 +162,7 @@ class ImageAugmentationAlbumentations(preprocess.Preprocess):
         """
 
         # Do the augmentations
-        aug_images = self.transformer(**images)
+        aug_images = self.transformer(**data)
 
         return aug_images
 
