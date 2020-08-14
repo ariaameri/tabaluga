@@ -167,5 +167,74 @@ class ImageAugmentationAlbumentations(preprocess.Preprocess):
         return aug_images
 
 
+class ImageResizerWithKeypoints(ImageAugmentationAlbumentations):
+    """Resizes images and their corresponding keypoints."""
+
+    def __init__(self, config: ConfigParser, keypoint_format: str):
+        """Initializes the class instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            Contains the config needed including:
+                destination_image_size : (int, int)
+                    The image size to resize images to.
+                interpolation, optional
+                    The type of interpolation to use
+        keypoint_format : str
+            The format of the keypoint to be used according to Albumentations library
+
+        """
+
+        self.destination_image_size = config.destination_image_size
+
+        self.interpolation = config.interpolation or cv2.INTER_AREA
+
+        self.keypoint_format = keypoint_format
+
+        super().__init__(config)
+
+    def build_transformer(self) -> A.Compose:
+        """Creates the resize transformer using the albumentations package.
+
+        Returns
+        -------
+        The instance of the albumentations.Compose class to do the image and keypoint resize.
+
+        """
+
+        transformer = A.Compose(
+            [A.Resize(
+                width=self.destination_image_size[0],
+                height=self.destination_image_size[1],
+                interpolation=self.interpolation
+            )],
+            keypoint_params=A.KeypointParams(format=self.keypoint_format)
+        )
+
+        return transformer
+
+    def process(self, *, keypoints, **data) -> Dict:
+        """"Resizes the images given.
+
+        Parameters
+        ----------
+        keypoints : List[Union[List, Tuple]]
+            The keypoints to be resized
+        data
+            Images to be resized passed with keywords, each a np.ndarray
+
+        Returns
+        -------
+        The return of the results using Albumentations package compose
+
+        """
+
+        # Get the results
+        aug_images = super().process(keypoints=keypoints, **data)
+
+        return aug_images
+
+
 # TODO: add/look Augmentor package as well
 # TODO: add/look imgaug package as well
