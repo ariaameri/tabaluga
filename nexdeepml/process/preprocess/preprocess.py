@@ -1,5 +1,4 @@
-from abc import ABC
-
+from abc import ABC, abstractmethod
 from ...util.config import ConfigParser
 from ...base import base
 
@@ -35,4 +34,19 @@ class Preprocess(base.BaseEventWorker):
 
         super().__init__(config)
 
+    @abstractmethod
+    def process(self, data):
+        """Does the act of processing.
 
+        Parameters
+        ----------
+        data
+            Input data
+
+        Returns
+        -------
+        Processed data
+
+        """
+
+        pass
