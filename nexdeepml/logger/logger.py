@@ -12,6 +12,7 @@ from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
+from numbers import Number
 
 
 class Logger(BaseWorker):
@@ -650,8 +651,9 @@ class TheProgressBarLogger(Logger):
                     message += f'{SUC.horizontal_bar} '
                     message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
                                f'{CCC.reset.all}: ' \
-                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
-                               f'{CCC.reset.all}' \
+                               f'{CCC.foreground.set_88_256.orange1}'
+                    message += f'{value: .5e}' if issubclass(type(value), Number) else f'{value}'
+                    message += f'{CCC.reset.all}' \
                                f'\n'
 
             return message
