@@ -17,10 +17,8 @@ class ToTorchTensor(preprocess.Preprocess):
         ----------
         config : ConfigParser
             Contains the config needed including:
-                destination_image_size : (int, int)
-                    The image size to resize images to.
-                interpolation, optional
-                    The type of interpolation to use
+                dtype
+                    The dtype of the final data
 
         """
 
