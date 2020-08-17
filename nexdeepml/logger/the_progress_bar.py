@@ -344,6 +344,9 @@ class TheProgressBar:
         # Trim the progress bar to the number of columns of the console
         progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
 
+        # Always reset the color back to normal
+        progress_bar += f'{CCC.reset.all}'
+
         return progress_bar
 
     def _get_terminal_size(self) -> (int, int):
