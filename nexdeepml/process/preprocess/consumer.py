@@ -1,5 +1,6 @@
 from .preprocess import PreprocessManager
 from .image import ImageNormalizer, ImageResizer
+from .pyTorch import ToTorchTensor
 from ...util.config import ConfigParser
 from typing import Dict
 
@@ -35,6 +36,8 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         self.workers['image_normalizer'] = ImageNormalizer()
 
+        self.workers['to_torch_tensor'] = ToTorchTensor(ConfigParser())
+
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train image data."""
 
@@ -45,6 +48,7 @@ class SampleImagePreprocessManager(PreprocessManager):
         processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
 
         return processed_data
 
@@ -57,5 +61,6 @@ class SampleImagePreprocessManager(PreprocessManager):
         processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
 
         return processed_data
