@@ -1,5 +1,5 @@
 from .preprocess import PreprocessManager
-from .image import ImageNormalizer, ImageResizer
+from .image import ImageNormalizer, ImageResizer, BWHCToBCWH
 from .pyTorch import ToTorchTensor, ToTorchGPU
 from ...util.config import ConfigParser
 from typing import Dict
@@ -36,6 +36,8 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         self.workers['image_normalizer'] = ImageNormalizer()
 
+        self.workers['image_bwhc_to_bcwh'] = BWHCToBCWH()
+
         self.workers['to_torch_tensor'] = ToTorchTensor(ConfigParser())
 
         self.workers['to_torch_gpu'] = ToTorchGPU(ConfigParser())
@@ -50,6 +52,7 @@ class SampleImagePreprocessManager(PreprocessManager):
         processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
         processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
         processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
 
@@ -64,6 +67,7 @@ class SampleImagePreprocessManager(PreprocessManager):
         processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
         processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
         processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
 
