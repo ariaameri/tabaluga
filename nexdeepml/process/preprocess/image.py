@@ -238,3 +238,31 @@ class ImageResizerWithKeypoints(ImageAugmentationAlbumentations):
 
 # TODO: add/look Augmentor package as well
 # TODO: add/look imgaug package as well
+
+
+class BWHCToBCWH(preprocess.Preprocess):
+    """Converts image data of form (B, W, H, [...,] C) to (B, C, W, H[, ...])."""
+
+    def __init__(self):
+        """Initializes the class."""
+
+        super().__init__(ConfigParser())
+
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """"Converts image data of form (B, W, H, [...,] C) to (B, C, W, H[, ...]).
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A numpy array containing the image data of form (B, W, H, [...,] C)
+
+        Returns
+        -------
+        Numpy array of image data of form (B, C, W, H[, ...])
+
+        """
+
+        # Do the rolling
+        output = np.rollaxis(data, -1, 1)
+
+        return output
