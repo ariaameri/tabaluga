@@ -54,7 +54,7 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_train_begin(self, info: Dict = None):
 
         self.workers['train_tpb']: TheProgressBarLogger = \
-            TheProgressBarLogger(self._config.TheProgressBar).activate()
+            TheProgressBarLogger(self._config.TheProgressBar.update('console_handler', self.console_file)).activate()
 
     def on_train_epoch_begin(self, info: Dict = None):
 
