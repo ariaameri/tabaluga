@@ -88,11 +88,15 @@ class SampleImagePreprocessManager(PreprocessManager):
     def create_workers(self):
         """Creates Preprocess instances."""
 
+        self.workers['labels_background_to_color'] = BackgroundToColor(ConfigParser())
+
         self.workers['image_resizer'] = ImageResizer(self._config.resize)
 
         self.workers['image_normalizer'] = ImageNormalizer()
 
         self.workers['image_bwhc_to_bcwh'] = BWHCToBCWH()
+
+        self.workers['label_one_hot_decoder'] = OneHotDecoder(ConfigParser({"axis": 1}))
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train image data."""
@@ -100,11 +104,19 @@ class SampleImagePreprocessManager(PreprocessManager):
         # data = info['data']['data']
         data = info['data']
 
+        labels = data.labels
+        labels = self.workers['labels_background_to_color'].process(labels)
+        processed_data = data.update('labels', labels)
+
         # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = data.map(self.workers['image_resizer'].process)
+        processed_data = processed_data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
         processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
+
+        labels = processed_data.labels
+        labels = self.workers['label_one_hot_decoder'].process(labels)
+        processed_data = processed_data.update('labels', labels)
 
         return processed_data
 
@@ -113,10 +125,18 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         data = info['data']
 
+        labels = data.labels
+        labels = self.workers['labels_background_to_color'].process(labels)
+        processed_data = data.update('labels', labels)
+
         # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = data.map(self.workers['image_resizer'].process)
+        processed_data = processed_data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
         processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
+
+        labels = processed_data.labels
+        labels = self.workers['label_one_hot_decoder'].process(labels)
+        processed_data = processed_data.update('labels', labels)
 
         return processed_data
