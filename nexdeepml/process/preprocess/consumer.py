@@ -1,8 +1,65 @@
-from .preprocess import PreprocessManager
-from .image import ImageNormalizer, ImageResizer, BWHCToBCWH
+from .preprocess import PreprocessManager, Preprocess
+from .image import ImageNormalizer, ImageResizer, BWHCToBCWH, OneHotDecoder
 from .pyTorch import ToTorchTensor, ToTorchGPU
 from ...util.config import ConfigParser
 from typing import Dict
+import numpy as np
+
+
+class BackgroundToColor(Preprocess):
+    """Converts image channels of the form [0, ..., 0] to 255 in one of the channels.
+    In other words, turns background pixels to a color
+
+    """
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            Contains the config needed including:
+                axis : int, optional
+                    The axis showing the channels. If not given will be the default value of -1
+                new_channel : int, optional
+                    The number of the new channel to have value. If not given, -1 will be assumed
+
+        """
+
+        super().__init__(config)
+
+        # Set the axis
+        self.axis = config.axis if config.axis is not None else -1
+
+        # Set the new channel to be filled
+        self.new_channel = config.new_channel if config.axis is not None else -1
+
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """"Converts background pixels containing all zeros to 255 in some channel
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A numpy array containing the data with some background, all-zero pixels
+
+        Returns
+        -------
+        Numpy array of the data with the new_channel filled for the background
+
+        """
+
+        # Find the background pixels
+        background = np.all(data == 0, axis=self.axis)
+
+        # Fill the background with 255
+        output = data.copy()
+        dim_count = len(output.shape)
+        prefix_count = self.axis if self.axis >= 0 else (dim_count + self.axis)
+        suffix_count = dim_count - 1 - prefix_count
+        output[(slice(None), ) * prefix_count + (self.new_channel, ) + (slice(None), ) * suffix_count] \
+            = background * 255
+
+        return output
 
 
 class SampleImagePreprocessManager(PreprocessManager):
