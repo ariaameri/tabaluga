@@ -12,7 +12,6 @@ from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
-from copy import deepcopy
 
 
 class Logger(BaseWorker):
@@ -441,7 +440,7 @@ class TQDMLogger(Logger, io.StringIO):
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
@@ -658,7 +657,7 @@ class TheProgressBarLogger(Logger):
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
