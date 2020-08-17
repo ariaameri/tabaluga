@@ -4,6 +4,7 @@ import sys
 from typing import List
 import numpy as np
 import time
+import datetime
 import os
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 
@@ -458,6 +459,37 @@ class TheProgressBar:
         bar_suffix += f' '
         bar_suffix += f'[{self._get_item_per_second():.2f} it/s]'
 
+        # Time elapsed since the last update
+        now = datetime.datetime.now()
+        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        delta_time = now - last_update_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        microseconds = delta_time.microseconds
+        # For formatting purposes, just keep the first 4 digits
+        microseconds = int(str(microseconds)[:4])
+        delta_time_str_last_update = f'{hours:02d}' \
+                                     f':' \
+                                     f'{minutes:02d}' \
+                                     f':' \
+                                     f'{seconds:02d}' \
+                                     f'.' \
+                                     f'{microseconds:4d}'
+
+        # Time elapsed since the beginning
+        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        delta_time = now - init_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        delta_time_str_since_beginning = f'{hours:02d}' \
+                                         f':' \
+                                         f'{minutes:02d}' \
+                                         f':' \
+                                         f'{seconds:02d}'
+
+        # Add the elapsed time to the bar_suffix
+        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_beginning}'
+
         return bar_suffix
 
     def _get_fractional_progress(self) -> str:
@@ -609,6 +641,37 @@ class TheProgressBarColored(TheProgressBar):
         bar_suffix += f'{CCC.foreground.set_88_256.grey27}' \
                       f'[{self._get_item_per_second():.2f} it/s]'
         bar_suffix += f'{CCC.reset.all}'
+
+        # Time elapsed since the last update
+        now = datetime.datetime.now()
+        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        delta_time = now - last_update_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        microseconds = delta_time.microseconds
+        # For formatting purposes, just keep the first 4 digits
+        microseconds = int(str(microseconds)[:4])
+        delta_time_str_last_update = f'{hours:02d}' \
+                                     f':' \
+                                     f'{minutes:02d}' \
+                                     f':' \
+                                     f'{seconds:02d}' \
+                                     f'.' \
+                                     f'{microseconds:4d}'
+
+        # Time elapsed since the beginning
+        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        delta_time = now - init_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        delta_time_str_since_beginning = f'{hours:02d}' \
+                                         f':' \
+                                         f'{minutes:02d}' \
+                                         f':' \
+                                         f'{seconds:02d}'
+
+        # Add the elapsed time to the bar_suffix
+        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_beginning}'
 
         return bar_suffix
 
