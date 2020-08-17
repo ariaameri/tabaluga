@@ -42,9 +42,9 @@ class SampleImagePreprocessManager(PreprocessManager):
         data = info['data']
 
         # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = data.map(self.workers['image_resizer'].resize)
+        processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
-        processed_data = processed_data.map(self.workers['image_normalizer'].normalize)
+        processed_data = processed_data.map(self.workers['image_normalizer'].process)
 
         return processed_data
 
@@ -54,8 +54,8 @@ class SampleImagePreprocessManager(PreprocessManager):
         data = info['data']
 
         # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = data.map(self.workers['image_resizer'].resize)
+        processed_data = data.map(self.workers['image_resizer'].process)
         # processed_data = self.workers['image_normalizer'].normalize(processed_data)
-        processed_data = processed_data.map(self.workers['image_normalizer'].normalize)
+        processed_data = processed_data.map(self.workers['image_normalizer'].process)
 
         return processed_data
