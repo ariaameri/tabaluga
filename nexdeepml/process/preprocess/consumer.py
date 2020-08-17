@@ -4,6 +4,7 @@ from .pyTorch import ToTorchTensor, ToTorchGPU
 from ...util.config import ConfigParser
 from typing import Dict
 import numpy as np
+import torch
 
 
 class BackgroundToColor(Preprocess):
@@ -121,9 +122,13 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         labels = processed_data.labels
         labels = self.workers['label_one_hot_decoder'].process(labels)
+        labels = self.workers['to_torch_tensor'].process(labels, dtype=torch.long)
         processed_data = processed_data.update('labels', labels)
 
-        processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
+        data = processed_data.data
+        data = self.workers['to_torch_tensor'].process(data, dtype=torch.float)
+        processed_data = processed_data.update('data', data)
+
         processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
 
         return processed_data
@@ -137,15 +142,18 @@ class SampleImagePreprocessManager(PreprocessManager):
         labels = self.workers['labels_background_to_color'].process(labels)
         processed_data = data.update('labels', labels)
 
-        # processed_data = self.workers['image_resizer'].resize(data)
         processed_data = processed_data.map(self.workers['image_resizer'].process)
-        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
         processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
 
         labels = processed_data.labels
         labels = self.workers['label_one_hot_decoder'].process(labels)
+        labels = self.workers['to_torch_tensor'].process(labels, dtype=torch.long)
         processed_data = processed_data.update('labels', labels)
+
+        data = processed_data.data
+        data = self.workers['to_torch_tensor'].process(data, dtype=torch.float)
+        processed_data = processed_data.update('data', data)
 
         processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
         processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
