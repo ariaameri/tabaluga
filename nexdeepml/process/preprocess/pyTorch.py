@@ -27,7 +27,7 @@ class ToTorchTensor(preprocess.Preprocess):
 
         super().__init__(config)
 
-    def process(self, data: np.ndarray) -> torch.Tensor:
+    def process(self, data: np.ndarray, dtype=None) -> torch.Tensor:
         """"Converts the given data to torch tensors.
 
         It takes input data of np.ndarray type and converts them to torch.Tensor with dtype of self.dtype.
@@ -36,6 +36,9 @@ class ToTorchTensor(preprocess.Preprocess):
         ----------
         data : np.ndarray
             A numpy array containing the data
+        dtype
+            The dtype of the final tensor. This will override the given dtype in the constructor.
+                If not given, the default will be self.dtype
 
         Returns
         -------
@@ -44,8 +47,9 @@ class ToTorchTensor(preprocess.Preprocess):
         """
 
         # Do the conversion
+        dtype = dtype or self.dtype
         try:
-            return torch.tensor(data, dtype=self.dtype)
+            return torch.tensor(data, dtype=dtype)
         except Exception:
             raise Exception('Cannot convert data to torch tensor.')
 
