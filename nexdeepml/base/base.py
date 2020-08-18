@@ -445,6 +445,20 @@ class BaseEventWorker(BaseWorker):
 
         pass
 
+    # Exception event methods
+
+    def on_os_signal(self, info: Dict = None):
+        """Method to be called at the event of an OS signal, such as SIGINT.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
 
 class BaseEventManager(BaseEventWorker, BaseManager, ABC):
     """This abstract class servers as the parent of all manager classes.
@@ -818,6 +832,22 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         for worker in self.workers:
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_batch_end(info)
+
+    # Exception event methods
+
+    def on_os_signal(self, info: Dict = None):
+        """Method to be called at the event of an OS signal, such as SIGINT.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_os_signal(info)
 
 
 class Workers:

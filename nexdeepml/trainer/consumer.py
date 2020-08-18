@@ -3,6 +3,7 @@ from ..util.config import ConfigParser
 from ..callback.consumer import SampleCallbackManager
 from ..model.consumer import SamplePyTorchModelManager
 from typing import Dict
+import signal
 import torch
 
 
@@ -27,6 +28,14 @@ class SampleTrainer(Trainer):
     def val_one_batch(self) -> Dict:
 
         return {}
+
+    def signal_catcher(self, os_signal, frame):
+        """Catches an OS signal and calls it on its workers."""
+
+        # Take care of SIGINT
+        if os_signal == signal.SIGINT:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
 
 
 class SamplePyTorchTrainer(Trainer):

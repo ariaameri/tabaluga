@@ -238,3 +238,81 @@ class ImageResizerWithKeypoints(ImageAugmentationAlbumentations):
 
 # TODO: add/look Augmentor package as well
 # TODO: add/look imgaug package as well
+
+# TODO: Move some of these classes to preprocess.py?
+
+
+class BWHCToBCWH(preprocess.Preprocess):
+    """Converts image data of form (B, W, H, [...,] C) to (B, C, W, H[, ...])."""
+
+    def __init__(self):
+        """Initializes the class."""
+
+        super().__init__(ConfigParser())
+
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """"Converts image data of form (B, W, H, [...,] C) to (B, C, W, H[, ...]).
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A numpy array containing the image data of form (B, W, H, [...,] C)
+
+        Returns
+        -------
+        Numpy array of image data of form (B, C, W, H[, ...])
+
+        """
+
+        # Do the rolling
+        output = np.rollaxis(data, -1, 1)
+
+        return output
+
+
+class OneHotDecoder(preprocess.Preprocess):
+    """Converts one-hot-encoded data to index data. Also, makes index values from the biggest number in an axis"""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            Contains the config needed including:
+                axis : int, optional
+                    The axis along which the decoding should happen. If not given, the default is -1
+
+        """
+
+        super().__init__(config)
+
+        # Set the axis
+        self.axis = config.axis if config.axis is not None else -1
+
+    def process(self, data: np.ndarray, axis: int = None) -> np.ndarray:
+        """"Does the decoding.
+
+        Converts one-hot-encoded data to index data.
+        Also, makes index values/data from the biggest number in an axis.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A numpy array containing the (pseudo-)one-hot data of the shape ([A, ...,] C[, B...])
+        axis : int, optional
+            The axis along which the decoding should happen and would override self.axis, optional
+
+        Returns
+        -------
+        Numpy array of decoded data of the shape ([A, ...,][ B...])
+
+        """
+
+        # Find the axis along which we should decode
+        axis = axis or self.axis
+
+        # Do the decoding based on argmax
+        output = np.argmax(data, axis=axis)
+
+        return output

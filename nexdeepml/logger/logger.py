@@ -12,7 +12,7 @@ from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
-from copy import deepcopy
+from numbers import Number
 
 
 class Logger(BaseWorker):
@@ -441,7 +441,7 @@ class TQDMLogger(Logger, io.StringIO):
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
@@ -651,14 +651,15 @@ class TheProgressBarLogger(Logger):
                     message += f'{SUC.horizontal_bar} '
                     message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
                                f'{CCC.reset.all}: ' \
-                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
-                               f'{CCC.reset.all}' \
+                               f'{CCC.foreground.set_88_256.orange1}'
+                    message += f'{value: .5e}' if issubclass(type(value), Number) else f'{value}'
+                    message += f'{CCC.reset.all}' \
                                f'\n'
 
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
