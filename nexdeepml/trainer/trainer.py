@@ -6,6 +6,8 @@ from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
+import signal
+import sys
 
 
 class Trainer(base.BaseEventManager, ABC):
@@ -186,3 +188,16 @@ class Trainer(base.BaseEventManager, ABC):
         """
 
         raise NotImplementedError
+
+    def signal_catcher(self, os_signal, frame):
+        """Catches an OS signal and calls it on its workers."""
+
+        # Take care of signals
+        if os_signal == signal.SIGINT:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
+            sys.exit(1)
+        elif os_signal == signal.SIGTERM:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
+            sys.exit(0)
