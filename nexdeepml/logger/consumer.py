@@ -1,6 +1,8 @@
 from .logger import LoggerManager, Logger, TQDMLogger, TheProgressBarLogger
 from ..util.config import ConfigParser
 from typing import Dict
+import sys
+import signal
 
 
 class SampleLoggerManager(LoggerManager):
@@ -54,7 +56,7 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_train_begin(self, info: Dict = None):
 
         self.workers['train_tpb']: TheProgressBarLogger = \
-            TheProgressBarLogger(self._config.TheProgressBar).activate()
+            TheProgressBarLogger(self._config.TheProgressBar.update('console_handler', self.console_file)).activate()
 
     def on_train_epoch_begin(self, info: Dict = None):
 
@@ -74,3 +76,12 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_end(self, info: Dict = None):
 
         self.workers['train_tpb'].close()
+
+    def on_os_signal(self, info: Dict = None):
+
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT:
+            self.workers['train_tpb'].close()
+
+        sys.exit(1)

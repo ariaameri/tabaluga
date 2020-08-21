@@ -4,8 +4,10 @@ import sys
 from typing import List
 import numpy as np
 import time
+import datetime
 import os
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+import re
 
 
 class TheProgressBar:
@@ -330,12 +332,17 @@ class TheProgressBar:
         bar_prefix = self._get_bar_prefix()
         bar_suffix = self._get_bar_suffix()
 
+        # Calculate the written char length of the prefix, suffix, and the first line of description
+        len_bar_prefix = len(bar_prefix)
+        len_bar_suffix = len(bar_suffix)
+        len_bar_desc = len(self.description.split('\n')[0])
+
         remaining_columns = \
             int(np.clip(
-                columns - len(bar_prefix) - len(bar_suffix) - 3 - len(self.description.split('\n')[0]),
+                columns - len_bar_prefix - len_bar_suffix - 3 - len_bar_desc,
                 5,
                 50
-            ))
+            ))  # -3 for the spaces between the fields
 
         bar = self._get_bar(remaining_columns)
 
@@ -343,6 +350,9 @@ class TheProgressBar:
 
         # Trim the progress bar to the number of columns of the console
         progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
+
+        # Always reset the color back to normal
+        progress_bar += f'{CCC.reset.all}'
 
         return progress_bar
 
@@ -454,6 +464,37 @@ class TheProgressBar:
         bar_suffix: str = self._get_fractional_progress()  # Fractional progress e.g. 12/20
         bar_suffix += f' '
         bar_suffix += f'[{self._get_item_per_second():.2f} it/s]'
+
+        # Time elapsed since the last update
+        now = datetime.datetime.now()
+        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        delta_time = now - last_update_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        microseconds = delta_time.microseconds
+        # For formatting purposes, just keep the first 4 digits
+        microseconds = int(str(microseconds)[:4])
+        delta_time_str_last_update = f'{hours:02d}' \
+                                     f':' \
+                                     f'{minutes:02d}' \
+                                     f':' \
+                                     f'{seconds:02d}' \
+                                     f'.' \
+                                     f'{microseconds:4d}'
+
+        # Time elapsed since the beginning
+        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        delta_time = now - init_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        delta_time_str_since_beginning = f'{hours:02d}' \
+                                         f':' \
+                                         f'{minutes:02d}' \
+                                         f':' \
+                                         f'{seconds:02d}'
+
+        # Add the elapsed time to the bar_suffix
+        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_beginning}'
 
         return bar_suffix
 
@@ -574,6 +615,8 @@ class TheProgressBarColored(TheProgressBar):
 
         super().__init__()
 
+    # TODO: Code duplication, fix it
+
     def _get_bar_prefix(self) -> str:
         """Returns the string that comes before the bar.
 
@@ -607,6 +650,39 @@ class TheProgressBarColored(TheProgressBar):
                       f'[{self._get_item_per_second():.2f} it/s]'
         bar_suffix += f'{CCC.reset.all}'
 
+        # Time elapsed since the last update
+        now = datetime.datetime.now()
+        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        delta_time = now - last_update_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        microseconds = delta_time.microseconds
+        # For formatting purposes, just keep the first 4 digits
+        microseconds = int(str(microseconds)[:4])
+        delta_time_str_last_update = f'{hours:02d}' \
+                                     f':' \
+                                     f'{minutes:02d}' \
+                                     f':' \
+                                     f'{seconds:02d}' \
+                                     f'.' \
+                                     f'{microseconds:4d}'
+
+        # Time elapsed since the beginning
+        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        delta_time = now - init_time
+        hours, remainder = divmod(delta_time.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        delta_time_str_since_beginning = f'{hours:02d}' \
+                                         f':' \
+                                         f'{minutes:02d}' \
+                                         f':' \
+                                         f'{seconds:02d}'
+
+        # Add the elapsed time to the bar_suffix
+        bar_suffix += f' {CCC.foreground.set_88_256.grey39}{delta_time_str_last_update}' \
+                      f'{CCC.foreground.set_88_256.grey27} - ' \
+                      f'{delta_time_str_since_beginning}{CCC.reset.all}'
+
         return bar_suffix
 
     def _get_fractional_progress(self) -> str:
@@ -631,3 +707,42 @@ class TheProgressBarColored(TheProgressBar):
         fractional_progress += f'{CCC.reset.all}'
 
         return fractional_progress
+
+    def _get_progressbar(self) -> str:
+        """Returns a string containing the progress bar.
+
+        Returns
+        -------
+        A string containing the progress bar
+
+        """
+
+        # Get console's width and height
+        columns, rows = self._get_terminal_size()
+
+        bar_prefix = self._get_bar_prefix()
+        bar_suffix = self._get_bar_suffix()
+
+        # Calculate the written char length of the prefix, suffix, and the first line of description
+        len_bar_prefix = len(re.sub(r'\\x1b\[.+?m', '', repr(bar_prefix)))
+        len_bar_suffix = len(re.sub(r'\\x1b\[.+?m', '', repr(bar_suffix)))
+        len_bar_desc = len(re.sub(r'\\x1b\[.+?m', '', repr(self.description.split('\n')[0])))
+
+        remaining_columns = \
+            int(np.clip(
+                columns - len_bar_prefix - len_bar_suffix - 3 - len_bar_desc,
+                5,
+                50
+            ))  # -3 for the spaces between the fields
+
+        bar = self._get_bar(remaining_columns)
+
+        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
+
+        # Trim the progress bar to the number of columns of the console
+        # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
+
+        # Always reset the color back to normal
+        progress_bar += f'{CCC.reset.all}'
+
+        return progress_bar

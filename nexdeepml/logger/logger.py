@@ -5,14 +5,14 @@ from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
-from typing import Dict, List
+from typing import Dict, List, Union
 import logging
 import sys
 from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
-from copy import deepcopy
+from numbers import Number
 
 
 class Logger(BaseWorker):
@@ -62,7 +62,9 @@ class Logger(BaseWorker):
         # Determine whether to write to file or console and get the handlers
         self.console = config.console
         if self.console is True:
-            self._handler = logging.StreamHandler(sys.stdout)
+            # Get the handler
+            self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] = config.console_handler or sys.stdout
+            self._handler = logging.StreamHandler(self.console_file)
         else:
             file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             file_name = f'{file_name}.txt'
@@ -234,6 +236,42 @@ class Logger(BaseWorker):
         self._handler.level = level
 
 
+class LoggerConsoleFile:
+    """Class to hold the console handler and act as one."""
+
+    def __init__(self):
+        
+        # Keep the stack list of console (file) handlers to write to
+        self.handler = [sys.stdout]
+
+    def add_handler(self, handler):
+        """Add a console (file) handler to the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Add the handler
+        self.handler.append(handler)
+
+    def revert(self):
+        """Reverts the current handler to the previous one."""
+
+        # Revert only when it has more than 1 item in the stack
+        if len(self.handler) > 1:
+            del self.handler[-1]
+
+    def __getattr__(self, item):
+
+        # Get the attribute from the latest file
+        attr = getattr(self.handler[-1], item)
+
+        return attr
+
+
 class LoggerManager(BaseEventManager, ABC):
     """"An abstract class that manages Logger instances and calls their events on the occurrence of events."""
 
@@ -246,6 +284,10 @@ class LoggerManager(BaseEventManager, ABC):
             The configuration for this instance and the rest of the instances it will initialize
 
         """
+
+        # Add the console handler
+        self.console_file = LoggerConsoleFile()
+        config = config.update('console_handler', self.console_file)
 
         super().__init__(config)
 
@@ -399,7 +441,7 @@ class TQDMLogger(Logger, io.StringIO):
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
@@ -506,7 +548,10 @@ class TheProgressBarLogger(Logger):
         self._the_progress_bar.activate()
 
         # Redirect the stream handler of the this logger to use TPB
-        self._handler.setStream(self._the_progress_bar)
+        # self._handler.setStream(self._the_progress_bar)
+
+
+        self.console_file.add_handler(self._the_progress_bar)
 
         return self
 
@@ -606,14 +651,15 @@ class TheProgressBarLogger(Logger):
                     message += f'{SUC.horizontal_bar} '
                     message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
                                f'{CCC.reset.all}: ' \
-                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
-                               f'{CCC.reset.all}' \
+                               f'{CCC.foreground.set_88_256.orange1}'
+                    message += f'{value: .5e}' if issubclass(type(value), Number) else f'{value}'
+                    message += f'{CCC.reset.all}' \
                                f'\n'
 
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
