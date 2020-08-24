@@ -101,6 +101,23 @@ class Option(ABC):
         pass
 
     @abstractmethod
+    def for_all(self, function: Callable[[Any], bool]) -> bool:
+        """Returns true if the predicate function is satisfied or the Option is empty, false otherwise.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function predicate to test
+
+        Returns
+        -------
+        A boolean containing the result
+
+        """
+
+        pass
+
+    @abstractmethod
     def get_or_else(self, default_value: Any) -> Any:
         """Returns the internal value or default_value if non-existence.
 
@@ -186,6 +203,22 @@ class Some(Option):
 
     def exist(self, function: Callable[[Any], bool]) -> bool:
         """Returns the result of applying the predicate function to the internal value.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function predicate to test
+
+        Returns
+        -------
+        A boolean containing the result
+
+        """
+
+        return function(self._value)
+
+    def for_all(self, function: Callable[[Any], bool]) -> bool:
+        """Returns true if the predicate function is satisfied.
 
         Parameters
         ----------
@@ -310,6 +343,22 @@ class Nothing(Option):
         """
 
         return False
+
+    def for_all(self, function: Callable[[Any], bool]) -> bool:
+        """Returns true as the predicate is satisfied.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function predicate to test
+
+        Returns
+        -------
+        A boolean containing the result
+
+        """
+
+        return True
 
     def flatten(self) -> Nothing:
         """Returns the nested Option value within."""
