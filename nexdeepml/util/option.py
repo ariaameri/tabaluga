@@ -118,6 +118,21 @@ class Option(ABC):
         pass
 
     @abstractmethod
+    def for_each(self, function: Callable[[Any], None]) -> None:
+        """Applies the function `function` to the internal value if it exists.
+
+        The function should have side-effects and not return anything.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply
+
+        """
+
+        pass
+
+    @abstractmethod
     def get_or_else(self, default_value: Any) -> Any:
         """Returns the internal value or default_value if non-existence.
 
@@ -232,6 +247,21 @@ class Some(Option):
         """
 
         return function(self._value)
+
+    def for_each(self, function: Callable[[Any], None]) -> None:
+        """Applies the function `function` to the internal value.
+
+        The function should have side-effects and not return anything.
+
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply
+
+        """
+
+        function(self._value)
 
     def flatten(self) -> Type[Option]:
         """Returns the nested Option value within."""
@@ -359,6 +389,21 @@ class Nothing(Option):
         """
 
         return True
+
+    def for_each(self, function: Callable[[Any], None]) -> None:
+        """Does not do anything!
+
+        The function passed should have side-effects and not return anything.
+
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply
+
+        """
+
+        pass
 
     def flatten(self) -> Nothing:
         """Returns the nested Option value within."""
