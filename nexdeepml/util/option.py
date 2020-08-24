@@ -66,6 +66,23 @@ class Option(ABC):
 
         pass
 
+    def filter_not(self, function: Callable[[Any], bool]) -> Type[Option]:
+        """Method to apply the filter function to the internal value and returns true when the Option value is non-empty
+            and the predicate function is not satisfied.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to filter, must return boolean
+
+        Returns
+        -------
+        An Option instance of the result
+
+        """
+
+        return self.filter(lambda x: not function(x))
+
     @abstractmethod
     def exist(self, function: Callable[[Any], bool]) -> bool:
         """Returns true if the Option is non-empty and predicate function is satisfied, false otherwise.
