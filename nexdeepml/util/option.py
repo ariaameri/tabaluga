@@ -49,6 +49,25 @@ class Option(ABC):
 
         pass
 
+    def fold(self, function: Callable[[Any], Type[Option]], default_value: Any) -> Any:
+        """Method to apply the function to the internal value and return its result
+        or returns `default_value` if the Option is empty.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply to the item within
+        default_value : Any
+            The default value to return in case of empty Option
+
+        Returns
+        -------
+        The result
+
+        """
+
+        return self.map(function).get_or_else(default_value)
+
     @abstractmethod
     def filter(self, function: Callable[[Any], bool]) -> Type[Option]:
         """Method to apply the filter function to the internal value.
