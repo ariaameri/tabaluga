@@ -8,6 +8,12 @@ class Option(ABC):
     """A class to hold an optional value."""
 
     @abstractmethod
+    def flatten(self) -> Type[Option]:
+        """Returns the nested Option value within."""
+
+        pass
+
+    @abstractmethod
     def map(self, function: Callable[[Any], Any]) -> Type[Option]:
         """Method to apply the function to the internal value.
 
@@ -144,6 +150,11 @@ class Some(Option):
 
         return self._value
 
+    def flatten(self) -> Type[Option]:
+        """Returns the nested Option value within."""
+
+        return self._value if isinstance(self._value, Some) else Nothing()
+
     def map(self, function: Callable[[Any], Any]) -> Some:
         """Method to apply the function to the internal value.
 
@@ -233,6 +244,11 @@ class Nothing(Option):
         """
 
         return default_value
+
+    def flatten(self) -> Nothing:
+        """Returns the nested Option value within."""
+
+        return self
 
     def map(self, function: Callable[[Any], Any]) -> Nothing:
         """Method to apply the function to the internal value.
