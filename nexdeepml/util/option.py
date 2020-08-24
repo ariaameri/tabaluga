@@ -1,14 +1,14 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from types import FunctionType
-from typing import Any, Type
+from typing import Any, Type, Callable
 
 
 class Option(ABC):
     """A class to hold an optional value."""
 
     @abstractmethod
-    def map(self, function: FunctionType) -> Type[Option]:
+    def map(self, function: Callable[[Any], Any]) -> Type[Option]:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -25,7 +25,26 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def filter(self, function: FunctionType) -> Type[Option]:
+    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Type[Option]:
+        """Method to apply the function to the internal value and return its result.
+
+        It differs from map in that `function` in this method returns an Option itself.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply to the item within that returns an Option
+
+        Returns
+        -------
+        An Option instance of the result
+
+        """
+
+        pass
+
+    @abstractmethod
+    def filter(self, function: Callable[[Any], bool]) -> Type[Option]:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -109,7 +128,7 @@ class Some(Option):
 
         return self._value
 
-    def get_or_else(self, default_value) -> Any:
+    def get_or_else(self, default_value: Any) -> Any:
         """Returns the internal value.
 
         Parameters
@@ -125,7 +144,7 @@ class Some(Option):
 
         return self._value
 
-    def map(self, function) -> Some:
+    def map(self, function: Callable[[Any], Any]) -> Some:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -141,7 +160,25 @@ class Some(Option):
 
         return Some(function(self._value))
 
-    def filter(self, function) -> Type[Option]:
+    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Type[Option]:
+        """Method to apply the function to the internal value and return its result.
+
+        It differs from map in that `function` in this method returns an Option itself.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply to the item within that returns an Option
+
+        Returns
+        -------
+        An Option instance of the result
+
+        """
+
+        return function(self._value)
+
+    def filter(self, function: Callable[[Any], bool]) -> Type[Option]:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -197,7 +234,7 @@ class Nothing(Option):
 
         return default_value
 
-    def map(self, function) -> Nothing:
+    def map(self, function: Callable[[Any], Any]) -> Nothing:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -213,7 +250,25 @@ class Nothing(Option):
 
         return self
 
-    def filter(self, function) -> Nothing:
+    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Nothing:
+        """Method to apply the function to the internal value and return its result.
+
+        It differs from map in that `function` in this method returns an Option itself.
+
+        Parameters
+        ----------
+        function : FunctionType
+            Function to apply to the item within that returns an Option
+
+        Returns
+        -------
+        An Option instance of the result
+
+        """
+
+        return self
+
+    def filter(self, function: Callable[[Any], bool]) -> Nothing:
         """Method to apply the filter function to the value.
 
         Parameters
