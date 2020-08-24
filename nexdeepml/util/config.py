@@ -250,7 +250,7 @@ class ConfigParser:
 
         return str(value)
 
-    def get(self, item: str) -> Type[Option]:
+    def get_option(self, item: str) -> Type[Option]:
         """Gets an item in the instance and return an Option value of that.
 
         Parameters
@@ -269,6 +269,29 @@ class ConfigParser:
         else:
             return Nothing()
 
+    def get(self, item: str) -> Any:
+        """Gets an item in the instance and return it or raise an error if not exists.
+
+        Parameters
+        ----------
+        item : str
+            Item to look for in the shallowest level
+
+        Returns
+        -------
+        Value of the item
+
+        """
+
+        # Get the item from the returned option
+        out = self.get_option(item)
+
+        # Raise an error if the item does not exist
+        if out.is_empty():
+            raise AttributeError(f'{item} does not exist in this instance of {self.__class__.__name__}!')
+
+        return out.get()
+
     def get_or_else(self, item: str, default_value: Any) -> Any:
         """Gets an item in the instance and return default_value if not found.
 
@@ -285,7 +308,7 @@ class ConfigParser:
 
         """
 
-        return self.get(item).get_or_else(default_value)
+        return self.get_option(item).get_or_else(default_value)
 
     def __getattr__(self, item):
         """Method to help with getting an attribute.
@@ -315,6 +338,30 @@ class ConfigParser:
         """
 
         return not bool(self._parameters)
+
+    def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
+
+        parameter_names = list(self._parameters.keys())
+
+        # Check if non of the parameters are of type ConfigParse, i.e. the instance is flat
+        check = all([
+            not issubclass(type(self._parameters.get(parameter_name)), ConfigParser)
+            for parameter_name
+            in parameter_names
+            if not parameter_name.startswith('_')
+        ])
+
+        # Assert the flat-ness of the instance
+        assert check is True, f'Object of type {self.__class__.__name__} is not flat, cannot perform reduction!'
+
+        # Fill the result with the first element
+        result = self._parameters.get(parameter_names[0])
+
+        # Reduce the function `function` over all elements
+        for parameter_name in parameter_names[1:]:
+            result = function(result, self._parameters.get(parameter_name))
+
+        return result
 
     def update(self, name: str, value):
         """Update an entry in the config and return a new ConfigParser.
