@@ -49,7 +49,7 @@ class Option(ABC):
 
         pass
 
-    def fold(self, function: Callable[[Any], Type[Option]], default_value: Any) -> Any:
+    def fold(self, function: Callable[[Any], Any], default_value: Any) -> Any:
         """Method to apply the function to the internal value and return its result
         or returns `default_value` if the Option is empty.
 
