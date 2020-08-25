@@ -340,6 +340,20 @@ class ConfigParser:
         return not bool(self._parameters)
 
     def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
+        """Reduces the parameters of this collection using the specified associative binary operator.
+
+        It will return function(function(...function(x1, x2), x3), ..., xn) where xi is the i-th parameter.
+
+        Parameters
+        ----------
+        function : Callable[[A, A], A]
+            Function to do the reduction. Must take two arguments of type A and return value of type A
+
+        Returns
+        -------
+        Result of the reduction
+
+        """
 
         parameter_names = list(self._parameters.keys())
 
