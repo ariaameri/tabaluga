@@ -69,9 +69,9 @@ class ImageResizer(preprocess.Preprocess):
 
         """
 
-        self.destination_image_size = config.destination_image_size
+        self.destination_image_size = config.get('destination_image_size')
 
-        self.interpolation = config.interpolation or cv2.INTER_AREA
+        self.interpolation = config.get_or_else('interpolation', cv2.INTER_AREA)
 
         super().__init__(config)
 
@@ -186,9 +186,9 @@ class ImageResizerWithKeypoints(ImageAugmentationAlbumentations):
 
         """
 
-        self.destination_image_size = config.destination_image_size
+        self.destination_image_size = config.get('destination_image_size')
 
-        self.interpolation = config.interpolation or cv2.INTER_AREA
+        self.interpolation = config.get_or_else('interpolation', cv2.INTER_AREA)
 
         self.keypoint_format = keypoint_format
 
@@ -288,7 +288,7 @@ class OneHotDecoder(preprocess.Preprocess):
         super().__init__(config)
 
         # Set the axis
-        self.axis = config.axis if config.axis is not None else -1
+        self.axis = config.get_or_else('axis', -1)
 
     def process(self, data: np.ndarray, axis: int = None) -> np.ndarray:
         """"Does the decoding.

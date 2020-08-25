@@ -19,7 +19,7 @@ class SampleLoggerManager(LoggerManager):
 
     def on_train_begin(self, info: Dict = None):
 
-        self.workers['train_tqdm']: TQDMLogger = TQDMLogger(self._config.tqdm)
+        self.workers['train_tqdm']: TQDMLogger = TQDMLogger(self._config.get_or_else('tqdm', None))
 
     def on_train_epoch_begin(self, info: Dict = None):
 
@@ -56,7 +56,11 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_train_begin(self, info: Dict = None):
 
         self.workers['train_tpb']: TheProgressBarLogger = \
-            TheProgressBarLogger(self._config.TheProgressBar.update('console_handler', self.console_file)).activate()
+            TheProgressBarLogger(
+                self._config
+                .get_or_else('TheProgressBar', ConfigParser())
+                .update('console_handler', self.console_file)
+            ).activate()
 
     def on_train_epoch_begin(self, info: Dict = None):
 

@@ -12,7 +12,8 @@ class SampleTrainer(Trainer):
         self.create_workers()
 
     def create_workers(self):
-        self.workers['callback'] = SampleCallbackManager(self._config.callback, self)
+
+        self.workers['callback'] = SampleCallbackManager(self._config.get('callback'), self)
 
     def create_model(self):
 

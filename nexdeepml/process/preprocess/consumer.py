@@ -90,7 +90,7 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         self.workers['labels_background_to_color'] = BackgroundToColor(ConfigParser())
 
-        self.workers['image_resizer'] = ImageResizer(self._config.resize)
+        self.workers['image_resizer'] = ImageResizer(self._config.get('resize'))
 
         self.workers['image_normalizer'] = ImageNormalizer()
 
@@ -104,7 +104,7 @@ class SampleImagePreprocessManager(PreprocessManager):
         # data = info['data']['data']
         data = info['data']
 
-        labels = data.labels
+        labels = data.get('labels')
         labels = self.workers['labels_background_to_color'].process(labels)
         processed_data = data.update('labels', labels)
 
@@ -114,7 +114,7 @@ class SampleImagePreprocessManager(PreprocessManager):
         processed_data = processed_data.map(self.workers['image_normalizer'].process)
         processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
 
-        labels = processed_data.labels
+        labels = processed_data.get('labels')
         labels = self.workers['label_one_hot_decoder'].process(labels)
         processed_data = processed_data.update('labels', labels)
 

@@ -28,18 +28,18 @@ class DataManager(base.BaseEventManager, ABC):
         self._folders: List[str] = []
 
         # Get the input type
-        self._input_type: str = config.input_type
+        self._input_type: str = config.get('input_type')
 
         # Get random seed and shuffle boolean
-        self._seed = config.seed
-        self._shuffle: bool = config.shuffle or False
+        self._seed = config.get_or_else('seed', None)
+        self._shuffle: bool = config.get_or_else('shuffle', False)
 
         # Get test and validation ratios
-        self._test_ratio: float = config.test_ratio or 0
-        self._val_ratio: float = config.val_ratio or 0
+        self._test_ratio: float = config.get_or_else('test_ratio', 0)
+        self._val_ratio: float = config.get_or_else('val_ratio', 0)
 
         # Set batch size
-        self.batch_size: int = config.batch_size
+        self.batch_size: int = config.get('batch_size')
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
@@ -107,7 +107,7 @@ class DataManager(base.BaseEventManager, ABC):
         """This method goes over the specified folders, read files and creates a pandas data frame from them."""
 
         # Folders containing the data
-        self._folders: List[str] = self._config.folders
+        self._folders: List[str] = self._config.get('folders')
 
         # Check if folder list is given
         if self._folders is None:

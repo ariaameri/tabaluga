@@ -31,7 +31,7 @@ class SampleImageProcessManager(ProcessManager):
     def create_workers(self):
         """Creates the pre- and post-processing managers as workers."""
 
-        self.workers['preprocess'] = SampleImagePreprocessManager(self._config.preprocess)
+        self.workers['preprocess'] = SampleImagePreprocessManager(self._config.get('preprocess'))
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train data."""
