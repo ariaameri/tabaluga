@@ -43,7 +43,7 @@ class ConfigParser:
             self._parameters['_meta'] = config_dict.pop('_meta')
 
         # Traverse the dictionary and set the parameters dictionary
-        self._parameters = self._init_helper(config_dict)
+        self._parameters = self.__init_helper(config_dict)
 
     @classmethod
     def create_from_file(cls, file_path: str):
@@ -62,7 +62,7 @@ class ConfigParser:
         # Return instance of the class
         return cls(config_dict)
 
-    def _init_helper(self, config_dict: Dict) -> Dict:
+    def __init_helper(self, config_dict: Dict) -> Dict:
         """Helper method for the constructor to recursively construct the parameters dictionary of the class
 
         Parameter
@@ -628,12 +628,12 @@ class ConfigParser:
         # return processed_filter_dict
 
         # Perform the filtering
-        filtered: Option = self._filter_helper(processed_filter_dict, '', '')
+        filtered: Option = self.__filter_helper(processed_filter_dict, '', '')
 
         # Return the result of an empty ConfigParser if the filtering result is empty
         return filtered.get_or_else(self.__class__())
 
-    def _filter_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
+    def __filter_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
         """Method to help with filtering.
             Performs filtering on each of the parameters of the current instance.
 
@@ -663,7 +663,7 @@ class ConfigParser:
 
             # If the parameter is ConfigParser, call its own filtering with the updated name
             if type(value) is type(self):
-                out = value._filter_helper(filter_dict, bc + f'.{name}', bc_meta)
+                out = value.__filter_helper(filter_dict, bc + f'.{name}', bc_meta)
             # If the parameter is anything else, see if it matches the filter and return the result
             else:
                 out = Some(value) \
