@@ -472,14 +472,14 @@ class ConfigParser:
 
         # In case we have to change an attribute here at depth zero
         if len(split) == 1:
-            parameters = {**self.__dict__, **{name: value}}  # Either update or create new attribute
+            parameters = {**self._parameters, **{name: value}}  # Either update or create new attribute
             return self.__class__(parameters)
         # In case we have to go deeper to change an attribute
         else:
             root: str = split[0]
-            parameters = {key: value for key, value in self.__dict__.items() if key != root}
+            parameters = {key: value for key, value in self._parameters.items() if key != root}
             # Find if we should update or create new attribute
-            chooser = self.__dict__[root] if root in self.__dict__.keys() else self.__class__({})
+            chooser = self._parameters[root] if root in self._parameters.keys() else self.__class__({})
             parameters = {**parameters, root: chooser.update('.'.join(split[1:]), value)}
             return self.__class__(parameters)
 

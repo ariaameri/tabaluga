@@ -46,17 +46,17 @@ class DataMuncher(ConfigParser):
 
             return out
 
-        bc_meta = bc_meta + self.__dict__.get('_meta', '')
+        bc_meta = bc_meta + self._parameters.get('_meta', '')
 
         if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            value = {key: map_helper(value, bc + f'.{key}') for key, value in self.__dict__.items()}
+            value = {key: map_helper(value, bc + f'.{key}') for key, value in self._parameters.items()}
             return self.__class__(value)
 
-        final_dict = {**self.__dict__,
+        final_dict = {**self._parameters,
                       **{
                           key: value.map_helper(function, filter_dict, update_regex, bc + f'.{key}', bc_meta)
                           for key, value
-                          in self.__dict__.items()
+                          in self._parameters.items()
                           if type(value) is type(self)
                         }
                       }
