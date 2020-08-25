@@ -8,13 +8,13 @@ class Option(ABC):
     """A class to hold an optional value."""
 
     @abstractmethod
-    def flatten(self) -> Type[Option]:
+    def flatten(self) -> Option:
         """Returns the nested Option value within."""
 
         pass
 
     @abstractmethod
-    def map(self, function: Callable[[Any], Any]) -> Type[Option]:
+    def map(self, function: Callable[[Any], Any]) -> Option:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -31,7 +31,7 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Type[Option]:
+    def flat_map(self, function: Callable[[Any], Option]) -> Option:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
@@ -69,7 +69,7 @@ class Option(ABC):
         return self.map(function).get_or_else(default_value)
 
     @abstractmethod
-    def filter(self, function: Callable[[Any], bool]) -> Type[Option]:
+    def filter(self, function: Callable[[Any], bool]) -> Option:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -85,7 +85,7 @@ class Option(ABC):
 
         pass
 
-    def filter_not(self, function: Callable[[Any], bool]) -> Type[Option]:
+    def filter_not(self, function: Callable[[Any], bool]) -> Option:
         """Method to apply the filter function to the internal value and returns true when the Option value is non-empty
             and the predicate function is not satisfied.
 
@@ -151,12 +151,12 @@ class Option(ABC):
 
         pass
 
-    def or_else(self, default_value: Type[Option]) -> Type[Option]:
+    def or_else(self, default_value: Option) -> Option:
         """Returns the Option itself if non-empty or the default value that is an Option.
 
         Parameters
         ----------
-        default_value : Type[Option]
+        default_value : Option
             Default value to return in case of non-existence internal value
 
         Returns
@@ -298,7 +298,7 @@ class Some(Option):
 
         function(self._value)
 
-    def flatten(self) -> Type[Option]:
+    def flatten(self) -> Option:
         """Returns the nested Option value within."""
 
         return self._value if isinstance(self._value, Some) else Nothing()
@@ -319,7 +319,7 @@ class Some(Option):
 
         return Some(function(self._value))
 
-    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Type[Option]:
+    def flat_map(self, function: Callable[[Any], Option]) -> Option:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
@@ -337,7 +337,7 @@ class Some(Option):
 
         return function(self._value)
 
-    def filter(self, function: Callable[[Any], bool]) -> Type[Option]:
+    def filter(self, function: Callable[[Any], bool]) -> Option:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -461,7 +461,7 @@ class Nothing(Option):
 
         return self
 
-    def flat_map(self, function: Callable[[Any], Type[Option]]) -> Nothing:
+    def flat_map(self, function: Callable[[Any], Option]) -> Nothing:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
