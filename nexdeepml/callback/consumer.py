@@ -187,6 +187,18 @@ class SampleCallbackManager(CallbackManager):
     def create_workers(self):
         """Creates and initializes workers."""
 
-        self.workers['data_loader'] = SampleDataManagerCallback(self._config.data_loader, self.trainer)
-        self.workers['process'] = SampleDataProcessCallback(self._config.process, self.trainer)
-        self.workers['logger'] = SampleLoggerCallback(self._config.logger, self.trainer)
+        self.workers['data_loader'] = \
+            SampleDataManagerCallback(
+                self._config.get_or_else('data_loader', None),
+                self.trainer
+            )
+        self.workers['process'] = \
+            SampleDataProcessCallback(
+                self._config.get_or_else('process', None),
+                self.trainer
+            )
+        self.workers['logger'] = \
+            SampleLoggerCallback(
+                self._config.get_or_else('logger', None),
+                self.trainer
+            )

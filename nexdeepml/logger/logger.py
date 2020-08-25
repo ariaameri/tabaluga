@@ -50,29 +50,30 @@ class Logger(BaseWorker):
         super().__init__(config)
 
         # The level at which we log
-        self._level: int = config.level or logging.INFO
+        self._level: int = config.get_or_else('level', logging.INFO)
 
         # Get the logger
-        self._logger = logging.getLogger(config.name or str(self._counter[0]))
+        self._logger = logging.getLogger(config.get_or_else('name', str(self._counter[0])))
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
 
         # TODO: Should we have logging to both the console and the file?
         # Determine whether to write to file or console and get the handlers
-        self.console = config.console
+        self.console = config.get_or_else('console', False)
         if self.console is True:
             # Get the handler
-            self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] = config.console_handler or sys.stdout
+            self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] =\
+                config.get_or_else('console_handler', sys.stdout)
             self._handler = logging.StreamHandler(self.console_file)
         else:
             file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             file_name = f'{file_name}.txt'
-            self._handler = logging.FileHandler(config.file_name or file_name)
+            self._handler = logging.FileHandler(config.get_or_else('file_name', file_name))
 
         # Set the level, format, and attach
-        self._handler.setLevel(config.level or logging.INFO)
-        self._format = config.format or self._create_format()
+        self._handler.setLevel(config.get_or_else('level', logging.INFO))
+        self._format = config.get_or_else('format', self._create_format())
         self._handler.setFormatter(
             logging.Formatter(
                 self._format
