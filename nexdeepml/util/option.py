@@ -1,20 +1,26 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from types import FunctionType
-from typing import Any, Type, Callable
+from typing import Any, Type, Callable, TypeVar, Generic
+
+T = TypeVar('T')
 
 
-class Option(ABC):
-    """A class to hold an optional value."""
+class Option(Generic[T], ABC):
+    """A class to hold an optional value.
+
+    The internal value is of type T.
+
+    """
 
     @abstractmethod
-    def flatten(self) -> Option:
+    def flatten(self) -> Option[Any]:
         """Returns the nested Option value within."""
 
         pass
 
     @abstractmethod
-    def map(self, function: Callable[[Any], Any]) -> Option:
+    def map(self, function: Callable[[T], Any]) -> Option[Any]:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -31,7 +37,7 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def flat_map(self, function: Callable[[Any], Option]) -> Option:
+    def flat_map(self, function: Callable[[T], Option[Any]]) -> Option[Any]:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
@@ -49,7 +55,7 @@ class Option(ABC):
 
         pass
 
-    def fold(self, function: Callable[[Any], Any], default_value: Any) -> Any:
+    def fold(self, function: Callable[[T], Any], default_value: Any) -> Any:
         """Method to apply the function to the internal value and return its result
         or returns `default_value` if the Option is empty.
 
@@ -69,7 +75,7 @@ class Option(ABC):
         return self.map(function).get_or_else(default_value)
 
     @abstractmethod
-    def filter(self, function: Callable[[Any], bool]) -> Option:
+    def filter(self, function: Callable[[T], bool]) -> Option[T]:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -85,7 +91,7 @@ class Option(ABC):
 
         pass
 
-    def filter_not(self, function: Callable[[Any], bool]) -> Option:
+    def filter_not(self, function: Callable[[T], bool]) -> Option[T]:
         """Method to apply the filter function to the internal value and returns true when the Option value is non-empty
             and the predicate function is not satisfied.
 
@@ -103,7 +109,7 @@ class Option(ABC):
         return self.filter(lambda x: not function(x))
 
     @abstractmethod
-    def exist(self, function: Callable[[Any], bool]) -> bool:
+    def exist(self, function: Callable[[T], bool]) -> bool:
         """Returns true if the Option is non-empty and predicate function is satisfied, false otherwise.
 
         Parameters
@@ -120,7 +126,7 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def for_all(self, function: Callable[[Any], bool]) -> bool:
+    def for_all(self, function: Callable[[T], bool]) -> bool:
         """Returns true if the predicate function is satisfied or the Option is empty, false otherwise.
 
         Parameters
@@ -137,7 +143,7 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def for_each(self, function: Callable[[Any], None]) -> None:
+    def for_each(self, function: Callable[[T], None]) -> None:
         """Applies the function `function` to the internal value if it exists.
 
         The function should have side-effects and not return anything.
@@ -151,7 +157,7 @@ class Option(ABC):
 
         pass
 
-    def or_else(self, default_value: Option) -> Option:
+    def or_else(self, default_value: Option[Any]) -> Option[Any]:
         """Returns the Option itself if non-empty or the default value that is an Option.
 
         Parameters
@@ -185,7 +191,7 @@ class Option(ABC):
         pass
 
     @abstractmethod
-    def get(self) -> Any:
+    def get(self) -> T:
         """Returns the internal value or raises an error if non-existence.
 
         Returns
@@ -212,7 +218,7 @@ class Option(ABC):
 class Some(Option):
     """A subclass of the Option class that holds a value."""
 
-    def __init__(self, value: Any):
+    def __init__(self, value: T):
         """Initializer to the instance.
 
         Parameters
@@ -222,9 +228,9 @@ class Some(Option):
 
         """
 
-        self._value = value
+        self._value: T = value
 
-    def get(self) -> Any:
+    def get(self) -> T:
         """Returns the internal value
 
         Returns
@@ -235,7 +241,7 @@ class Some(Option):
 
         return self._value
 
-    def get_or_else(self, default_value: Any) -> Any:
+    def get_or_else(self, default_value: Any) -> T:
         """Returns the internal value.
 
         Parameters
@@ -251,7 +257,7 @@ class Some(Option):
 
         return self._value
 
-    def exist(self, function: Callable[[Any], bool]) -> bool:
+    def exist(self, function: Callable[[T], bool]) -> bool:
         """Returns the result of applying the predicate function to the internal value.
 
         Parameters
@@ -267,7 +273,7 @@ class Some(Option):
 
         return function(self._value)
 
-    def for_all(self, function: Callable[[Any], bool]) -> bool:
+    def for_all(self, function: Callable[[T], bool]) -> bool:
         """Returns true if the predicate function is satisfied.
 
         Parameters
@@ -283,7 +289,7 @@ class Some(Option):
 
         return function(self._value)
 
-    def for_each(self, function: Callable[[Any], None]) -> None:
+    def for_each(self, function: Callable[[T], None]) -> None:
         """Applies the function `function` to the internal value.
 
         The function should have side-effects and not return anything.
@@ -298,12 +304,12 @@ class Some(Option):
 
         function(self._value)
 
-    def flatten(self) -> Option:
+    def flatten(self) -> Option[Any]:
         """Returns the nested Option value within."""
 
         return self._value if isinstance(self._value, Some) else Nothing()
 
-    def map(self, function: Callable[[Any], Any]) -> Some:
+    def map(self, function: Callable[[T], Any]) -> Some:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -319,7 +325,7 @@ class Some(Option):
 
         return Some(function(self._value))
 
-    def flat_map(self, function: Callable[[Any], Option]) -> Option:
+    def flat_map(self, function: Callable[[T], Option[Any]]) -> Option[Any]:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
@@ -337,7 +343,7 @@ class Some(Option):
 
         return function(self._value)
 
-    def filter(self, function: Callable[[Any], bool]) -> Option:
+    def filter(self, function: Callable[[T], bool]) -> Option[T]:
         """Method to apply the filter function to the internal value.
 
         Parameters
@@ -393,7 +399,7 @@ class Nothing(Option):
 
         return default_value
 
-    def exist(self, function: Callable[[Any], bool]) -> bool:
+    def exist(self, function: Callable[[T], bool]) -> bool:
         """Returns false as there is no element to satisfy the predicate.
 
         Parameters
@@ -409,7 +415,7 @@ class Nothing(Option):
 
         return False
 
-    def for_all(self, function: Callable[[Any], bool]) -> bool:
+    def for_all(self, function: Callable[[T], bool]) -> bool:
         """Returns true as the predicate is satisfied.
 
         Parameters
@@ -425,7 +431,7 @@ class Nothing(Option):
 
         return True
 
-    def for_each(self, function: Callable[[Any], None]) -> None:
+    def for_each(self, function: Callable[[T], None]) -> None:
         """Does not do anything!
 
         The function passed should have side-effects and not return anything.
@@ -445,7 +451,7 @@ class Nothing(Option):
 
         return self
 
-    def map(self, function: Callable[[Any], Any]) -> Nothing:
+    def map(self, function: Callable[[T], Any]) -> Nothing:
         """Method to apply the function to the internal value.
 
         Parameters
@@ -461,7 +467,7 @@ class Nothing(Option):
 
         return self
 
-    def flat_map(self, function: Callable[[Any], Option]) -> Nothing:
+    def flat_map(self, function: Callable[[T], Option[Any]]) -> Nothing:
         """Method to apply the function to the internal value and return its result.
 
         It differs from map in that `function` in this method returns an Option itself.
@@ -479,7 +485,7 @@ class Nothing(Option):
 
         return self
 
-    def filter(self, function: Callable[[Any], bool]) -> Nothing:
+    def filter(self, function: Callable[[T], bool]) -> Nothing:
         """Method to apply the filter function to the value.
 
         Parameters
