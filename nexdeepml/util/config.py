@@ -250,7 +250,7 @@ class ConfigParser:
 
         return str(value)
 
-    def get_option(self, item: str) -> Type[Option]:
+    def get_option(self, item: str) -> Option:
         """Gets an item in the instance and return an Option value of that.
 
         Parameters
@@ -417,7 +417,7 @@ class ConfigParser:
 
         return result
 
-    def update(self, name: str, value):
+    def update(self, name: str, value) -> ConfigParser:
         """Update an entry in the config and return a new ConfigParser.
 
         Parameters
@@ -515,7 +515,7 @@ class ConfigParser:
 
         return new_config
 
-    def find_one(self, filter_dict: Dict = None):
+    def find_one(self, filter_dict: Dict = None) -> ConfigParser:
 
         if filter_dict is None:
             return self
@@ -552,7 +552,7 @@ class ConfigParser:
 
         return None
 
-    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Type[Option] = Nothing()):
+    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = Nothing()) -> bool:
 
         # Check if all filters are satisfied
         satisfied = all(
@@ -591,7 +591,7 @@ class ConfigParser:
 
         return satisfied
 
-    def filter(self, filter_dict: Dict = None):
+    def filter(self, filter_dict: Dict = None) -> ConfigParser:
         """Method to filter the current item based on the criteria given and return a new ConfigParser that satisfies
             the criteria.
 
@@ -628,12 +628,12 @@ class ConfigParser:
         # return processed_filter_dict
 
         # Perform the filtering
-        filtered: Type[Option] = self._filter_helper(processed_filter_dict, '', '')
+        filtered: Option = self._filter_helper(processed_filter_dict, '', '')
 
         # Return the result of an empty ConfigParser if the filtering result is empty
         return filtered.get_or_else(self.__class__())
 
-    def _filter_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Type[Option]:
+    def _filter_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
         """Method to help with filtering.
             Performs filtering on each of the parameters of the current instance.
 
@@ -645,7 +645,7 @@ class ConfigParser:
 
         """
 
-        def helper(name: str, value: Any) -> Type[Option]:
+        def helper(name: str, value: Any) -> Option:
             """Helper method to filter a given parameter.
 
             Parameters
@@ -715,7 +715,7 @@ class ConfigParser:
             # Parse the query and get the list of functions corresponding to the queries
             self._function_list = self._parser(self.query)
 
-        def _parser(self, query: Dict) -> Any:
+        def _parser(self, query: Dict) -> list:
             """Method to parse the query given and turn it into actions or a list of functions to be called.
 
             Parameters
@@ -729,7 +729,7 @@ class ConfigParser:
 
             """
 
-            def helper(single_operator: str, value: Any) -> FunctionType:
+            def helper(single_operator: str, value: Any) -> Callable[[Option], bool]:
                 """Helper method to parse a single query by the single operator and its value given
                     and turn it into a function to be called.
 
@@ -760,14 +760,14 @@ class ConfigParser:
 
             return function_list
 
-        def filter(self, x: Type[Option]) -> bool:
+        def filter(self, x: Option) -> bool:
             """Method to perform the filtering on an Option value.
 
             This filtering is based on the query given in the constructor.
 
             Parameters
             ----------
-            x : Type[Option]
+            x : Option
                 An Option value to perform the filtering
 
             Returns
@@ -784,7 +784,7 @@ class ConfigParser:
 
             return satisfied
 
-        def _function(self, func: FunctionType) -> Callable[[Type[Option]], bool]:
+        def _function(self, func: FunctionType) -> Callable[[Option], bool]:
             """Wrapper function for a function to query on an Option value.
 
             Parameters
@@ -798,12 +798,12 @@ class ConfigParser:
 
             """
 
-            def helper(x: Type[Option]) -> bool:
+            def helper(x: Option) -> bool:
                 """Function to be called on an Option value to apply an internal function.
 
                 Parameters
                 ----------
-                x : Type[Option]
+                x : Option
                     An Option value to apply the internal function to.
 
                 Returns
@@ -820,7 +820,7 @@ class ConfigParser:
 
             return helper
 
-        def _exist(self, value: bool) -> Callable[[Type[Option]], bool]:
+        def _exist(self, value: bool) -> Callable[[Option], bool]:
             """Operator for checking if a variable exists.
 
             Parameters
@@ -834,12 +834,12 @@ class ConfigParser:
 
             """
 
-            def helper(x: Type[Option]) -> bool:
+            def helper(x: Option) -> bool:
                 """Helper function to decide whether or not Option x has an element.
 
                 Parameters
                 ----------
-                x : Type[Option]
+                x : Option
                     An Option value to check if exists or not
 
                 Returns
@@ -855,7 +855,7 @@ class ConfigParser:
 
             return helper
 
-        def _regex(self, regex: str) -> Callable[[Type[Option]], bool]:
+        def _regex(self, regex: str) -> Callable[[Option], bool]:
             """Operator for checking a regex string on a value.
 
                Parameters
@@ -869,12 +869,12 @@ class ConfigParser:
 
                """
 
-            def helper(x: Type[Option]) -> bool:
+            def helper(x: Option) -> bool:
                 """Helper function to decide whether or not a regex satisfies the Option x element.
 
                 Parameters
                 ----------
-                x : Type[Option]
+                x : Option
                     An Option value to be checked
 
                 Returns
