@@ -377,6 +377,46 @@ class ConfigParser:
 
         return result
 
+    def fold(self, zero_element: Any, function: Callable[[Any, Any], Any]) -> Any:
+        """Folds the parameters of this collection using the specified associative binary operator and zero_elemnt.
+
+        It will return function(function(...function(zero_element, x1), x2), ..., xn) where xi is the i-th parameter.
+
+        Parameters
+        ----------
+        function : Callable[[B, A], B]
+            Function to do the reduction. Must take two arguments of type B and A and return value of type B
+        zero_element : Any
+            The first element to be combined in the fold procedure
+
+        Returns
+        -------
+        Result of the fold of type B
+
+        """
+
+        parameter_names = list(self._parameters.keys())
+
+        # Check if non of the parameters are of type ConfigParse, i.e. the instance is flat
+        check = all([
+            not issubclass(type(self._parameters.get(parameter_name)), ConfigParser)
+            for parameter_name
+            in parameter_names
+            if not parameter_name.startswith('_')
+        ])
+
+        # Assert the flat-ness of the instance
+        assert check is True, f'Object of type {self.__class__.__name__} is not flat, cannot perform fold!'
+
+        # Fill the result with the first element
+        result = zero_element
+
+        # Reduce the function `function` over all elements
+        for parameter_name in parameter_names:
+            result = function(result, self._parameters.get(parameter_name))
+
+        return result
+
     def update(self, name: str, value):
         """Update an entry in the config and return a new ConfigParser.
 
