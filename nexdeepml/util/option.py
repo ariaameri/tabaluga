@@ -151,6 +151,22 @@ class Option(ABC):
 
         pass
 
+    def or_else(self, default_value: Type[Option]) -> Type[Option]:
+        """Returns the Option itself if non-empty or the default value that is an Option.
+
+        Parameters
+        ----------
+        default_value : Type[Option]
+            Default value to return in case of non-existence internal value
+
+        Returns
+        -------
+        Self in case of non-empty Option or default_value
+
+        """
+
+        return default_value if self.is_empty() else self
+
     @abstractmethod
     def get_or_else(self, default_value: Any) -> Any:
         """Returns the internal value or default_value if non-existence.
