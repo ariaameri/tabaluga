@@ -498,11 +498,11 @@ class ConfigParser:
 
         return None
 
-    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this=None):
+    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Type[Option] = Nothing()):
 
         # Check if all filters are satisfied
         satisfied = all(
-            filter.filter(self.get(key))
+            filter.filter(self.get_option(key))
             for key, filter
             in filter_dict.items()
             if not key.startswith('_')  # special items start with '_'
@@ -514,7 +514,7 @@ class ConfigParser:
         satisfied &= \
             filter_dict.get('_bc_meta').filter(Some(bc_meta)) if filter_dict.get('_bc_meta') is not None else True
         satisfied &= \
-            filter_dict.get('_self').filter(Some(this or self)) if filter_dict.get('_self') is not None else True
+            filter_dict.get('_self').filter(this.or_else(Some(self))) if filter_dict.get('_self') is not None else True
 
 
         # bc_regex = filter_dict.get('_bc_regex')
@@ -612,7 +612,9 @@ class ConfigParser:
                 out = value._filter_helper(filter_dict, bc + f'.{name}', bc_meta)
             # If the parameter is anything else, see if it matches the filter and return the result
             else:
-                out = Some(value) if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, value) else Nothing()
+                out = Some(value) \
+                    if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, Some(value)) \
+                    else Nothing()
 
             return out
 
