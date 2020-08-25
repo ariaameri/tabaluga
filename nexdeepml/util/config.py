@@ -339,6 +339,38 @@ class ConfigParser:
 
         return not bool(self._parameters)
 
+    def enable_debug_mode(self) -> ConfigParser:
+        """Enables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
+
+        # Reserve the current __dict__
+        self.__old___dict__ = self.__dict__
+
+        # Update the dictionary and pass the method down to children
+        self.__dict__ = {**self.__dict__, **self._parameters}
+        for key, item in self._parameters.items():
+            if issubclass(type(item), ConfigParser):
+                item.enable_debug_mode()
+
+        return self
+
+    def disable_debug_mode(self) -> ConfigParser:
+        """Disables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
+
+        # Check if enable_debug_mode has already been activated
+        if getattr(self, '__old___dict__') is None:
+            return self
+
+        # Set the __dict__ to previous version and pass down
+        self.__dict__ = self.__old___dict__
+        for key, item in self._parameters.items():
+            if issubclass(type(item), ConfigParser):
+                item.disable_debug_mode()
+
+        # Delete the old dictionary
+        del self.__old___dict__
+
+        return self
+
     def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
         """Reduces the parameters of this collection using the specified associative binary operator.
 
