@@ -16,7 +16,7 @@ class TheProgressBar:
     This implementation is based on the alive_progress package.
     """
 
-    def __init__(self):
+    def __init__(self, stdout_handler=None):
         """Initializes the instance."""
 
         # Create a lock so that one thread at a time can use the console to write
@@ -32,9 +32,12 @@ class TheProgressBar:
         self.cursor_modifier = self.CursorModifier()
 
         # Console controlling book keeping
-        self.original_sysout = sys.stdout
+        self.original_sysout = sys.__stdout__
         self.isatty = sys.stdout.isatty
         self.fileno = sys.stdout.fileno
+
+        # Keep the stdout handler to write to
+        self.stdout_handler = stdout_handler or self.original_sysout
 
         # The description to write at the end of the progress bar
         self.description: str = ''
@@ -76,8 +79,11 @@ class TheProgressBar:
         # Set the initial time
         self.init_time = self.last_update_time = time.time()
 
-        # Redirect stdout
-        sys.stdout = self
+        # Redirect stdout just in case there is no stdout handler from outside
+        if self.stdout_handler is self.original_sysout:
+            sys.stdout = self
+        else:
+            self.stdout_handler.register_handler(self)
 
         # Hide cursor
         self._direct_write(self.cursor_modifier.get("hide"))
@@ -105,7 +111,11 @@ class TheProgressBar:
         # Show cursor
         self._direct_write(self.cursor_modifier.get("show"))
 
-        sys.stdout = self.original_sysout
+        # Revert stdout back to its original place
+        if self.stdout_handler is self.original_sysout:
+            sys.stdout = self.original_sysout
+        else:
+            self.stdout_handler.deregister_handler(self)
 
     def run(self) -> None:
         """Prints the progress bar and takes care of other controls.
@@ -570,9 +580,8 @@ class TheProgressBar:
 
         """
 
-        with self.print_lock:
-            self.original_sysout.write(msg)
-            self.flush()
+        self.stdout_handler.write(msg)
+        self.stdout_handler.flush()
 
     def write(self, msg: str) -> None:
         """Prints a message to the output.
@@ -606,14 +615,16 @@ class TheProgressBar:
     def flush(self) -> None:
         """Flushes the screen."""
 
+        self.original_sysout.write(''.join(self.buffer))
         self.original_sysout.flush()
+        self.buffer = []
 
 
 class TheProgressBarColored(TheProgressBar):
 
-    def __init__(self):
+    def __init__(self, handler=None):
 
-        super().__init__()
+        super().__init__(handler)
 
     # TODO: Code duplication, fix it
 

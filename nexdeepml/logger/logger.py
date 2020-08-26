@@ -5,7 +5,7 @@ from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Any
 import logging
 import sys
 from tqdm import tqdm
@@ -13,6 +13,8 @@ import numpy as np
 import io
 from datetime import datetime
 from numbers import Number
+from collections import OrderedDict
+import threading
 
 
 class Logger(BaseWorker):
@@ -242,10 +244,51 @@ class LoggerConsoleFile:
 
     def __init__(self):
         
-        # Keep the stack list of console (file) handlers to write to
-        self.handler = [sys.stdout]
+        # Keep the stack of console (file) handlers to write to as an ordered dictionary
+        self.handlers_stack: OrderedDict[Any, LoggerConsoleFile.ConsoleFile] = \
+            OrderedDict({'sysout': self.ConsoleFile(sys.stdout)})
 
-    def add_handler(self, handler):
+        # Keep track of whether or not this class is activated
+        self.activated: bool = False
+
+        # A lock to control printing to the stdout
+        self.print_lock: threading.Lock = threading.Lock()
+
+    def __enter__(self):
+
+        self.activate()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
+        self.deactivate()
+
+        return self
+
+    def activate(self):
+        """Activate the class to do the redirection of the stdout to this class and redirect stdout."""
+
+        # Reroute stdout to this class to take care of all the printings
+        sys.stdout = self
+
+        # We are activated!
+        self.activated = True
+
+        return self
+
+    def deactivate(self):
+        """Deactivate the class and returns stdout to itself."""
+
+        # Revert stdout
+        sys.stdout = self.handlers_stack['sysout'].handler
+
+        # And... deactivated!
+        self.activated = False
+
+        return self
+
+    def register_handler(self, handler):
         """Add a console (file) handler to the stack.
 
         Parameters
@@ -255,22 +298,119 @@ class LoggerConsoleFile:
 
         """
 
-        # Add the handler
-        self.handler.append(handler)
+        # Add the handler if it does not exist
+        if handler not in self.handlers_stack.keys():
+            self.handlers_stack[handler] = self.ConsoleFile(handler)
+
+    def deregister_handler(self, handler):
+        """Delete a console (file) handler from the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Delete the handler if it exists
+        if handler in self.handlers_stack.keys():
+            del self.handlers_stack[handler]
+
+    def pause_handler(self, handler):
+        """Pause a console (file) handler on the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Pause the handler, i.e. call pause() on it
+        if handler in self.handlers_stack.keys():
+            self.handlers_stack[handler].pause()
+
+    def resume_handler(self, handler):
+        """Resumes a possible paused console (file) handler on the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Resume the handler, i.e. call resume() on it
+        if handler in self.handlers_stack.keys():
+            self.handlers_stack[handler].resume()
 
     def revert(self):
         """Reverts the current handler to the previous one."""
 
         # Revert only when it has more than 1 item in the stack
-        if len(self.handler) > 1:
-            del self.handler[-1]
+        # if len(self.handlers_stack) > 1:
+        #     del self.handlers_stack[-1]
+
+        if len(self.handlers_stack.keys()) > 1:
+            del self.handlers_stack[list(self.handlers_stack.keys())[-1]]
 
     def __getattr__(self, item):
+        """Look for the item in the item on top of the stack and then in sysout.stdout if could not find it."""
 
-        # Get the attribute from the latest file
-        attr = getattr(self.handler[-1], item)
+        attr = None
 
-        return attr
+        # If not activate yet, just return the attribute of stdout
+        if self.activated is False:
+            return getattr(self.handlers_stack['sysout'], item)
+
+        # Get the attribute from the latest file if not paused
+        for index in range(len(self.handlers_stack.keys()) - 1, -1, -1):
+            name = list(self.handlers_stack.keys())[index]
+            if self.handlers_stack[name].paused is False:
+                if item == 'write':
+                    with self.print_lock:
+                        attr = getattr(self.handlers_stack[name], item)
+                else:
+                    attr = getattr(self.handlers_stack[name], item)
+                break
+
+        # If the item could not be found, look in sysout finally
+        return attr or getattr(self.handlers_stack['sysout'], item)
+
+    class ConsoleFile:
+        """Nested class as a thin wrapper to only hold the stdout handler and its specifications."""
+
+        def __init__(self, handler):
+            """Initializer for the class.
+
+            Parameters
+            ----------
+            handler
+                Handler to stdout
+
+            """
+
+            # Set the handler
+            self.handler = handler
+
+            # Flag to know whether or not we are paused
+            self.paused = False
+
+        def pause(self):
+            """Method to pause using this handler."""
+
+            self.paused = True
+
+        def resume(self):
+            """Method to resume using this handler."""
+
+            self.paused = False
+
+        def __getattr__(self, item):
+
+            attr = getattr(self.handler, item)
+
+            return attr
 
 
 class LoggerManager(BaseEventManager, ABC):
@@ -287,7 +427,7 @@ class LoggerManager(BaseEventManager, ABC):
         """
 
         # Add the console handler
-        self.console_file = LoggerConsoleFile()
+        self.console_file = LoggerConsoleFile().activate()
         config = config.update('console_handler', self.console_file)
 
         super().__init__(config)
@@ -523,7 +663,7 @@ class TheProgressBarLogger(Logger):
         super().__init__(config)
 
         # Create the instance of the TheProgressBar
-        self._the_progress_bar = TheProgressBarColored()
+        self._the_progress_bar = TheProgressBarColored(self.console_file)
 
         # The number of total items and epochs
         self._total: int = -1
@@ -547,12 +687,6 @@ class TheProgressBarLogger(Logger):
         """
 
         self._the_progress_bar.activate()
-
-        # Redirect the stream handler of the this logger to use TPB
-        # self._handler.setStream(self._the_progress_bar)
-
-
-        self.console_file.add_handler(self._the_progress_bar)
 
         return self
 
