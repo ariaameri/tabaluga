@@ -310,7 +310,7 @@ class OneHotDecoder(preprocess.Preprocess):
         """
 
         # Find the axis along which we should decode
-        axis = axis or self.axis
+        axis = axis if axis is not None else self.axis
 
         # Do the decoding based on argmax
         output = np.argmax(data, axis=axis)
