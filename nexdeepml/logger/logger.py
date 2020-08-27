@@ -248,6 +248,9 @@ class LoggerConsoleFile:
         self.handlers_stack: OrderedDict[Any, LoggerConsoleFile.ConsoleFile] = \
             OrderedDict({'sysout': self.ConsoleFile(sys.stdout)})
 
+        # Keep track of the active console handler
+        self.active_handler: Any = self.handlers_stack['sysout']
+
         # Keep track of whether or not this class is activated
         self.activated: bool = False
 
@@ -288,6 +291,17 @@ class LoggerConsoleFile:
 
         return self
 
+    def find_active(self):
+        """Find the active handler on top of the stack and puts in in the self.active_handler variable."""
+
+        # Find the name of the name of the handler and if it is not paused,
+        for index in range(len(self.handlers_stack.keys()) - 1, -1, -1):
+            name = list(self.handlers_stack.keys())[index]
+            item = self.handlers_stack[name]
+            if item.ready() is True:
+                self.active_handler = item
+                return
+
     def register_handler(self, handler):
         """Add a console (file) handler to the stack.
 
@@ -301,6 +315,9 @@ class LoggerConsoleFile:
         # Add the handler if it does not exist
         if handler not in self.handlers_stack.keys():
             self.handlers_stack[handler] = self.ConsoleFile(handler)
+
+        # Update the new active handler
+        self.find_active()
 
     def deregister_handler(self, handler):
         """Delete a console (file) handler from the stack.
@@ -316,6 +333,9 @@ class LoggerConsoleFile:
         if handler in self.handlers_stack.keys():
             del self.handlers_stack[handler]
 
+        # Update the new active handler
+        self.find_active()
+
     def pause_handler(self, handler):
         """Pause a console (file) handler on the stack.
 
@@ -329,6 +349,9 @@ class LoggerConsoleFile:
         # Pause the handler, i.e. call pause() on it
         if handler in self.handlers_stack.keys():
             self.handlers_stack[handler].pause()
+
+        # Update the new active handler
+        self.find_active()
 
     def resume_handler(self, handler):
         """Resumes a possible paused console (file) handler on the stack.
@@ -344,6 +367,9 @@ class LoggerConsoleFile:
         if handler in self.handlers_stack.keys():
             self.handlers_stack[handler].resume()
 
+        # Update the new active handler
+        self.find_active()
+
     def revert(self):
         """Reverts the current handler to the previous one."""
 
@@ -354,25 +380,18 @@ class LoggerConsoleFile:
         if len(self.handlers_stack.keys()) > 1:
             del self.handlers_stack[list(self.handlers_stack.keys())[-1]]
 
+        # Update the new active handler
+        self.find_active()
+
     def __getattr__(self, item):
         """Look for the item in the item on top of the stack and then in sysout.stdout if could not find it."""
-
-        attr = None
 
         # If not activate yet, just return the attribute of stdout
         if self.activated is False:
             return getattr(self.handlers_stack['sysout'], item)
 
-        # Get the attribute from the latest file if not paused
-        for index in range(len(self.handlers_stack.keys()) - 1, -1, -1):
-            name = list(self.handlers_stack.keys())[index]
-            if self.handlers_stack[name].paused is False:
-                if item == 'write':
-                    with self.print_lock:
-                        attr = getattr(self.handlers_stack[name], item)
-                else:
-                    attr = getattr(self.handlers_stack[name], item)
-                break
+        # Get the attribute from the active file
+        attr = getattr(self.active_handler, item)
 
         # If the item could not be found, look in sysout finally
         return attr or getattr(self.handlers_stack['sysout'], item)
@@ -396,15 +415,28 @@ class LoggerConsoleFile:
             # Flag to know whether or not we are paused
             self.paused = False
 
-        def pause(self):
+        def pause(self) -> None:
             """Method to pause using this handler."""
 
             self.paused = True
 
-        def resume(self):
+        def resume(self) -> None:
             """Method to resume using this handler."""
 
             self.paused = False
+
+        def ready(self) -> bool:
+            """Method to return whether or not this instance is ready to act as a console file or not.
+
+            Returns
+            -------
+            A boolean indicating whether it is ready to act a console file.
+
+            """
+
+            ready = not self.paused
+
+            return ready
 
         def __getattr__(self, item):
 
