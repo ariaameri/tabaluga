@@ -7,6 +7,7 @@ import time
 import datetime
 import os
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from ..util.data_muncher import DataMuncher
 import re
 
 
@@ -15,6 +16,8 @@ class TheProgressBar:
 
     This implementation is based on the alive_progress package.
     """
+
+    # TODO: Refactor the class to keep the state of the progress bar and other info as a DataMuncher
 
     def __init__(self, stdout_handler=None):
         """Initializes the instance."""
@@ -38,6 +41,22 @@ class TheProgressBar:
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
+        
+        # Book keeping for the information regarding the progress bar
+        initial_info = {
+            'progressbar': {
+                'prefix': '',
+                'bar': '',
+                'suffix': '',
+                'description': '',
+                'progressbar': '',
+            },
+            'console': {
+                'width': -1,
+                'column': -1
+            }
+        }
+        # self.progressbar
 
         # The description to write at the end of the progress bar
         self.description: str = ''
@@ -283,7 +302,23 @@ class TheProgressBar:
 
         """
 
-        self.description = description
+        self.description = self._modify_description(description)
+
+    def _modify_description(self, description: str) -> str:
+        """Modifies the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            Description string for the progress bar
+
+        Returns
+        -------
+        Modified description string
+
+        """
+
+        return description
 
     def _get_progressbar_with_spaces(self, return_to_beginning: bool = True) -> str:
         """Retunrs the progress bar along with its cursor modifier ANSI escape codes
@@ -296,20 +331,20 @@ class TheProgressBar:
         """
 
         # Get the progress bar
-        progress_bar = self._get_progressbar()
+        progressbar = self._get_progressbar()
 
         # Clear the line and write it
-        progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
-        progress_bar_with_space += f'{progress_bar}'
+        progressbar_with_space: str = self.cursor_modifier.get('clear_line')
+        progressbar_with_space += f'{progressbar}'
 
         if return_to_beginning:
-            number_of_lines = progress_bar.count(f'\n')
-            progress_bar_with_space += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
-            progress_bar_with_space += f'\r'
+            number_of_lines = progressbar.count(f'\n')
+            progressbar_with_space += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
+            progressbar_with_space += f'\r'
         else:
-            progress_bar_with_space += f'\n'
+            progressbar_with_space += f'\n'
 
-        return progress_bar_with_space
+        return progressbar_with_space
 
     def _print_progressbar(self, return_to_beginning: bool = True) -> None:
         """Clears the line and prints the progress bar
@@ -322,10 +357,10 @@ class TheProgressBar:
         """
 
         # Get the progress bar with spaces
-        progress_bar = self._get_progressbar_with_spaces(return_to_beginning=return_to_beginning)
+        progressbar = self._get_progressbar_with_spaces(return_to_beginning=return_to_beginning)
 
         # Print the progress bar
-        self._direct_write(progress_bar)
+        self._direct_write(progressbar)
 
     def _get_progressbar(self) -> str:
         """Returns a string containing the progress bar.
@@ -356,15 +391,15 @@ class TheProgressBar:
 
         bar = self._get_bar(remaining_columns)
 
-        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
+        progressbar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
 
         # Trim the progress bar to the number of columns of the console
-        progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
+        progressbar = '\n'.join(item[:columns] for item in progressbar.split('\n'))
 
         # Always reset the color back to normal
-        progress_bar += f'{CCC.reset.all}'
+        progressbar += f'{CCC.reset.all}'
 
-        return progress_bar
+        return progressbar
 
     def _get_terminal_size(self) -> (int, int):
 
@@ -748,12 +783,12 @@ class TheProgressBarColored(TheProgressBar):
 
         bar = self._get_bar(remaining_columns)
 
-        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
+        progressbar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
 
         # Trim the progress bar to the number of columns of the console
-        # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
+        # progressbar = '\n'.join(item[:columns] for item in progressbar.split('\n'))
 
         # Always reset the color back to normal
-        progress_bar += f'{CCC.reset.all}'
+        progressbar += f'{CCC.reset.all}'
 
-        return progress_bar
+        return progressbar
