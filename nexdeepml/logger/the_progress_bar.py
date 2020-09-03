@@ -43,24 +43,53 @@ class TheProgressBar:
         self.stdout_handler = stdout_handler or self.original_sysout
         
         # Book keeping for the information regarding the progress bar
-        initial_info = {
-            'progress_bar': {
+        initial_progress_bar_info = {
+            'progress_bar': {  # Everything related to the string of the progress bar
                 'prefix': '',
-                'bar': '',
+                'bar': '',  # The bar itself
                 'suffix': '',
                 'description': '',
-                'progress_bar': '',
+                'progress_bar': '',  # The whole progress bar, consisting of the previous fields
             },
-            'console': {
+            'console': {  # Information regarding the console
                 'width': -1,
                 'column': -1
             }
         }
-        # self.progressbar
+        self.progress_bar_info = DataMuncher(initial_progress_bar_info)
 
         # The description to write at the end of the progress bar
         self.description: str = ''
 
+        # Book keeping for the information regarding the collected statistics
+        initial_statistics_info = {
+            'time': {
+                'initial_run_time': -1,  # The time when this instance is first activated
+                'initial_progress_bar_time': -1,  # The time when this instance is activated or reset,
+                                                  # i.e. the time when this current, specific progress bar started
+                'last_update_time': -1  # The time when the latest update to this instance happened
+            },
+            'average': {
+                'average_time_per_update': -np.inf,
+                'average_item_per_update': -np.inf
+            }
+        }
+        self.statistics_info = DataMuncher(initial_statistics_info)
+
+        # Book keeping for the state of the instance
+        initial_state_info = {
+            'activated': False,  # Whether the instance has been activated---it can be activated only once
+            'paused': False,  # Whether we are on pause mode
+            # Whether we should write to some external stdout handler or take care of it ourselves
+            'external_stdout_handler': True if stdout_handler is None else False,
+            'item': {
+                'total_items_count': -1,  # Count of total number of batches expected
+                'current_item_index': -1  # Current batch item/index/number
+            }
+        }
+        self.state_info = DataMuncher(initial_state_info)
+
+        # TODO: Take care of these two variables by using self.state_info
         # The total number of items and the current item
         self.number_of_items: int = -1
         self.current_item: int = 0
@@ -70,13 +99,6 @@ class TheProgressBar:
 
         # Set of characters to be used for filling the bar
         self.bar_chars: str = '▏▎▍▌▋▊▉█'
-
-        # Book keeping for calculating the elapsed time
-        self.init_time: float
-        self.last_update_time: float
-        self.average_time_per_update: float = -np.inf
-        self.average_item_per_update: float = -np.inf
-        self.call_count: int = 0
 
     def __enter__(self) -> TheProgressBar:
 
@@ -95,14 +117,25 @@ class TheProgressBar:
 
         """
 
+        # If the instance is already activated, skip
+        if self.state_info.get('activated') is True:
+            return self
+
+        # Update the state to know we are activated
+        self.state_info = self.state_info.update('activated', True)
+
         # Set the initial time
-        self.init_time = self.last_update_time = time.time()
+        current_time = time.time()
+        self.statistics_info = \
+            self.statistics_info\
+                .update('time.initial_run_time', current_time)\
+                .update('time.initial_progress_bar_time', current_time)
 
         # Redirect stdout just in case there is no stdout handler from outside
-        if self.stdout_handler is self.original_sysout:
+        if self.state_info.get('external_stdout_handler') is False:
             sys.stdout = self
         else:
-            self.stdout_handler.register_handler(self)
+            self._activate_external_stdout_handler()
 
         # Hide cursor
         self._direct_write(self.cursor_modifier.get("hide"))
@@ -118,6 +151,18 @@ class TheProgressBar:
 
         return self
 
+    def _activate_external_stdout_handler(self):
+        """Method to activate the external stdout handler in case one is passed in the constructor."""
+
+        # Register self to the external console file
+        self.stdout_handler.register_handler(self)
+
+    def _deactivate_external_stdout_handler(self):
+        """Method to deactivate the external stdout handler in case one is passed in the constructor."""
+
+        # De-register self from the external console file
+        self.stdout_handler.deregister_handler(self)
+
     def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
@@ -131,10 +176,10 @@ class TheProgressBar:
         self._direct_write(self.cursor_modifier.get("show"))
 
         # Revert stdout back to its original place
-        if self.stdout_handler is self.original_sysout:
+        if self.state_info.get('external_stdout_handler') is False:
             sys.stdout = self.original_sysout
         else:
-            self.stdout_handler.deregister_handler(self)
+            self._deactivate_external_stdout_handler()
 
     def run(self) -> None:
         """Prints the progress bar and takes care of other controls.
@@ -198,7 +243,11 @@ class TheProgressBar:
             self._print_progress_bar(return_to_beginning=False)
 
         # Set the initial time
-        self.init_time = self.last_update_time = time.time()
+        current_time = time.time()
+        self.statistics_info = \
+            self.statistics_info\
+                .update('time.initial_progress_bar_time', current_time)\
+                .update('time.last_update_time', current_time)
 
         # Reset the current item counter
         self.current_item = 0
@@ -220,7 +269,11 @@ class TheProgressBar:
             self.current_item += count
 
             # Keep track of an average number of elements in each update
-            self.average_item_per_update = self._exp_average(self.average_item_per_update, count)
+            self.statistics_info = \
+                self.statistics_info.update(
+                    'average.average_item_per_update',
+                    self._exp_average(self.statistics_info.get('average').get('average_item_per_update'), count)
+                )
 
             # Update the time
             self._update_time_counter()
@@ -512,7 +565,7 @@ class TheProgressBar:
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('last_update_time'))
         delta_time = now - last_update_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -528,7 +581,7 @@ class TheProgressBar:
                                      f'{microseconds:4d}'
 
         # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('initial_progress_bar_time'))
         delta_time = now - init_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -571,7 +624,7 @@ class TheProgressBar:
 
         """
 
-        average_item_per_second = self.average_item_per_update / self.average_time_per_update
+        average_item_per_second = self.statistics_info.get('average').get('average_item_per_update')
 
         return average_item_per_second
 
@@ -579,13 +632,17 @@ class TheProgressBar:
         """Updates the internal average time counter."""
 
         # Figure current item time
-        delta_time = time.time() - self.last_update_time
+        delta_time = time.time() - self.statistics_info.get('time').get('last_update_time')
 
         # Update the moving average
-        self.average_time_per_update = self._exp_average(self.average_time_per_update, delta_time)
+        self.statistics_info = \
+            self.statistics_info.update(
+                'average.average_time_per_update',
+                self._exp_average(self.statistics_info.get('average').get('average_time_per_update'), delta_time)
+            )
 
         # Update the last time
-        self.last_update_time = time.time()
+        self.statistics_info = self.statistics_info.update('time.last_update_time', time.time())
 
     def _get_update_frequency(self) -> float:
         """Returns the number of times in a second that the progress bar should be updated.
@@ -597,7 +654,7 @@ class TheProgressBar:
         """
 
         # Calculated the average number of items processed per second
-        average_freq: float = 1 / self.average_time_per_update
+        average_freq: float = 1 / self.statistics_info.get('average').get('average_time_per_update')
 
         # Rule: update at least 2 times and at most 60 times in a second unless needed to be faster
         # Also be twice as fast as the update time difference
@@ -698,7 +755,7 @@ class TheProgressBarColored(TheProgressBar):
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(self.last_update_time)
+        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('last_update_time'))
         delta_time = now - last_update_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -714,7 +771,7 @@ class TheProgressBarColored(TheProgressBar):
                                      f'{microseconds:4d}'
 
         # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(self.init_time)
+        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('initial_progress_bar_time'))
         delta_time = now - init_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
