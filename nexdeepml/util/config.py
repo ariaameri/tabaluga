@@ -728,7 +728,7 @@ class ConfigParser:
                             for key, value
                             in self._parameters.items()
                         }.items()
-                    if not value.is_empty()  # filter out the Nothing ones
+                    if value.is_defined()  # filter out the Nothing ones
                 }
 
         return Some(self.__class__(new_dict)) if new_dict else nothing
@@ -890,7 +890,7 @@ class ConfigParser:
                 # The result is the xnor of value and if the Option x is empty
                 return \
                     not \
-                    ((not x.is_empty()) ^ value)
+                    ((x.is_defined()) ^ value)
 
             return helper
 
