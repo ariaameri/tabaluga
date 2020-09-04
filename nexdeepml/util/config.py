@@ -4,7 +4,7 @@ from types import FunctionType
 import yaml
 import re
 from itertools import chain
-from .option import Some, Nothing, Option
+from .option import Some, nothing, Option
 
 
 class ConfigParser:
@@ -267,7 +267,7 @@ class ConfigParser:
         if item in self._parameters.keys():
             return Some(self._parameters.get(item))
         else:
-            return Nothing()
+            return nothing
 
     def get(self, item: str) -> Any:
         """Gets an item in the instance and return it or raise an error if not exists.
@@ -584,7 +584,7 @@ class ConfigParser:
 
         return None
 
-    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = Nothing()) -> bool:
+    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = nothing) -> bool:
 
         # Check if all filters are satisfied
         satisfied = all(
@@ -674,6 +674,13 @@ class ConfigParser:
         filter_dict : dict
             Dictionary containing the filtering criteria whose values are instances of the Filter class
         bc : str
+            The breadcrumb string so far
+        bc_meta : str
+            The meta breadcrumb string so far
+
+        Returns
+        -------
+        An Option value containing the results
 
         """
 
@@ -695,12 +702,12 @@ class ConfigParser:
 
             # If the parameter is ConfigParser, call its own filtering with the updated name
             if type(value) is type(self):
-                out = value.__filter_helper(filter_dict, bc + f'.{name}', bc_meta)
+                out: Option = value.__filter_helper(filter_dict, bc + f'.{name}', bc_meta)
             # If the parameter is anything else, see if it matches the filter and return the result
             else:
-                out = Some(value) \
-                    if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, Some(value)) \
-                    else Nothing()
+                out: Option = Some(value) \
+                    if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, Some(value)) is True \
+                    else nothing
 
             return out
 
@@ -724,7 +731,7 @@ class ConfigParser:
                     if not value.is_empty()  # filter out the Nothing ones
                 }
 
-        return Some(self.__class__(new_dict)) if new_dict else Nothing()
+        return Some(self.__class__(new_dict)) if new_dict else nothing
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for ConfigParser."""

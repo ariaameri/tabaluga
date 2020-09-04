@@ -208,11 +208,22 @@ class Option(Generic[T], ABC):
 
         Returns
         -------
-        A boolean indicating whether an internal value exist
+        A boolean indicating whether an internal value does not exist
 
         """
 
         pass
+
+    def is_defined(self) -> bool:
+        """Returns whether or not an internal value exist.
+
+        Returns
+        -------
+        A boolean indicating whether an internal value exist
+
+        """
+
+        return not self.is_empty()
 
 
 class Some(Option):
@@ -307,7 +318,7 @@ class Some(Option):
     def flatten(self) -> Option[Any]:
         """Returns the nested Option value within."""
 
-        return self._value if isinstance(self._value, Some) else Nothing()
+        return self._value if isinstance(self._value, Some) else nothing
 
     def map(self, function: Callable[[T], Any]) -> Some:
         """Method to apply the function to the internal value.
@@ -357,7 +368,7 @@ class Some(Option):
 
         """
 
-        return self if function(self._value) is True else Nothing()
+        return self if function(self._value) is True else nothing
 
     def is_empty(self) -> bool:
         """Returns whether or not an internal value exist.
@@ -511,3 +522,7 @@ class Nothing(Option):
         """
 
         return True
+
+
+# An instance that should be passed around and imported elsewhere
+nothing = Nothing()
