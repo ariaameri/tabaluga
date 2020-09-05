@@ -854,6 +854,8 @@ class ConfigParser:
                     return self._exist(value)
                 elif single_operator == '$regex':
                     return self._regex(value)
+                elif single_operator == '$equal':
+                    return self._equal(value)
 
             # Get the functions list
             function_list = [helper(operator, value) for operator, value in query.items()]
@@ -990,5 +992,38 @@ class ConfigParser:
                     .filter(lambda d: isinstance(d, str))\
                     .filter(lambda a: re.search(regex, a) is not None)\
                     .is_empty()
+
+            return helper
+
+        def _equal(self, value: Any) -> Callable[[Option], bool]:
+            """Operator for checking if a variable is equal to the given value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to check for equality against the current variable
+
+            Returns
+            -------
+            A function for filtering
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not Option x is equal to `value`.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to check for equality
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x value is equal to `value`
+
+                """
+
+                # The result is the xnor of value and if the Option x is empty
+                return x.exist(lambda item: item == value)
 
             return helper
