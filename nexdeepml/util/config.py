@@ -547,43 +547,6 @@ class ConfigParser:
 
         return new_config
 
-    def find_one(self, filter_dict: Dict = None) -> ConfigParser:
-
-        if filter_dict is None:
-            return self
-        else:
-            found = self._find_one_helper(filter_dict, '', '')
-            return found or self.__class__()
-
-    def _find_one_helper(self, filter_dict, bc, bc_meta):
-
-        bc_meta = bc_meta + self.__dict__.get('_meta', '')
-
-        if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            return self
-
-        else:
-            for key, value in self.__dict__.items():
-                if type(value) is type(self):
-                    out = value._find_one_helper(filter_dict, bc + f'.{key}', bc_meta)
-                    if out is not None:
-                        return out
-                elif type(value) is list:
-                    for item in value:
-                        if type(item) is type(self):
-                            out = item._find_one_helper(filter_dict, bc + f'.{key}', bc_meta)
-                            if out is not None:
-                                return out
-                else:
-                    out = self._filter_checker(filter_dict, bc + f'.{key}', bc_meta) and value
-                    if out is not False:
-                        new_dict = {**{'_meta': self.__dict__['_meta']}, **{key: out}} \
-                            if self.__dict__.get('_meta') \
-                            else {key: out}
-                        return self.__class__(new_dict)
-
-        return None
-
     def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = nothing) -> bool:
 
         # Check if all filters are satisfied
@@ -732,6 +695,104 @@ class ConfigParser:
                 }
 
         return Some(self.__class__(new_dict)) if new_dict else nothing
+
+    def find_one(self, filter_dict: Dict = None) -> Any:
+        """Method to find the first item based on the criteria given and return it.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to `filter` method for more information
+
+        Returns
+        -------
+        The first element found that satisfies the given criteria.
+
+        """
+
+        # Return None if no filtering is provided
+        if filter_dict is None:
+            return None
+
+        # Process the criteria for each of the filter_dict fields into an instance of the Filter class
+        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+
+        # Perform the finding
+        found_one: Option = self.__find_one_helper(processed_filter_dict, '', '')
+
+        # Return None if the no result is found
+        return found_one.get_or_else(None)
+
+    def __find_one_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
+        """Method to help with finding the first element that satisfies criteria.
+            Performs filtering on each of the parameters of the current instance and returns the first that satisfies
+            the criteria.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria whose values are instances of the Filter class
+        bc : str
+            The breadcrumb string so far
+        bc_meta : str
+            The meta breadcrumb string so far
+
+        Returns
+        -------
+        An Option value containing the results
+
+        """
+
+        def helper(name: str, value: Any) -> Option:
+            """Helper method to filter a given parameter.
+
+            Parameters
+            ----------
+            name : str
+                The name of the parameter
+            value : Any
+                The value of the parameter
+
+            Returns
+            -------
+            An Option instance containing the result of filtering and finding one element
+                based on the closure-ized filter_dict
+
+            """
+
+            # If the parameter is ConfigParser, call its own find_one with the updated name
+            if type(value) is type(self):
+                out: Option = value.__find_one_helper(filter_dict, bc + f'.{name}', bc_meta)
+            # If the parameter is anything else, see if it matches the filter and return the result
+            else:
+                out: Option = Some(value) \
+                    if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, Some(value)) is True \
+                    else nothing
+
+            return out
+
+        # Construct the meta breadcrumb
+        bc_meta: str = bc_meta + f'.' + self.get_or_else('_meta', '')
+
+        # Construct placeholder for the final result
+        result: Option = nothing
+
+        # Check if the current instance satisfies the filtering
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
+            result = Some(self)
+        else:
+            # Go over each of the parameters and return the one that satisfies the criteria
+            for key, value in self._parameters.items():
+
+                # Get the results of finding in the current parameter
+                result: Option = helper(key, value)
+
+                # If a result is found, break and do not go over other parameters
+                if result.is_defined():
+                    break
+
+        return result
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for ConfigParser."""
