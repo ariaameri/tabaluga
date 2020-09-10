@@ -992,7 +992,15 @@ class ConfigParser(ConfigBase):
                     if value.is_defined()  # filter out the Nothing ones
                 }
 
-        return Some(self.__class__(new_dict)) if new_dict else nothing
+        # If nothing has changed, return self
+        if new_dict == self._parameters:
+            return Some(self)
+        # if something has changed, create a new ConfigParser
+        elif new_dict:
+            return Some(self.__class__(new_dict))
+        # If filtering resulted in nothing
+        else:
+            return nothing
 
     def find_one(self, filter_dict: Dict = None) -> Any:
         """Method to find the first item based on the criteria given and return it.
