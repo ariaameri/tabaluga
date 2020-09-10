@@ -764,7 +764,7 @@ class ConfigParser(ConfigBase):
 
         """
 
-        def union_helper(new: Any, old: Any, this) -> Any:
+        def union_helper(new: Any, old: Any, this) -> ConfigBase:
             """Helper function to create the union of two elements.
 
             Parameters
@@ -782,6 +782,9 @@ class ConfigParser(ConfigBase):
 
             """
 
+            # If we are dealing with the same object, return it
+            if new is old:
+                return new
             # If the new and old items are ConfigParsers, traverse recursively, else return the new item
             if type(new) == type(old) == type(this):
                 return old.union(new)
@@ -810,9 +813,16 @@ class ConfigParser(ConfigBase):
         }
 
         # Concatenate the newly generated dictionaries to get a new one and create a ConfigParser from that
-        new_config = self.__class__({**out_delta, **out_intersection})
+        final_parameters = {**out_delta, **out_intersection}
 
-        return new_config
+        # If the union is the current instance, return self
+        if final_parameters == self._parameters:
+            return self
+        # If the union is the to-be-union-ed instance, return it
+        elif final_parameters == new_config._parameters:
+            return new_config
+        else:
+            return self.__class__(final_parameters)
 
     def intersection(self, new_config: ConfigParser) -> ConfigParser:
         """method to take the intersection of two config instances.
