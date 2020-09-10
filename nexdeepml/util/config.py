@@ -814,6 +814,77 @@ class ConfigParser(ConfigBase):
 
         return new_config
 
+    def intersection(self, new_config: ConfigParser) -> ConfigParser:
+        """method to take the intersection of two config instances.
+
+        Parameters
+        ----------
+        new_config : ConfigParser
+            A config instance to intersect with the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the intersection of the two config instances
+
+        """
+
+        def intersection_helper(new: Any, old: Any, this) -> Option:
+            """Helper function to create the intersection of two elements.
+
+            Parameters
+            ----------
+            new : Any
+                The new element
+            old : Any
+                The old element
+            this
+                The reference to the outer class
+
+            Returns
+            -------
+            The result of intersection of the new and old elements as an Option value
+
+            """
+
+            # If we are dealing with the same object, return it
+            if new is old:
+                return Some(new)
+            # If the new and old items are ConfigParsers, traverse recursively, else return the new item
+            if type(new) == type(old) == type(this):
+                intersection = old.intersection(new)
+                return Some(intersection) if not intersection.is_empty() else nothing
+            else:
+                return nothing
+
+        # If None is passed, return empty ConfigParser
+        if new_config is None:
+            return self.__class__()
+
+        assert type(new_config) is type(self), \
+            f"The element to be intersected must be the same type as {self.__class__.__name__} class."
+
+        # Find the elements that exist in both of the configs
+        out_intersection = {
+            key: value.get()
+            for key, value
+            in {
+                key: intersection_helper(value_new, self._parameters.get(key), self)
+                for key, value_new in new_config._parameters.items()
+                if (key in self._parameters) and (key in new_config._parameters)
+            }.items()
+            if value.is_defined()
+        }
+
+        # If the intersection is the current instance, return self
+        if out_intersection == self._parameters:
+            return self
+        # If the intersection is the to-be-intersected instance, return it
+        elif out_intersection == new_config._parameters:
+            return new_config
+        # Concatenate the newly generated dictionaries to get a new one and create a ConfigParser from that
+        else:
+            return self.__class__(out_intersection)
+
     def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = nothing) -> bool:
 
         # Check if all filters are satisfied
