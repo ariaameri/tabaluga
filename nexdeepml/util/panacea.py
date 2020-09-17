@@ -945,6 +945,43 @@ class Panacea(PanaceaBase):
 
         return satisfied
 
+    def _make_filter_dictionary(self, filter_dict: Dict) -> Dict:
+        """Method to create a dictionary from the given `filter_dict` whose values are instances of Filter class.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to `filter` method for more information
+
+        Returns
+        -------
+        A dictionary with the same keys as the input dictionary but values of Filter class instance
+
+        """
+
+        # Replace the key/value pairs whose value is not a dictionary with the '$equal' operator for the value
+        filter_dict = {
+            # Elements that are already in dictionary form that Filter class accept
+            **{key: value for key, value in filter_dict.items() if isinstance(value, dict)},
+            # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
+            **{key: {'$equal': value} for key, value in filter_dict.items() if not isinstance(value, dict)}
+        }
+
+        # Process the criteria for each of the filter_dict fields into an instance of the Filter class
+        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+
+        # Split the dictionary into two keys: `field` and `_special`
+        # The `field` key contains all the selectors corresponding to the name of the fields
+        # The `_special` key contains all the special selectors that start with '_'
+        processed_filter_dict = \
+            {
+                'field': {key: value for key, value in processed_filter_dict.items() if not key.startswith('_')},
+                '_special': {key: value for key, value in processed_filter_dict.items() if key.startswith('_')}
+            }
+
+        return processed_filter_dict
+
     def filter(self, filter_dict: Dict = None) -> Panacea:
         """Method to filter the current item based on the criteria given and return a new Panacea that satisfies
             the criteria.
@@ -976,25 +1013,8 @@ class Panacea(PanaceaBase):
         if filter_dict is None:
             return self
 
-        # Replace the key/value pairs whose value is not a dictionary with the '$equal' operator for the value
-        filter_dict = {
-            # Elements that are already in dictionary form that Filter class accept
-            **{key: value for key, value in filter_dict.items() if isinstance(value, dict)},
-            # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
-            **{key: {'$equal': value} for key, value in filter_dict.items() if not isinstance(value, dict)}
-        }
-
-        # Process the criteria for each of the filter_dict fields into an instance of the Filter class
-        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
-
-        # Split the dictionary into two keys: `field` and `_special`
-        # The `field` key contains all the selectors corresponding to the name of the fields
-        # The `_special` key contains all the special selectors that start with '_'
-        processed_filter_dict = \
-            {
-                'field': {key: value for key, value in processed_filter_dict.items() if not key.startswith('_')},
-                '_special': {key: value for key, value in processed_filter_dict.items() if key.startswith('_')}
-            }
+        # Make the filter dictionary whose elements are instances of the Filter class
+        processed_filter_dict = self._make_filter_dictionary(filter_dict)
 
         # Perform the filtering
         filtered: Option = self._filter_helper(processed_filter_dict, '', '')
