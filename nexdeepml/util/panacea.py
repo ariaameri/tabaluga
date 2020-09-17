@@ -509,7 +509,7 @@ class Panacea(PanaceaBase):
         """Method to help with the visualization of the configuration in YAML style."""
 
         # Get dictionary representation of the current instance
-        out_string = self.str_representation(depth=2)
+        out_string = self.str_representation(name="", depth=2)
 
         return out_string
 
