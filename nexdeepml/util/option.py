@@ -225,6 +225,23 @@ class Option(Generic[T], ABC):
 
         return not self.is_empty()
 
+    @abstractmethod
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
+
+        """
+
+        pass
+
 
 class Some(Option):
     """A subclass of the Option class that holds a value."""
@@ -381,6 +398,22 @@ class Some(Option):
 
         return False
 
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
+
+        """
+
+        return self._value == x
+
 
 class Nothing(Option):
 
@@ -522,6 +555,22 @@ class Nothing(Option):
         """
 
         return True
+
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
+
+        """
+
+        return False
 
 
 # An instance that should be passed around and imported elsewhere
