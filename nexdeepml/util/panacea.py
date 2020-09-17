@@ -19,6 +19,8 @@ class PanaceaBase(ABC):
 
         pass
 
+    # Representation
+
     @abstractmethod
     def print(self, depth: int = -1) -> None:
         """Print the configuration up to certain depth.
@@ -67,6 +69,8 @@ class PanaceaBase(ABC):
     def _identity_str_representation(self, name) -> str:
 
         pass
+
+    # Getters
 
     @abstractmethod
     def get_option(self, item: str) -> Option:
@@ -126,6 +130,8 @@ class PanaceaBase(ABC):
 
         return self.get_option(item).get_or_else(default_value)
 
+    # Debugging mode
+
     def enable_debug_mode(self) -> PanaceaBase:
         """Enables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
 
@@ -157,6 +163,8 @@ class PanaceaBase(ABC):
         del self.__old___dict__
 
         return self
+
+    # Modification
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
@@ -495,6 +503,8 @@ class Panacea(PanaceaBase):
 
         return final_parameters
 
+    # Representation
+
     def __str__(self) -> str:
         """Method to help with the visualization of the configuration in YAML style."""
 
@@ -575,6 +585,8 @@ class Panacea(PanaceaBase):
     def _identity_str_representation(self, name) -> str:
 
         return f'{self.item_begin_symbol} {self.item_color}{name}\033[0m'
+
+    # Getters
 
     def get_option(self, item: str) -> Option:
         """Gets an item in the instance and return an Option value of that.
@@ -660,6 +672,8 @@ class Panacea(PanaceaBase):
     #
     #     raise Exception(f"Cannot change or add value of {name} due to immutability. Use `update` method instead.")
 
+    # State getters
+
     def is_empty(self) -> bool:
         """EXPERIMENTAL: A checker method that tells whether this instance of config is empty or not
 
@@ -685,6 +699,8 @@ class Panacea(PanaceaBase):
         ])
 
         return check
+
+    # Modifications
 
     def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
         """Reduces the parameters of this collection using the specified associative binary operator.
@@ -1247,6 +1263,8 @@ class PanaceaLeaf(PanaceaBase):
         # Hold other parameters
         self._parameters = {key: value for key, value in value.items() if not issubclass(type(value), PanaceaBase)}
 
+    # Representation
+
     def print(self, depth: int = -1) -> None:
         """Print the configuration up to certain depth.
 
@@ -1335,6 +1353,8 @@ class PanaceaLeaf(PanaceaBase):
 
         return out_string
 
+    # Getters
+
     def get_option(self, item: str) -> Option:
         """Gets an item in the instance and return an Option value of that.
 
@@ -1355,6 +1375,8 @@ class PanaceaLeaf(PanaceaBase):
             return Some(self._parameters.get(item))
         else:
             return nothing
+
+    # Debugging mode
 
     def enable_debug_mode(self) -> PanaceaLeaf:
         """Enables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
@@ -1385,6 +1407,8 @@ class PanaceaLeaf(PanaceaBase):
     #     satisfied = filter.filter(self.get_option('_value'))
     #
     #     return satisfied
+
+    # Modifications
 
     def _filter_helper(self, filter_dict, bc: str, bc_meta: str) -> Option:
         """Method to help with filtering.
