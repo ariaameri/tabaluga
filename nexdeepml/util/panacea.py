@@ -1119,8 +1119,8 @@ class Panacea(PanaceaBase):
         else:
             return nothing
 
-    def find_one(self, filter_dict: Dict = None) -> Any:
-        """Method to find the first item based on the criteria given and return it.
+    def find_one(self, filter_dict: Dict = None) -> Option:
+        """Method to find the first item based on the criteria given and return an Option value of it.
 
         Parameters
         ----------
@@ -1130,24 +1130,24 @@ class Panacea(PanaceaBase):
 
         Returns
         -------
-        The first element found that satisfies the given criteria.
+        An Option value of the first element found that satisfies the given criteria.
 
         """
 
         # Return None if no filtering is provided
         if filter_dict is None:
-            return None
+            return nothing
 
         # Process the criteria for each of the filter_dict fields into an instance of the Filter class
-        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+        processed_filter_dict: Dict = self._make_filter_dictionary(filter_dict)
 
         # Perform the finding
-        found_one: Option = self.__find_one_helper(processed_filter_dict, '', '')
+        found_one: Option = self._find_one_helper(processed_filter_dict, '', '')
 
-        # Return None if the no result is found
-        return found_one.get_or_else(None)
+        # Return
+        return found_one
 
-    def __find_one_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
+    def _find_one_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
         """Method to help with finding the first element that satisfies criteria.
             Performs filtering on each of the parameters of the current instance and returns the first that satisfies
             the criteria.
@@ -1179,19 +1179,36 @@ class Panacea(PanaceaBase):
 
             Returns
             -------
-            An Option instance containing the result of filtering and finding one element
-                based on the closure-ized filter_dict
+            An Option instance containing the result of filtering based on the closure-ized filter_dict
 
             """
 
-            # If the parameter is Panacea, call its own find_one with the updated name
+            # Set a placeholder for the result
+            out = nothing
+
+            # If the parameter is Panacea, call its own filtering with the updated name
             if type(value) is type(self):
-                out: Option = value.__find_one_helper(filter_dict, bc + f'.{name}', bc_meta)
-            # If the parameter is anything else, see if it matches the filter and return the result
-            else:
-                out: Option = Some(value) \
-                    if self._filter_checker(filter_dict, bc + f'.{name}', bc_meta, Some(value)) is True \
-                    else nothing
+                out: Option = value._find_one_helper(filter_dict, bc + f'.{name}', bc_meta)
+
+            # If the parameter is a leaf, see if it matches the filter and return the result
+            # It should be noted that there must exist only one field selector in field_dict.field in order
+            # to be able to match a specific leaf, otherwise it will definitely not be a match
+            # moreover, that field should be the same as the name of the leaf to be examined
+            # the other way to a possible match is to not have any field and have only _special selectors
+            elif list(filter_dict.get('field').keys()) in [[], [name]]:  # Empty or the name, respectively
+                # Create a new filter dictionary specific to this leaf
+                # Check if we should filter the internal value of the leaf or not
+                # If yes, populate the element `field` dictionary by '_value' and its corresponding filter else empty
+                field_dict = \
+                    {'_value': filter_dict.get('field').get(name)} \
+                        if filter_dict.get('field').get(name) is not None \
+                        else {}
+                modified_filter_dict = \
+                    {
+                        'field': field_dict,
+                        '_special': filter_dict.get('_special'),
+                    }
+                out: Option = value._find_one_helper(modified_filter_dict, bc + f'.{name}', bc_meta)
 
             return out
 
@@ -1492,3 +1509,30 @@ class PanaceaLeaf(PanaceaBase):
 
         return satisfied
 
+    def _find_one_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
+        """Method to help with finding the first element that satisfies criteria.
+            Performs filtering on internal value of the current instance.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria whose values are instances of the Filter class
+        bc : str
+            The breadcrumb string so far
+        bc_meta : str
+            The meta breadcrumb string so far
+
+        Returns
+        -------
+        An Option value containing the results
+
+        """
+
+        # A placeholder for the result
+        result = nothing
+
+        # Check if the current instance satisfies the filtering
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
+            result = Some(self._value)
+
+        return result
