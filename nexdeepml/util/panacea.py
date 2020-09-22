@@ -505,6 +505,46 @@ class Panacea(PanaceaBase):
 
         return final_parameters
 
+    # Relations
+
+    def __eq__(self, other):
+        """Returns whether two Panaceas are the same or not."""
+
+        # If other is not Panacea, then they are not the same
+        if not isinstance(other, self.__class__):
+            return False
+
+        # If the same object
+        if self is other:
+            return True
+
+        # If parameters do not match, not equal
+        if other._parameters.keys() != self._parameters.keys():
+            return False
+
+        # All parameters must be equal
+        for key, value in self._parameters.items():
+            if value != other._parameters.get(key):
+                return False
+
+        return True
+
+    def __ne__(self, other):
+        """Returns whether two Panaceas are not the same."""
+
+        return not (self == other)
+
+    def __copy__(self):
+        """Shallow copy of the current instance."""
+
+        return self.__class__(self._parameters)
+
+    def __deepcopy__(self, memodict={}):
+        """Deep copy of the current instance."""
+
+        return self.__class__(self.dict_representation())
+
+
     # Representation
 
     def __str__(self) -> str:
