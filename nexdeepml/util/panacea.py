@@ -1472,7 +1472,7 @@ class PanaceaLeaf(PanaceaBase):
             Configurations in a dictionary such as the one with json/yaml
         """
 
-        result = {'_value': self._value}
+        result = self._value
 
         return result
 
