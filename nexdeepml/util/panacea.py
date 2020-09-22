@@ -1301,6 +1301,146 @@ class PanaceaLeaf(PanaceaBase):
             # Hold the value
             self._value = value
 
+    # Relations
+
+    def _leaf_reference_eq(self, other: PanaceaLeaf):
+        """Check whether other has the same reference as the current instance."""
+
+        return self is other
+
+    def _leaf_value_eq(self, other: PanaceaLeaf):
+        """Check whether other has the same internal value as the current instance."""
+
+        if isinstance(other, self.__class__):
+            return self.get() == other.get()
+        else:
+            return False
+
+    def _any_eq(self, other: Any):
+        """Check whether other has the same value as the internal value of the current instance."""
+
+        return self.get() == other
+
+    def _leaf_value_lt(self, other: PanaceaLeaf):
+        """Check whether other internal value is less than the current instance."""
+
+        if isinstance(other, self.__class__):
+            return self.get() < other.get()
+        else:
+            return False
+
+    def _any_lt(self, other: Any):
+        """Check whether other internal value is less than that of the current instance."""
+
+        return self.get() < other
+
+    def __eq__(self, other):
+        """Defines the equality for the class.
+
+        Two leaves are equal if their references are equal or if their values are equal.
+        A leaf can also be equal to a value if its internal value is equal to it.
+
+        """
+
+        return self._leaf_reference_eq(other) or self._leaf_value_eq(other) or self._any_eq(other)
+
+    def __ne__(self, other):
+        """Defines the not equality for the class.
+
+        Two leaves are not equal if their references are not equal or if their values are different.
+        In other words, they are not equal if they are not ==-ly the same.
+
+        """
+
+        return not (self == other)
+
+    def __lt__(self, other):
+        """Defines the less than for the class.
+
+        This comparison is based on the internal values.
+
+        """
+
+        return self._leaf_value_lt(other) or self._any_lt(other)
+
+    def __gt__(self, other):
+        """Defines the greater than for the class.
+
+        This comparison is based on the internal values.
+
+        """
+
+        return (self < other) and (self != other)
+
+    def __ge__(self, other):
+        """Defines the greater than for the class.
+
+        This comparison is based on the internal values.
+
+        """
+
+        return (self > other) or self == other
+
+    def __le__(self, other):
+        """Defines the less than for the class.
+
+        This comparison is based on the internal values.
+
+        """
+
+        return (self < other) or (self == other)
+
+    # Operations
+
+    def __add__(self, other) -> PanaceaLeaf:
+        """Returns a new Leaf with added value"""
+
+        if isinstance(other, self.__class__):
+            return self.__class__(self._value + other.get())
+        else:
+            return self.__class__(self._value + other)
+
+    def __mul__(self, other) -> PanaceaLeaf:
+        """Returns a new Leaf with multiple value"""
+
+        if isinstance(other, self.__class__):
+            return self.__class__(self._value * other.get())
+        else:
+            return self.__class__(self._value * other)
+
+    def __copy__(self) -> PanaceaLeaf:
+        """Returns a copy of itself"""
+
+        return self.__class__(self._value)
+
+    def map(self, func: FunctionType) -> PanaceaBase:
+        """Applies a function on the internal value and returns a new Leaf.
+
+        Parameters
+        ----------
+        func : FunctionType
+            The function to be applied on the internal value
+
+        Returns
+        -------
+        A new leaf with the updated value
+
+        """
+
+        return self.__class__(func(self._value))
+
+    # Checkers
+
+    def contains(self, value: Any) -> bool:
+        """Check if the given `value` is the same as the internal one."""
+
+        return self._value == value
+
+    def exists(self, func: FunctionType) -> bool:
+        """Returns the result of the applying the boolean function on the internal value."""
+
+        return func(self._value)
+
     # Representation
 
     def print(self, depth: int = -1) -> None:
