@@ -494,7 +494,7 @@ class Panacea(PanaceaBase):
             elif isinstance(value, dict):
                 return self.__class__(value)
             else:
-                out = self.Leaf({'_value': value})
+                out = self.Leaf(value)
 
             return out
 
@@ -1283,22 +1283,23 @@ class PanaceaLeaf(PanaceaBase):
     begin_list_color = f'\033[38;5;70m'
     begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
 
-    def __init__(self, value: Dict):
+    def __init__(self, value: Any):
         """Initializes the class based on the input value.
 
         Parameters
         ----------
         value : Any
-            A dictionary containing all the configurations
+            The value to store
         """
 
         super().__init__()
 
-        # Hold the value
-        self._value = value.pop('_value')
-
-        # Hold other parameters
-        self._parameters = {key: value for key, value in value.items() if not issubclass(type(value), PanaceaBase)}
+        # To conform with the dictionary initialization, read also from a dictionary whose value is stored in _value key
+        if isinstance(value, dict) and '_value' in value.keys():
+            self._value = value.get('_value')
+        else:
+            # Hold the value
+            self._value = value
 
     # Representation
 
@@ -1331,11 +1332,7 @@ class PanaceaLeaf(PanaceaBase):
             Configurations in a dictionary such as the one with json/yaml
         """
 
-        result = self._value
-
-        # Check if other parameters were given as well
-        if len(self._parameters) > 0:
-            result = {**self._parameters, '_value': result}
+        result = {'_value': self._value}
 
         return result
 
@@ -1408,8 +1405,6 @@ class PanaceaLeaf(PanaceaBase):
 
         if item == '_value':
             return Some(self._value)
-        elif item in self._parameters.keys():
-            return Some(self._parameters.get(item))
         else:
             return nothing
 
