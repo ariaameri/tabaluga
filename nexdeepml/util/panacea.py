@@ -896,47 +896,28 @@ class Panacea(PanaceaBase):
 
         """
 
-        def intersection_helper(new: Any, old: Any, this) -> Option:
-            """Helper function to create the intersection of two elements.
+        return self.intersection_option(new_config).get_or_else(self.__class__())
 
-            Parameters
-            ----------
-            new : Any
-                The new element
-            old : Any
-                The old element
-            this
-                The reference to the outer class
+    def intersection_option(self, new_config: Panacea) -> Option:
+        """method to help to take the intersection of two config instances.
 
-            Returns
-            -------
-            The result of intersection of the new and old elements as an Option value
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to intersect with the current one
 
-            """
+        Returns
+        -------
+        An Option value containing the intersection of the two config instances
 
-            # If we are dealing with the same object, return it
-            if new is old:
-                return Some(new)
-            # If the new and old items are ConfigParsers, traverse recursively, else return the new item
-            if type(new) == type(old) == type(this):
-                intersection = old.intersection(new)
-                return Some(intersection) if not intersection.is_empty() else nothing
-            else:
-                return nothing
+        """
 
-        # If None is passed, return empty Panacea
-        if new_config is None:
-            return self.__class__()
-
-        assert type(new_config) is type(self), \
-            f"The element to be intersected must be the same type as {self.__class__.__name__} class."
-
-        # Find the elements that exist in both of the configs
+        # Find the dictionary of intersection for the parameters
         out_intersection = {
             key: value.get()
             for key, value
             in {
-                key: intersection_helper(value_new, self._parameters.get(key), self)
+                key: self._parameters.get(key).intersection_option(value_new)
                 for key, value_new in new_config._parameters.items()
                 if (key in self._parameters) and (key in new_config._parameters)
             }.items()
@@ -945,13 +926,18 @@ class Panacea(PanaceaBase):
 
         # If the intersection is the current instance, return self
         if out_intersection == self._parameters:
-            return self
+            return Some(self)
         # If the intersection is the to-be-intersected instance, return it
         elif out_intersection == new_config._parameters:
-            return new_config
+            return Some(new_config)
         # Concatenate the newly generated dictionaries to get a new one and create a Panacea from that
+        elif out_intersection:
+            return Some(self.__class__(out_intersection))
+        # If the intersection is empty
         else:
-            return self.__class__(out_intersection)
+            return nothing
+
+    # Traversals
 
     def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = nothing) -> bool:
 
@@ -1482,6 +1468,24 @@ class PanaceaLeaf(PanaceaBase):
         """Returns the result of the applying the boolean function on the internal value."""
 
         return func(self._value)
+
+    # Modification
+
+    def intersection_option(self, new_config: PanaceaBase) -> Option:
+        """method to help to take the intersection of two config instances.
+
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to intersect with the current one
+
+        Returns
+        -------
+        An Option value containing the intersection of the two config instances
+
+        """
+
+        return Some(self) if (self == new_config) else nothing
 
     # Representation
 
