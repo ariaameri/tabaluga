@@ -228,6 +228,8 @@ class PanaceaBase(ABC):
                     return self._regex(value)
                 elif single_operator == '$equal':
                     return self._equal(value)
+                else:
+                    raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
 
             # Get the functions list
             function_list = [helper(operator, value) for operator, value in query.items()]
