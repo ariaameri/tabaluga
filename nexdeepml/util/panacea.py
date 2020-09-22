@@ -1408,6 +1408,22 @@ class PanaceaLeaf(PanaceaBase):
         else:
             return nothing
 
+    def get(self, item: str = '_value') -> Any:
+        """Returns the internal value
+
+        Parameters
+        ----------
+        item : str
+            Dummy variable, just to conform with the superclass
+
+        Returns
+        -------
+        Value of the _value
+
+        """
+
+        return super().get(item)
+
     # Debugging mode
 
     def enable_debug_mode(self) -> PanaceaLeaf:
