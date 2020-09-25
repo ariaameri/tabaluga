@@ -544,7 +544,6 @@ class Panacea(PanaceaBase):
 
         return self.__class__(self.dict_representation())
 
-
     # Representation
 
     def __str__(self) -> str:
@@ -1262,7 +1261,7 @@ class Panacea(PanaceaBase):
 
         return result
 
-    def update(self, name: str, value) -> Panacea:
+    def update_old(self, name: str, value) -> Panacea:
         """Update an entry in the config and return a new Panacea.
 
         Parameters
@@ -1295,6 +1294,649 @@ class Panacea(PanaceaBase):
             chooser = self._parameters[root] if root in self._parameters.keys() else self.__class__({})
             parameters = {**parameters, root: chooser.update('.'.join(split[1:]), value)}
             return self.__class__(parameters)
+
+    def _update_apply(self, update_dict: Dict) -> PanaceaBase:
+
+        # Get a dictionary for the updated items
+        modified_panacea_dictionary = {
+            key: value.get()
+            for key, value
+            in {
+                key: update(self.get_option(key))
+                for key, update
+                in update_dict.get('field').items()  # items that should select specific fields
+            }.items()
+            if value.is_defined()
+        }
+
+        # First create a new Panacea with the new updated parameters and then apply _special updates
+        # Create a new Panacea from the new parameters and take the union with the old one,
+        # which will replace the new parameters
+        # new_panacea = self.union(self.__class__(modified_panacea_dictionary, self.Leaf))
+        new_panacea = {key: value for key, value in self._parameters.items() if key not in update_dict.get('field').keys()}
+        new_panacea = self.__class__({**new_panacea, **modified_panacea_dictionary})
+
+        # Apply the special _self update
+        if update_dict.get('_special').get('_self') is not None:
+            new_panacea = update_dict.get('_special').get('_self')(Some(new_panacea)).get()
+
+        return new_panacea
+
+    def _make_update_dictionary(self, update_dict: Dict) -> Dict:
+        """Method to create a dictionary from the given `update_dict` whose values are instances of Update class.
+
+        Parameters
+        ----------
+        update_dict : dict
+            Dictionary containing the updating rules
+
+        Returns
+        -------
+        A dictionary with keys as fields and values as Update class methods
+
+        """
+
+        # Replace the key/value pairs whose value is not a dictionary with '$set' operator
+        update_dict = {
+            # Elements that are already in dictionary form that Update class accept assuming operators are fine
+            **{key: value for key, value in update_dict.items() if isinstance(value, dict)},
+            # Elements that are not in dictionary form are set to '$set' operator for the Update class
+            **{'$set': {key: value} for key, value in update_dict.items() if not isinstance(value, dict)}
+        }
+
+        # Process the update_dict and get a modified update dictionary
+        processed_update_dict: Dict = self.Update(update_dict, self).get_modified_query()
+
+        # Split the dictionary into two keys: `field` and `_special`
+        # The `field` key contains all the selectors corresponding to the name of the fields
+        # The `_special` key contains all the special selectors that start with '_'
+        processed_update_dict = \
+            {
+                'field': {key: value for key, value in processed_update_dict.items() if not key.startswith('_')},
+                '_special': {key: value for key, value in processed_update_dict.items() if key.startswith('_')}
+            }
+
+        return processed_update_dict
+
+    def update(self, filter_dict: Dict = None, update_dict: Dict = None) -> PanaceaBase:
+        """Update an entry in the config and return a new Panacea.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to `filter` method for more information
+        update_dict : dict
+            Dictionary containing the updating rules.
+                ??????/
+
+        Returns
+        -------
+        An instance of Panacea class with the updated attribute
+
+        """
+
+        # Process the criteria for each of the filter_dict fields into an instance of the Filter class
+        processed_filter_dict: Dict = self._make_filter_dictionary(filter_dict)
+
+        # Process the update dictionary
+        processed_update_dict: Dict = self._make_update_dictionary(update_dict)
+
+        # Perform the update
+        updated = self._update_helper(processed_filter_dict, processed_update_dict, '', '')
+
+        # Return
+        return updated
+
+    def _update_helper(self, filter_dict: Dict, update_dict: Dict, bc: str, bc_meta: str) -> PanaceaBase:
+        """Method to help with updating.
+            Performs updating on the parameters of the current instance.
+
+        Parameters
+        ----------
+        filter_dict : dict[str, dict[str, Filter]]
+            Dictionary containing the filtering criteria whose values are instances of the Filter class
+            It consists of two keys:
+                'field,' whose element select existing fields, and
+                '_special,' whose element select special generated items
+        update_dict : dict[str, FunctionType]
+            Dictionary containing the update rules whose values are methods of Update class
+            It consists of two keys:
+                'field,' whose element select existing fields, and
+                '_special,' whose element select special generated items
+        bc : str
+            The breadcrumb string so far
+        bc_meta : str
+            The meta breadcrumb string so far
+
+        Returns
+        -------
+        An Option value containing the results
+
+        """
+
+        def helper(name: str, value: Any) -> PanaceaBase:
+            """Helper method to filter a given parameter.
+
+            Parameters
+            ----------
+            name : str
+                The name of the parameter
+            value : Any
+                The value of the parameter
+
+            Returns
+            -------
+            An Option instance containing the result of filtering based on the closure-ized filter_dict
+
+            """
+
+            # Set a placeholder for the result
+            out = value
+
+            # If the parameter is Panacea, call its own updating method with the updated name
+            if type(value) is type(self):
+                out = value._update_helper(filter_dict, update_dict, bc + f'.{name}', bc_meta)
+
+            # If the parameter is a leaf, see if it matches the filter and return the result
+            # It should be noted that there must exist only one field selector in field_dict.field in order
+            # to be able to match a specific leaf, otherwise it will definitely not be a match
+            # moreover, that field should be the same as the name of the leaf to be examined
+            # the other way to a possible match is to not have any field and have only _special selectors
+            elif list(filter_dict.get('field').keys()) in [[], [name]]:  # Empty or the name, respectively
+                # Create a new filter dictionary specific to this leaf
+                # Check if we should filter the internal value of the leaf or not
+                # If yes, populate the element `field` dictionary by '_value' and its corresponding filter else empty
+                field_dict = \
+                    {'_value': filter_dict.get('field').get(name)} \
+                        if filter_dict.get('field').get(name) is not None \
+                        else {}
+                modified_filter_dict = \
+                    {
+                        'field': field_dict,
+                        '_special': filter_dict.get('_special'),
+                    }
+                # Same for the update dictionary
+                field_dict = \
+                    {'_value': update_dict.get('field').get(name)} \
+                        if update_dict.get('field').get(name) is not None \
+                        else {}
+                modified_update_dict = \
+                    {
+                        'field': field_dict,
+                        '_special': update_dict.get('_special'),
+                    }
+                out = value._update_helper(modified_filter_dict, modified_update_dict, bc + f'.{name}', bc_meta)
+
+            return out
+
+        # Construct the meta breadcrumb
+        bc_meta: str = bc_meta + f'.' + self.get_option('_meta').fold(lambda x: x.get('_value'), '')
+
+        # Check if the current instance satisfies the filtering
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
+            return self._update_apply(update_dict)
+        else:
+            new_dict = \
+                        {  # Process and update each of the self._parameters
+                            key: helper(key, value)
+                            for key, value
+                            in self._parameters.items()
+                        }
+
+        # If nothing has changed, return self
+        if new_dict == self._parameters:
+            return self
+        # if something has changed, create a new Panacea
+        else:
+            return self.__class__(new_dict)
+
+    class Update:
+        """A class that parses, holds and updates the update rules for Panacea."""
+
+        def __init__(self, query: Dict, panacea: Panacea):
+            """Initializer to the class which will parse the update rule/query and create the corresponding actions.
+
+            Parameters
+            ----------
+            query : Dict
+                The query to do the updating to be parsed
+                Right now, only these sub-queries/operators are supported:
+                    - set or update an entry with the operator $set
+                    - only set a non-existing entry with the operator $set_only
+                    - only update an existing entry with the operator $update
+                    - rename an (existing) entry with the operator $rename
+                    - increment an (existing) entry with the operator $inc
+                    - multiply an (existing) entry with the operator $mult
+                    - lambda functions with the operator $function
+                The update rule/query has to be a dictionary with key containing the operator
+                and value the corresponding value
+
+                An example of the query is:
+                    {'$set': {'epochs': 10, 'other_thing': 'hello'}, '$inc': {'batch': 5}}
+                    which would set 'epochs' and 'other_thing' fields to 10 and 'hello'
+                        and will increment 'batch' field by 5
+
+            panacea : Panacea
+                The reference to the panacea object calling this object
+
+            """
+
+            # Set the Panacea instance calling this object
+            self.panacea = panacea
+
+            self.query = query
+
+            # Parse the query and get the dictionary of functions corresponding to the queries
+            self._query_dict: Dict[str, Callable[[Option], PanaceaBase]] = self._parser(self.query)
+
+        def _parser(self, query: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
+            """Method to parse the query given and turn it into actions or a list of functions to be called.
+
+            Parameters
+            ----------
+            query : Any
+                A query to be parsed
+
+            Returns
+            -------
+            A dictionary of modified query with functions to be called
+
+            """
+
+            def helper(single_operator: str, update_dict: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
+                """Helper method to parse a single query by the single operator and its value given
+                    and turn it into a function to be called.
+
+                Parameters
+                ----------
+                single_operator : str
+                    A single operator command string, starting with '$'
+                update_dict : dict
+                    The update corresponding to the operator
+                        It should have field names as keys and corresponding operator value as value
+
+                Returns
+                -------
+                A function corresponding to the operator
+
+                """
+
+                # If the operation is $operator, set the function to its corresponding wrapper
+                if single_operator == '$unset':
+                    function = self._unset
+                elif single_operator == '$set':
+                    function = self._set
+                elif single_operator == '$set_only':
+                    function = self._set_only
+                elif single_operator == '$update':
+                    function = self._update
+                elif single_operator == '$rename':
+                    function = self._rename
+                elif single_operator == '$inc':
+                    function = self._inc
+                elif single_operator == '$mult':
+                    function = self._mult
+                elif single_operator == '$function':
+                    function = self._function
+                else:
+                    raise AttributeError(f"Such operator {single_operator} does not exist for updating!")
+
+                # Modify the update dictionary with the corresponding function
+                modified_update_dict = {key: function(value) for key, value in update_dict.items()}
+
+                return modified_update_dict
+
+            # Check if all update rules are mutually exclusive
+            from collections import Counter
+            from functools import reduce
+            count = Counter(
+                reduce(lambda x, y: x + y,
+                       # Go over the value of each of the items in the query dictionary
+                       # Then, take the keys of each of the elements, which is a dictionary
+                       [list(value.keys()) for _, value in query.items()]
+                       )
+            )
+            # Check if all the fields are declared only once
+            for key, value in count.items():
+                if value >= 2:
+                    raise ValueError(f"Conflict in update dictionary for key {key}: duplicate update rules.")
+
+            # Get the functions list
+            function_list: List[Dict[str, Callable[[Option], PanaceaBase]]] = \
+                [helper(operator, value) for operator, value in query.items()]
+
+            # Turn all the lists, into a single dictionary with instructions
+            function_dict = reduce(lambda x, y: {**x, **y}, function_list)
+
+            return function_dict
+
+        def get_modified_query(self) -> Dict[str, Callable[[Option], PanaceaBase]]:
+            """Returns the modified update query dictionary constructed in the initializer.
+
+            Returns
+            -------
+            Modified dictionary of the update query
+
+            """
+
+            return self._query_dict
+
+        # def update(self, x: Option) -> PanaceaBase:
+        #     """Method to perform the update on an Option value.
+        #
+        #     This updating is based on the query given in the constructor.
+        #
+        #     Parameters
+        #     ----------
+        #     x : Option
+        #         An Option value to perform the updating on
+        #
+        #     Returns
+        #     -------
+        #     The result of the updating in form of an PanaceaBase instance
+        #
+        #     """
+        #
+        #     # Perform all the updates on the current item
+        #     filter_list = [func(x) for func in self._function_list]
+        #
+        #     # Check if all the filters are satisfied
+        #     satisfied = all(filter_list)
+        #
+        #     return satisfied
+
+        def _unset(self, value: Any) -> Callable[[Option], Some]:
+            """Wrapper function for unsetting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, remove it
+                    If Option value does not exist, do nothing
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> nothing:
+                """Function to be called on an Option value to unset a value.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to unset the value
+
+                Returns
+                -------
+                Option, nothing, to remove the value
+
+                """
+
+                return nothing
+
+            return helper
+
+        def _set(self, value: Any) -> Callable[[Option], Some]:
+            """Wrapper function for setting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, update it
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Some:
+                """Function to be called on an Option value to set a value.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to set the value
+
+                Returns
+                -------
+                Option, Some, value with the set value
+
+                """
+
+                # If x Option exists, update it, otherwise, set it
+                if x.is_defined():
+                    result: Some = self._update(value)(x)
+                else:
+                    result: Some = self._set_only(value)(x)
+
+                return result
+
+            return helper
+
+        def _set_only(self, value: Any) -> Callable[[Option], Some]:
+            """Wrapper function for setting a value on an Option value that does not exist.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, raise error
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Some:
+                """Function to be called on an Option value, that has to be nothing, to set a value.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value, which has to be nothing
+
+                Returns
+                -------
+                Option, Some, value with the set value
+
+                """
+
+                # Check if the Option does not exist
+                if x.is_defined():
+                    raise ValueError(f"The value {x} to be `set_only` exists!")
+
+                return Some(value)
+
+            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
+            # if not issubclass(type(value), PanaceaBase):
+            #     value = self.panacea.Leaf({'_value': value})
+
+            return helper
+
+        def _update(self, value: Any) -> Callable[[Option], Some]:
+            """Wrapper function for updating a value on an Option value that does exist.
+
+            Parameters
+            ----------
+            value : Any
+                A value to update the Option value with.
+                    If Option value exists, i.e. it is a PanaceaBase, update its value
+                    If Option value does not exist, raise an error
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Some:
+                """Function to be called on an Option value, that has to be Some, to update it.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value, which has to be Some
+
+                Returns
+                -------
+                Instance of PanaceaBase with the updated value
+
+                """
+
+                # Check if the Option does exist
+                if x.is_empty():
+                    raise ValueError(f"The value {x} to be `update` does not exist!")
+
+                return Some(value)
+
+            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
+            # if not issubclass(type(value), PanaceaBase):
+            #     value = self.panacea.Leaf({'_value': value})
+
+            return helper
+
+        def _rename(self, key: str) -> Callable[[Option], PanaceaBase]:
+            """Wrapper function for renaming a value name on an Option value.
+
+            Parameters
+            ----------
+            key : str
+                The old name of the value to be renamed
+
+            Returns
+            -------
+            ???
+
+            """
+
+            raise NotImplementedError
+
+        def _inc(self, value: Any) -> Callable[[Option], Option]:
+            """Wrapper function for updating a value on an Option value by adding `value` to it.
+
+            Parameters
+            ----------
+            value : Any
+                A value to add to the Option value.
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Option:
+                """Function to be called on an Option value, to add `value` to it.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to add `value` to
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(lambda a: a + value)
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') + value}))
+                # elif x.is_defined():
+                #     return Some(x.get() + value)
+                # else:
+                #     return x  # which is nothing
+
+            return helper
+
+        def _mult(self, value: Any) -> Callable[[Option], Option]:
+            """Wrapper function for updating a value on an Option value by multiplying it by `value`.
+
+            Parameters
+            ----------
+            value : Any
+                A value to multiply by the Option value.
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Option:
+                """Function to be called on an Option value, to multiply `value` by it.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to multiply `value` by
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(lambda a: a * value)
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') * value}))
+                # elif x.is_defined():
+                #     return Some(x.get() * value)
+                # else:
+                #     return x  # which is nothing
+
+            return helper
+
+        def _function(self, func: FunctionType) -> Callable[[Option], Option]:
+            """Wrapper function for updating a value on an Option value by applying the function `func` to it.
+
+            Parameters
+            ----------
+            func: FunctionType
+                The function to apply to the Option value
+
+            Returns
+            -------
+            A function that can be called on an Option PanaceaBase value
+
+            """
+
+            def helper(x: Option) -> Option:
+                """Function to be called on an Option value, to apply `func` to its value.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to apply `func` to
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(func)
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': func(x.get().get('_value'))}))
+                # else:
+                #     return x.map(func)
+
+            return helper
 
 
 class PanaceaLeaf(PanaceaBase):
@@ -1644,6 +2286,8 @@ class PanaceaLeaf(PanaceaBase):
 
     # Modifications
 
+    # Traversals
+
     def _filter_helper(self, filter_dict, bc: str, bc_meta: str) -> Option:
         """Method to help with filtering.
             Performs filtering on internal value of the current instance.
@@ -1731,5 +2375,54 @@ class PanaceaLeaf(PanaceaBase):
         # Check if the current instance satisfies the filtering
         if self._filter_checker(filter_dict, bc, bc_meta) is True:
             result = Some(self._value)
+
+        return result
+
+    def _update_apply(self, update_dict: Dict) -> PanaceaBase:
+
+        new_panacea = nothing
+
+        # First apply the _value update, which is general, then apply the by field update, which is specific
+
+        # Apply the special _value update that applies only on the _value
+        if update_dict.get('_special').get('_value') is not None:
+            new_panacea: Option = update_dict.get('_special').get('_value')(Some(self._value))
+
+        # Apply the by field update
+        if update_dict.get('field').get('_value') is not None:
+            new_panacea: Option = update_dict.get('field').get('_value')(new_panacea)
+
+        # Apply the special _self update
+        if update_dict.get('_special').get('_self') is not None:
+            new_panacea: Option = update_dict.get('_special').get('_self')(new_panacea)
+
+        # Either create a new instance with the new data or return self
+        return new_panacea.fold(lambda x: self.__class__({'_value': x}), self)
+
+    def _update_helper(self, filter_dict, update_dict, bc: str, bc_meta: str) -> PanaceaBase:
+        """Method to help with filtering.
+            Performs filtering on internal value of the current instance.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria whose values are instances of the Filter class
+        bc : str
+            The breadcrumb string so far
+        bc_meta : str
+            The meta breadcrumb string so far
+
+        Returns
+        -------
+        An Option value containing the results
+
+        """
+
+        # A placeholder for the result
+        result = self
+
+        # Check if the current instance satisfies the filtering
+        if self._filter_checker(filter_dict, bc, bc_meta) is True:
+            result = self._update_apply(update_dict)
 
         return result
