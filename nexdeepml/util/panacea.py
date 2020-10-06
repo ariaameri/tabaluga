@@ -184,6 +184,491 @@ class PanaceaBase(ABC):
 
     # Modification
 
+    def filter_helper(self, filter_dict, root, bc):
+
+        modification = self.Modification(self, filter_dict=filter_dict, root=root, bc=bc)
+
+        return modification.filter()
+
+    # class Modification:
+    #
+    #     def __init__(self, panacea: PanaceaBase, filter_dict: Dict, update_dict: Dict = None, root: bool = True, bc: str = ''):
+    #
+    #         # Reference to its Panacea class
+    #         self.panacea: PanaceaBase = panacea
+    #
+    #         self.bc: str = bc
+    #
+    #         self.filter_dict = self.make_filter_dictionary(filter_dict) if root is True else filter_dict
+    #         self.update_dict = {}
+    #
+    #     class Filter:
+    #         """A class that parses, holds and checks the filtering queries for Panacea."""
+    #
+    #         def __init__(self, query: Dict):
+    #             """Initializer to the class which will parse the query and create the corresponding actions.
+    #
+    #             Parameters
+    #             ----------
+    #             query : Dict
+    #                 The query to do the filtering to be parsed
+    #                 Right now, only these sub-queries/operators are supported:
+    #                     lambda functions with operator $function, whether it exists with operator $exist
+    #                 The query has to be a dictionary with key containing the operator
+    #
+    #             """
+    #
+    #             self.query = query
+    #
+    #             # Parse the query and get the list of functions corresponding to the queries
+    #             self._function_list = self._parser(self.query)
+    #
+    #         def _parser(self, query: Dict) -> list:
+    #             """Method to parse the query given and turn it into actions or a list of functions to be called.
+    #
+    #             Parameters
+    #             ----------
+    #             query : Any
+    #                 A query to be parsed
+    #
+    #             Returns
+    #             -------
+    #             A list of functions to be called
+    #
+    #             """
+    #
+    #             def helper(single_operator: str, value: Any) -> Callable[[Option], bool]:
+    #                 """Helper method to parse a single query by the single operator and its value given
+    #                     and turn it into a function to be called.
+    #
+    #                 Parameters
+    #                 ----------
+    #                 single_operator : str
+    #                     A single operator command string, starting with '$'
+    #                 value : Any
+    #                     The value corresponding to the operator
+    #
+    #                 Returns
+    #                 -------
+    #                 A function corresponding to the operator
+    #
+    #                 """
+    #
+    #                 # If the operation is a function, return the wrapper with the function
+    #                 if single_operator == '$function':
+    #                     return self._function(value)
+    #                 # Do the rest of the operations
+    #                 elif single_operator == '$exist':
+    #                     return self._exist(value)
+    #                 elif single_operator == '$regex':
+    #                     return self._regex(value)
+    #                 elif single_operator == '$equal':
+    #                     return self._equal(value)
+    #                 else:
+    #                     raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
+    #
+    #             # Get the functions list
+    #             function_list = [helper(operator, value) for operator, value in query.items()]
+    #
+    #             return function_list
+    #
+    #         def filter(self, x: Option) -> bool:
+    #             """Method to perform the filtering on an Option value.
+    #
+    #             This filtering is based on the query given in the constructor.
+    #
+    #             Parameters
+    #             ----------
+    #             x : Option
+    #                 An Option value to perform the filtering
+    #
+    #             Returns
+    #             -------
+    #             A boolean indicating whether or not all the filtering queries are satisfied
+    #
+    #             """
+    #
+    #             # Perform all the filtering on the current item
+    #             filter_list = [func(x) for func in self._function_list]
+    #
+    #             # Check if all the filters are satisfied
+    #             satisfied = all(filter_list)
+    #
+    #             return satisfied
+    #
+    #         def _function(self, func: FunctionType) -> Callable[[Option], bool]:
+    #             """Wrapper function for a function to query on an Option value.
+    #
+    #             Parameters
+    #             ----------
+    #             func : FunctionType
+    #                 A function to apply on the Option value. Must return boolean
+    #
+    #             Returns
+    #             -------
+    #             A function that can be called on an Option value
+    #
+    #             """
+    #
+    #             def helper(x: Option) -> bool:
+    #                 """Function to be called on an Option value to apply an internal function.
+    #
+    #                 Parameters
+    #                 ----------
+    #                 x : Option
+    #                     An Option value to apply the internal function to.
+    #
+    #                 Returns
+    #                 -------
+    #                 The boolean result of the application of function on x
+    #
+    #                 """
+    #
+    #                 return \
+    #                     x \
+    #                         .filter(func) \
+    #                         .is_defined()
+    #
+    #             return helper
+    #
+    #         def _exist(self, value: bool) -> Callable[[Option], bool]:
+    #             """Operator for checking if a variable exists.
+    #
+    #             Parameters
+    #             ----------
+    #             value : bool
+    #                 A boolean indicating whether we are dealing with existence or non-existence of the element
+    #
+    #             Returns
+    #             -------
+    #             A function for filtering
+    #
+    #             """
+    #
+    #             def helper(x: Option) -> bool:
+    #                 """Helper function to decide whether or not Option x has an element.
+    #
+    #                 Parameters
+    #                 ----------
+    #                 x : Option
+    #                     An Option value to check if exists or not
+    #
+    #                 Returns
+    #                 -------
+    #                 A boolean indicating whether or not the Option x has an element
+    #
+    #                 """
+    #
+    #                 # The result is the xnor of value and if the Option x is empty
+    #                 return \
+    #                     not \
+    #                         ((x.is_defined()) ^ value)
+    #
+    #             return helper
+    #
+    #         def _regex(self, regex: str) -> Callable[[Option], bool]:
+    #             """Operator for checking a regex string on a value.
+    #
+    #                Parameters
+    #                ----------
+    #                regex : str
+    #                    A regex string to be checked on the Option value
+    #
+    #                Returns
+    #                -------
+    #                A function for filtering
+    #
+    #                """
+    #
+    #             def helper(x: Option) -> bool:
+    #                 """Helper function to decide whether or not a regex satisfies the Option x element.
+    #
+    #                 Parameters
+    #                 ----------
+    #                 x : Option
+    #                     An Option value to be checked
+    #
+    #                 Returns
+    #                 -------
+    #                 A boolean indicating whether or not the Option x satisfy the regex
+    #
+    #                 """
+    #
+    #                 # Check if the item is a string and then do regex filtering
+    #                 return \
+    #                     x \
+    #                         .filter(lambda d: isinstance(d, str)) \
+    #                         .filter(lambda a: re.search(regex, a) is not None) \
+    #                         .is_defined()
+    #
+    #             return helper
+    #
+    #         def _equal(self, value: Any) -> Callable[[Option], bool]:
+    #             """Operator for checking if a variable is equal to the given value.
+    #
+    #             Parameters
+    #             ----------
+    #             value : Any
+    #                 A value to check for equality against the current variable
+    #
+    #             Returns
+    #             -------
+    #             A function for filtering
+    #
+    #             """
+    #
+    #             def helper(x: Option) -> bool:
+    #                 """Helper function to decide whether or not Option x is equal to `value`.
+    #
+    #                 Parameters
+    #                 ----------
+    #                 x : Option
+    #                     An Option value to check for equality
+    #
+    #                 Returns
+    #                 -------
+    #                 A boolean indicating whether or not the Option x value is equal to `value`
+    #
+    #                 """
+    #
+    #                 return x.exist(lambda item: item == value)
+    #
+    #             return helper
+    #
+    #     class Update:
+    #         pass
+    #
+    #     def filter(self):
+    #
+    #         for_each_element = \
+    #             lambda key, value: value._filter_helper(self.filter_dict, root=False, bc=f'{self.bc}.{key}')
+    #
+    #         propagate = self.propagate_all(for_each_element)
+    #
+    #         pass
+    #
+    #     def make_filter_dictionary(self, filter_dict: Dict) -> Dict:
+    #         """Method to create a dictionary from the given `filter_dict` whose values are instances of Filter class.
+    #
+    #         Parameters
+    #         ----------
+    #         filter_dict : dict
+    #             Dictionary containing the filtering criteria.
+    #                 Refer to `filter` method for more information
+    #
+    #         Returns
+    #         -------
+    #         A dictionary with the same keys as the input dictionary but values of Filter class instance
+    #
+    #         """
+    #
+    #         # Replace the key/value pairs whose value is not a dictionary with the '$equal' operator for the value
+    #         filter_dict = {
+    #             # Elements that are already in dictionary form that Filter class accept
+    #             **{key: value for key, value in filter_dict.items() if isinstance(value, dict)},
+    #             # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
+    #             **{key: {'$equal': value} for key, value in filter_dict.items() if not isinstance(value, dict)}
+    #         }
+    #
+    #         # Process the criteria for each of the filter_dict fields into an instance of the Filter class
+    #         processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+    #
+    #         # Split the dictionary into two keys: `field` and `_special`
+    #         # The `field` key contains all the selectors corresponding to the name of the fields
+    #         # The `_special` key contains all the special selectors that start with '_'
+    #         processed_filter_dict = \
+    #             {
+    #                 'field': {key: value for key, value in processed_filter_dict.items() if not key.startswith('_')},
+    #                 '_special': {key: value for key, value in processed_filter_dict.items() if key.startswith('_')}
+    #             }
+    #
+    #         return processed_filter_dict
+    #
+    #     def filter_check_self(self, bc: str = '') -> bool:
+    #
+    #         # Load the filter dictionary
+    #         filter_dict = self.filter_dict
+    #
+    #         # By default, self satisfies all the criteria
+    #         satisfied = True
+    #
+    #         # Check if all filter's field items are satisfied
+    #         for key, filter in filter_dict.get('field').items():
+    #             satisfied &= filter.filter(self.panacea.get_option(key))
+    #
+    #             # If filter is not satisfied, return false
+    #             if satisfied is False:
+    #                 return False
+    #
+    #         # Check special items that start with _
+    #         satisfied &= \
+    #             filter_dict \
+    #                 .get('_special') \
+    #                 .get('_bc') \
+    #                 .filter(Some(bc)) \
+    #                 if filter_dict.get('_special').get('_bc') is not None \
+    #                 else True
+    #         satisfied &= \
+    #             filter_dict \
+    #                 .get('_special') \
+    #                 .get('_self') \
+    #                 .filter(Some(self.panacea)) \
+    #                 if filter_dict.get('_special').get('_self') is not None \
+    #                 else True
+    #
+    #         return satisfied
+    #
+    #     def traverse(self, bc: str, do_after_satisfied, propagate):
+    #
+    #         # Check if self is satisfied
+    #         if self.filter_check_self(bc) is True:
+    #             return do_after_satisfied(self)
+    #
+    #         # If self is not satisfied, propagate
+    #         else:
+    #             return propagate(filter)
+    #
+    #     def filterXX_propagate(self):
+    #
+    #         def helper(name: str, value: Any) -> Option:
+    #             """Helper method to filter a given parameter.
+    #
+    #             Parameters
+    #             ----------
+    #             name : str
+    #                 The name of the parameter
+    #             value : Any
+    #                 The value of the parameter
+    #
+    #             Returns
+    #             -------
+    #             An Option instance containing the result of filtering based on the closure-ized filter_dict
+    #
+    #             """
+    #
+    #             # Set a placeholder for the result
+    #             out = nothing
+    #
+    #             # If the parameter is Panacea, call its own filtering with the updated name
+    #             if type(value) is type(self):
+    #                 out: Option = value._filter_helper(filter_dict, bc + f'.{name}', bc_meta)
+    #
+    #             # If the parameter is a leaf, see if it matches the filter and return the result
+    #             # It should be noted that there must exist only one field selector in field_dict.field in order
+    #             # to be able to match a specific leaf, otherwise it will definitely not be a match
+    #             # moreover, that field should be the same as the name of the leaf to be examined
+    #             # the other way to a possible match is to not have any field and have only _special selectors
+    #             elif list(filter_dict.get('field').keys()) in [[], [name]]:  # Empty or the name, respectively
+    #                 # Create a new filter dictionary specific to this leaf
+    #                 # Check if we should filter the internal value of the leaf or not
+    #                 # If yes, populate the element `field` dictionary by '_value' and its corresponding filter else empty
+    #                 field_dict = \
+    #                     {'_value': filter_dict.get('field').get(name)} \
+    #                         if filter_dict.get('field').get(name) is not None \
+    #                         else {}
+    #                 modified_filter_dict = \
+    #                     {
+    #                         'field': field_dict,
+    #                         '_special': filter_dict.get('_special'),
+    #                     }
+    #                 out: Option = value._filter_helper(modified_filter_dict, bc + f'.{name}', bc_meta)
+    #
+    #             return out
+    #
+    #         new_dict = \
+    #             {  # Keep only the filtered parameters that are not empty, i.e. that are not Nothing
+    #                 key: value.get()
+    #                 for key, value
+    #                 in
+    #                 {  # Process and filter each of the self._parameters
+    #                     key: helper(key, value)
+    #                     for key, value
+    #                     in self._parameters.items()
+    #                 }.items()
+    #                 if value.is_defined()  # filter out the Nothing ones
+    #             }
+    #
+    #
+    #     def propagate_all(self, function_to_call_for_each_element):
+    #
+    #         def helper():
+    #
+    #             new_dict = \
+    #                 {  # Keep only the filtered parameters that are not empty, i.e. that are not Nothing
+    #                     key: value.get()
+    #                     for key, value
+    #                     in
+    #                     {  # Process and filter each of the self._parameters
+    #                         key: function_to_call_for_each_element(key, value)
+    #                         for key, value
+    #                         in self.panacea._parameters.items()
+    #                     }.items()
+    #                     if value.is_defined()  # filter out the Nothing ones
+    #                 }
+    #
+    #             return self.panacea.__class__(new_dict)
+    #
+    #         return helper
+    #
+    #
+    #     def propagate_one(self, function_to_call) -> Option:
+    #
+    #         for key, value in self.panacea._parameters.items():
+    #
+    #             # Get the results of finding in the current parameter
+    #             result: Option = function_to_call(key, value)
+    #
+    #             # If a result is found, break and do not go over other parameters
+    #             if result.is_defined():
+    #                 return result
+    #
+    #         return nothing
+    #
+    #     def helper(self, name: str, value: Any, function_to_call) -> Option:
+    #         """Helper method to filter a given parameter.
+    #
+    #         Parameters
+    #         ----------
+    #         name : str
+    #             The name of the parameter
+    #         value : Any
+    #             The value of the parameter
+    #
+    #         Returns
+    #         -------
+    #         An Option instance containing the result of filtering based on the closure-ized filter_dict
+    #
+    #         """
+    #
+    #         # Set a placeholder for the result
+    #         out = nothing
+    #
+    #         # If the parameter is Panacea, call its own filtering with the updated name
+    #         if isinstance(value, type(self.panacea)):
+    #             out: Option = function_to_call(value, filter_dict, bc + f'.{name}')
+    #
+    #         # If the parameter is a leaf, see if it matches the filter and return the result
+    #         # It should be noted that there must exist only one field selector in field_dict.field in order
+    #         # to be able to match a specific leaf, otherwise it will definitely not be a match
+    #         # moreover, that field should be the same as the name of the leaf to be examined
+    #         # the other way to a possible match is to not have any field and have only _special selectors
+    #         elif list(filter_dict.get('field').keys()) in [[], [name]]:  # Empty or the name, respectively
+    #             # Create a new filter dictionary specific to this leaf
+    #             # Check if we should filter the internal value of the leaf or not
+    #             # If yes, populate the element `field` dictionary by '_value' and its corresponding filter else empty
+    #             field_dict = \
+    #                 {'_value': filter_dict.get('field').get(name)} \
+    #                     if filter_dict.get('field').get(name) is not None \
+    #                     else {}
+    #             modified_filter_dict = \
+    #                 {
+    #                     'field': field_dict,
+    #                     '_special': filter_dict.get('_special'),
+    #                 }
+    #             out: Option = value._find_one_helper(modified_filter_dict, bc + f'.{name}', bc_meta)
+    #
+    #         return out
+
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
 
@@ -2462,3 +2947,951 @@ class PanaceaLeaf(PanaceaBase):
             result = self._update_apply(update_dict)
 
         return result
+
+
+class Modification:
+
+    def __init__(self, filter_dict: Dict, update_dict: Dict = None):
+
+        self.filter_dict = self.make_filter_dictionary(filter_dict)
+        self.update_dict = self.make_update_dictionary(update_dict) if update_dict is not None else None
+
+    class Filter:
+        """A class that parses, holds and checks the filtering queries for Panacea."""
+
+        def __init__(self, query: Dict):
+            """Initializer to the class which will parse the query and create the corresponding actions.
+
+            Parameters
+            ----------
+            query : Dict
+                The query to do the filtering to be parsed
+                Right now, only these sub-queries/operators are supported:
+                    lambda functions with operator $function, whether it exists with operator $exist
+                The query has to be a dictionary with key containing the operator
+
+            """
+
+            self.query = query
+
+            # Parse the query and get the list of functions corresponding to the queries
+            self._function_list = self._parser(self.query)
+
+        def _parser(self, query: Dict) -> list:
+            """Method to parse the query given and turn it into actions or a list of functions to be called.
+
+            Parameters
+            ----------
+            query : Any
+                A query to be parsed
+
+            Returns
+            -------
+            A list of functions to be called
+
+            """
+
+            def helper(single_operator: str, value: Any) -> Callable[[Option], bool]:
+                """Helper method to parse a single query by the single operator and its value given
+                    and turn it into a function to be called.
+
+                Parameters
+                ----------
+                single_operator : str
+                    A single operator command string, starting with '$'
+                value : Any
+                    The value corresponding to the operator
+
+                Returns
+                -------
+                A function corresponding to the operator
+
+                """
+
+                # If the operation is a function, return the wrapper with the function
+                if single_operator == '$function':
+                    return self._function(value)
+                # Do the rest of the operations
+                elif single_operator == '$exist':
+                    return self._exist(value)
+                elif single_operator == '$regex':
+                    return self._regex(value)
+                elif single_operator == '$equal':
+                    return self._equal(value)
+                else:
+                    raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
+
+            # Get the functions list
+            function_list = [helper(operator, value) for operator, value in query.items()]
+
+            return function_list
+
+        def filter(self, x: Option) -> bool:
+            """Method to perform the filtering on an Option value.
+
+            This filtering is based on the query given in the constructor.
+
+            Parameters
+            ----------
+            x : Option
+                An Option value to perform the filtering
+
+            Returns
+            -------
+            A boolean indicating whether or not all the filtering queries are satisfied
+
+            """
+
+            # Perform all the filtering on the current item
+            filter_list = [func(x) for func in self._function_list]
+
+            # Check if all the filters are satisfied
+            satisfied = all(filter_list)
+
+            return satisfied
+
+        def _function(self, func: FunctionType) -> Callable[[Option], bool]:
+            """Wrapper function for a function to query on an Option value.
+
+            Parameters
+            ----------
+            func : FunctionType
+                A function to apply on the Option value. Must return boolean
+
+            Returns
+            -------
+            A function that can be called on an Option value
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Function to be called on an Option value to apply an internal function.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to apply the internal function to.
+
+                Returns
+                -------
+                The boolean result of the application of function on x
+
+                """
+
+                return \
+                    x \
+                        .filter(func) \
+                        .is_defined()
+
+            return helper
+
+        def _exist(self, value: bool) -> Callable[[Option], bool]:
+            """Operator for checking if a variable exists.
+
+            Parameters
+            ----------
+            value : bool
+                A boolean indicating whether we are dealing with existence or non-existence of the element
+
+            Returns
+            -------
+            A function for filtering
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not Option x has an element.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to check if exists or not
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x has an element
+
+                """
+
+                # The result is the xnor of value and if the Option x is empty
+                return \
+                    not \
+                        ((x.is_defined()) ^ value)
+
+            return helper
+
+        def _regex(self, regex: str) -> Callable[[Option], bool]:
+            """Operator for checking a regex string on a value.
+
+               Parameters
+               ----------
+               regex : str
+                   A regex string to be checked on the Option value
+
+               Returns
+               -------
+               A function for filtering
+
+               """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not a regex satisfies the Option x element.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to be checked
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x satisfy the regex
+
+                """
+
+                # Check if the item is a string and then do regex filtering
+                return \
+                    x \
+                        .filter(lambda d: isinstance(d, str)) \
+                        .filter(lambda a: regex_checker.search(a) is not None) \
+                        .is_defined()
+
+            # Define the compiled regex
+            regex_checker = re.compile(regex)
+
+            return helper
+
+        def _equal(self, value: Any) -> Callable[[Option], bool]:
+            """Operator for checking if a variable is equal to the given value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to check for equality against the current variable
+
+            Returns
+            -------
+            A function for filtering
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not Option x is equal to `value`.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to check for equality
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x value is equal to `value`
+
+                """
+
+                return x.exist(lambda item: item == value)
+
+            return helper
+
+    class Update:
+        """A class that parses, holds and updates the update rules for Panacea."""
+
+        def __init__(self, query: Dict):
+            """Initializer to the class which will parse the update rule/query and create the corresponding actions.
+
+            Parameters
+            ----------
+            query : Dict
+                The query to do the updating to be parsed
+                Right now, only these sub-queries/operators are supported:
+                    - set or update an entry with the operator $set
+                    - only set a non-existing entry with the operator $set_only
+                    - only update an existing entry with the operator $update
+                    - rename an (existing) entry with the operator $rename
+                    - increment an (existing) entry with the operator $inc
+                    - multiply an (existing) entry with the operator $mult
+                    - lambda functions with the operator $function
+                The update rule/query has to be a dictionary with key containing the operator
+                and value the corresponding value
+
+                An example of the query is:
+                    {'$set': {'epochs': 10, 'other_thing': 'hello'}, '$inc': {'batch': 5}}
+                    which would set 'epochs' and 'other_thing' fields to 10 and 'hello'
+                        and will increment 'batch' field by 5
+
+            """
+
+            self.query = query
+
+            # Parse the query and get the dictionary of functions corresponding to the queries
+            self._query_dict: Dict[str, Callable[[Option], PanaceaBase]] = self._parser(self.query)
+
+        def _parser(self, query: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
+            """Method to parse the query given and turn it into actions or a list of functions to be called.
+
+            Parameters
+            ----------
+            query : Any
+                A query to be parsed
+
+            Returns
+            -------
+            A dictionary of modified query with functions to be called
+
+            """
+
+            def helper(single_operator: str, update_dict: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
+                """Helper method to parse a single query by the single operator and its value given
+                    and turn it into a function to be called.
+
+                Parameters
+                ----------
+                single_operator : str
+                    A single operator command string, starting with '$'
+                update_dict : dict
+                    The update corresponding to the operator
+                        It should have field names as keys and corresponding operator value as value
+
+                Returns
+                -------
+                A function corresponding to the operator
+
+                """
+
+                # If the operation is $operator, set the function to its corresponding wrapper
+                if single_operator == '$unset':
+                    function = self._unset
+                elif single_operator == '$set':
+                    function = self._set
+                elif single_operator == '$set_only':
+                    function = self._set_only
+                elif single_operator == '$update':
+                    function = self._update
+                elif single_operator == '$rename':
+                    function = self._rename
+                elif single_operator == '$inc':
+                    function = self._inc
+                elif single_operator == '$mult':
+                    function = self._mult
+                elif single_operator == '$function':
+                    function = self._function
+                elif single_operator == '$map':
+                    function = self._map
+                else:
+                    raise AttributeError(f"Such operator {single_operator} does not exist for updating!")
+
+                # Modify the update dictionary with the corresponding function
+                modified_update_dict = {key: function(value) for key, value in update_dict.items()}
+
+                return modified_update_dict
+
+            # Check if all update rules are mutually exclusive
+            from collections import Counter
+            from functools import reduce
+            count = Counter(
+                reduce(lambda x, y: x + y,
+                       # Go over the value of each of the items in the query dictionary
+                       # Then, take the keys of each of the elements, which is a dictionary
+                       [list(value.keys()) for _, value in query.items()]
+                       )
+            )
+            # Check if all the fields are declared only once
+            for key, value in count.items():
+                if value >= 2:
+                    raise ValueError(f"Conflict in update dictionary for key {key}: duplicate update rules.")
+
+            # Get the functions list
+            function_list: List[Dict[str, Callable[[Option], PanaceaBase]]] = \
+                [helper(operator, value) for operator, value in query.items()]
+
+            # Turn all the lists, into a single dictionary with instructions
+            function_dict = reduce(lambda x, y: {**x, **y}, function_list)
+
+            return function_dict
+
+        def get_modified_query(self) -> Dict[str, Callable[[Option], PanaceaBase]]:
+            """Returns the modified update query dictionary constructed in the initializer.
+
+            Returns
+            -------
+            Modified dictionary of the update query
+
+            """
+
+            return self._query_dict
+
+        # def update(self, x: Option) -> PanaceaBase:
+        #     """Method to perform the update on an Option value.
+        #
+        #     This updating is based on the query given in the constructor.
+        #
+        #     Parameters
+        #     ----------
+        #     x : Option
+        #         An Option value to perform the updating on
+        #
+        #     Returns
+        #     -------
+        #     The result of the updating in form of an PanaceaBase instance
+        #
+        #     """
+        #
+        #     # Perform all the updates on the current item
+        #     filter_list = [func(x) for func in self._function_list]
+        #
+        #     # Check if all the filters are satisfied
+        #     satisfied = all(filter_list)
+        #
+        #     return satisfied
+
+        def _unset(self, value: Any) -> Callable[[str, Option], Option]:
+            """Wrapper function for unsetting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, remove it
+                    If Option value does not exist, do nothing
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> nothing:
+                """Function to be called on an Option value to unset a value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to unset the value
+
+                Returns
+                -------
+                Option, nothing, to remove the value
+
+                """
+
+                return nothing
+
+            return helper
+
+        def _set(self, value: Any) -> Callable[[str, Option], Some]:
+            """Wrapper function for setting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, update it
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Some:
+                """Function to be called on an Option value to set a value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to set the value
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the set value
+
+                """
+
+                # If x Option exists, update it, otherwise, set it
+                if x.is_defined():
+                    result: Some = self._update(value)(key, x)
+                else:
+                    result: Some = self._set_only(value)(key, x)
+
+                return result
+
+            return helper
+
+        def _set_only(self, value: Any) -> Callable[[str, Option], Some]:
+            """Wrapper function for setting a value on an Option value that does not exist.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, raise error
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Some:
+                """Function to be called on an Option value, that has to be nothing, to set a value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value, which has to be nothing
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the set value
+
+                """
+
+                # Check if the Option does not exist
+                if x.is_defined():
+                    raise ValueError(f"The value {x} to be `set_only` exists!")
+
+                return Some((key, value))
+
+            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
+            # if not issubclass(type(value), PanaceaBase):
+            #     value = self.panacea.Leaf({'_value': value})
+
+            return helper
+
+        def _update(self, value: Any) -> Callable[[str, Option], Some]:
+            """Wrapper function for updating a value on an Option value that does exist.
+
+            Parameters
+            ----------
+            value : Any
+                A value to update the Option value with.
+                    If Option value exists, i.e. it is a PanaceaBase, update its value
+                    If Option value does not exist, raise an error
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Some:
+                """Function to be called on an Option value, that has to be Some, to update it.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value, which has to be Some
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the updated value
+
+                """
+
+                # Check if the Option does exist
+                if x.is_empty():
+                    raise ValueError(f"The value {x} to be `update` does not exist!")
+
+                return Some((key, value))
+
+            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
+            # if not issubclass(type(value), PanaceaBase):
+            #     value = self.panacea.Leaf({'_value': value})
+
+            return helper
+
+        def _rename(self, key_new: str) -> Callable[[str, Option], Option]:
+            """Wrapper function for renaming a value name on an Option value.
+
+            Parameters
+            ----------
+            key_new : str
+                The old name of the value to be renamed
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value to rename its key if available.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value, which has to be Some
+
+                Returns
+                -------
+                Option of (key, value) pair with updated key.
+
+                """
+
+                return x.map(lambda z: (key_new, z))
+
+            assert isinstance(key_new, str), \
+                TypeError(f'key has to be of type string, it is now of type {type(key_new)}')
+
+            return helper
+
+        def _inc(self, value: Any) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by adding `value` to it.
+
+            Parameters
+            ----------
+            value : Any
+                A value to add to the Option value.
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to add `value` to it.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to add `value` to
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(lambda a: (key, a + value))
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') + value}))
+                # elif x.is_defined():
+                #     return Some(x.get() + value)
+                # else:
+                #     return x  # which is nothing
+
+            return helper
+
+        def _mult(self, value: Any) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by multiplying it by `value`.
+
+            Parameters
+            ----------
+            key : str
+                    Name of the Option value
+            value : Any
+                A value to multiply by the Option value.
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to multiply `value` by it.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to multiply `value` by
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(lambda a: (key, a * value))
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') * value}))
+                # elif x.is_defined():
+                #     return Some(x.get() * value)
+                # else:
+                #     return x  # which is nothing
+
+            return helper
+
+        def _function(self, func: FunctionType) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by applying the function `func` to it.
+
+            Parameters
+            ----------
+            func: FunctionType
+                The function to apply to the Option value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to apply `func` to its value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to apply `func` to
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(func).map(lambda a: (key, a))
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': func(x.get().get('_value'))}))
+                # else:
+                #     return x.map(func)
+
+            return helper
+
+        def _map(self, func: FunctionType) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value 'by mapping' the function `func` to the
+            PanaceaBase instance within the Option value.
+
+            Parameters
+            ----------
+            func: FunctionType
+                The function to map to the Option value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to 'map' `func` to it
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to 'map' `func` to
+
+                Returns
+                -------
+                Option value with the updated value
+
+                """
+
+                return x.map(lambda a: a.map(func)).map(lambda a: (key, a))
+
+                # # Check if the Option is a leaf, then update its _value
+                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
+                #     return Some(self.panacea.Leaf({'_value': func(x.get().get('_value'))}))
+                # else:
+                #     return x.map(func)
+
+            return helper
+
+    # General traversals
+
+    def traverse(self, panacea: PanaceaBase, bc: str, do_after_satisfied, propagate) -> Option:
+
+        key = bc.split('.')[-1]
+
+        # Check if self is satisfied
+        if self.filter_check_self(panacea, bc) is True:
+            return do_after_satisfied(key, panacea)  # Provide (key, value) pair as input
+
+        # If self is not satisfied, propagate
+        else:
+            return propagate(key, panacea)
+
+    def propagate_all(self, function_to_call_for_each_element):
+
+        def helper(key, panacea) -> Option:
+
+            # new_dict = \
+            #     {  # Keep only the filtered parameters that are not empty, i.e. that are not Nothing
+            #         key: value.get()
+            #         for key, value
+            #         in
+            #         [  # Process and filter each of the self._parameters
+            #             function_to_call_for_each_element(key, value)
+            #             for key, value
+            #             in panacea._parameters.items()
+            #         ]
+            #         if value.is_defined()  # filter out the Nothing ones
+            #     }
+
+            # print([item.get() for item in [  # Process each of the parameters, results in Option value containing (key, value) pairs
+            #             function_to_call_for_each_element(key, value)
+            #             for key, value
+            #             in panacea._parameters.items()
+            #         ] if item.is_defined()])
+
+            new_dict = \
+                {
+                    item.get()[0]: item.get()[1]  # Each returned element is (key, value) pair
+                    for item
+                    in
+                    [  # Process each of the parameters, results in Option value containing (key, value) pairs
+                        function_to_call_for_each_element(key, value)
+                        for key, value
+                        in panacea._parameters.items()
+                    ]
+                    if item.is_defined()
+                }
+
+
+            if new_dict:
+                return Some((key, panacea.__class__(new_dict)))
+            else:
+                return nothing
+
+        return helper
+
+    def propagate_one(self, function_to_call_for_each_element):
+
+        def helper(key, panacea) -> Option:
+
+            for key, value in panacea._parameters.items():
+
+                # Get the results of finding in the current parameter
+                result: Option = function_to_call_for_each_element(key, value)
+
+                # If a result is found, break and do not go over other parameters
+                if result.is_defined():
+                    return result
+
+            return nothing
+
+        return helper
+
+    # Filter
+
+    def make_filter_dictionary(self, filter_dict: Dict) -> Dict:
+        """Method to create a dictionary from the given `filter_dict` whose values are instances of Filter class.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to `filter` method for more information
+
+        Returns
+        -------
+        A dictionary with the same keys as the input dictionary but values of Filter class instance
+
+        """
+
+        # Replace the key/value pairs whose value is not a dictionary with the '$equal' operator for the value
+        filter_dict = {
+            # Elements that are already in dictionary form that Filter class accept
+            **{key: value for key, value in filter_dict.items() if isinstance(value, dict)},
+            # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
+            **{key: {'$equal': value} for key, value in filter_dict.items() if not isinstance(value, dict)}
+        }
+
+        # Process the criteria for each of the filter_dict fields into an instance of the Filter class
+        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+
+        # Split the dictionary into two keys: `field` and `_special`
+        # The `field` key contains all the selectors corresponding to the name of the fields
+        # The `_special` key contains all the special selectors that start with '_'
+        processed_filter_dict = \
+            {
+                'field': {key: value for key, value in processed_filter_dict.items() if not key.startswith('_')},
+                '_special': {key: value for key, value in processed_filter_dict.items() if key.startswith('_')}
+            }
+
+        return processed_filter_dict
+
+    def filter_check_self(self, panacea: PanaceaBase, bc: str = '') -> bool:
+
+        # Load the filter dictionary
+        filter_dict = self.filter_dict
+
+        # By default, self satisfies all the criteria
+        satisfied = True
+
+        # Check if all filter's field items are satisfied
+        for key, filter in filter_dict.get('field').items():
+            satisfied &= filter.filter(panacea.get_option(key))
+
+            # If filter is not satisfied, return false
+            if satisfied is False:
+                return False
+
+        # Check special items that start with _
+        satisfied &= \
+            filter_dict \
+                .get('_special') \
+                .get('_bc') \
+                .filter(Some(bc)) \
+                if filter_dict.get('_special').get('_bc') is not None \
+                else True
+        satisfied &= \
+            filter_dict \
+                .get('_special') \
+                .get('_self') \
+                .filter(Some(panacea)) \
+                if filter_dict.get('_special').get('_self') is not None \
+                else True
+
+        return satisfied
+
+    def filter(self, panacea, bc: str = '') -> Option:
+
+        for_each_element = \
+            lambda key, value: self.filter(panacea=value, bc=f'{bc}.{key}')
+
+        if issubclass(type(panacea), Panacea):
+            propagate = self.propagate_all(for_each_element)
+        elif issubclass(type(panacea), PanaceaLeaf):
+            propagate = lambda x, key: nothing
+        else:
+            raise AttributeError(
+                f"What just happened?! The tree has to have only nodes or leaves, got type {type(panacea)}"
+            )
+
+        do_after_satisfied = lambda key, panacea: Some((key, panacea))
+
+        return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
+
+    def find_one(self, panacea, bc: str = '') -> Option:
+
+        for_each_element = \
+            lambda key, value: self.find_one(panacea=value, bc=f'{bc}.{key}')
+
+        if issubclass(type(panacea), Panacea):
+            propagate = self.propagate_one(for_each_element)
+        elif issubclass(type(panacea), PanaceaLeaf):
+            propagate = lambda x, key: nothing
+        else:
+            raise AttributeError(f"What just happened?! got of type {type(panacea)}")
+
+        do_after_satisfied = lambda key, x: Some(x) if issubclass(type(x), Panacea) else Some(x.get())
+
+        return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
+
