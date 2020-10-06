@@ -2951,10 +2951,10 @@ class PanaceaLeaf(PanaceaBase):
 
 class Modification:
 
-    def __init__(self, filter_dict: Dict, update_dict: Dict = None):
+    def __init__(self, filter_dict: Dict = None, update_dict: Dict = None):
 
-        self.filter_dict = self.make_filter_dictionary(filter_dict)
-        self.update_dict = self.make_update_dictionary(update_dict) if update_dict is not None else None
+        self.filter_dict = self.make_filter_dictionary(filter_dict or {})
+        self.update_dict = self.make_update_dictionary(update_dict or {})
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
@@ -3238,6 +3238,10 @@ class Modification:
             A dictionary of modified query with functions to be called
 
             """
+
+            # If query dictionary is empty, return it
+            if not query:
+                return query
 
             def helper(single_operator: str, update_dict: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
                 """Helper method to parse a single query by the single operator and its value given
@@ -3593,8 +3597,6 @@ class Modification:
 
             Parameters
             ----------
-            key : str
-                    Name of the Option value
             value : Any
                 A value to multiply by the Option value.
 
@@ -3895,3 +3897,95 @@ class Modification:
 
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
+    # Update
+
+    def make_update_dictionary(self, update_dict: Dict) -> Dict:
+        """Method to create a dictionary from the given `update_dict` whose values are instances of Update class.
+
+        Parameters
+        ----------
+        update_dict : dict
+            Dictionary containing the updating rules
+
+        Returns
+        -------
+        A dictionary with keys as fields and values as Update class methods
+
+        """
+
+        # Replace the key/value pairs whose value is not a dictionary with '$set' operator
+        update_dict = {
+            # Elements that are already in dictionary form that Update class accept assuming operators are fine
+            **{key: value for key, value in update_dict.items() if isinstance(value, dict)},
+            # Elements that are not in dictionary form are set to '$set' operator for the Update class
+            **{'$set': {key: value} for key, value in update_dict.items() if not isinstance(value, dict)}
+        }
+
+        # Process the update_dict and get a modified update dictionary
+        processed_update_dict: Dict = self.Update(update_dict).get_modified_query()
+
+        # Split the dictionary into two keys: `field` and `_special`
+        # The `field` key contains all the selectors corresponding to the name of the fields
+        # The `_special` key contains all the special selectors that start with '_'
+        processed_update_dict = \
+            {
+                'field': {key: value for key, value in processed_update_dict.items() if not key.startswith('_')},
+                '_special': {key: value for key, value in processed_update_dict.items() if key.startswith('_')}
+            }
+
+        return processed_update_dict
+
+    def update_self(self, panacea: PanaceaBase) -> PanaceaBase:
+
+        # Load the update dictionary
+        update_dict = self.update_dict
+
+        new_panacea = panacea
+
+        if issubclass(type(panacea), Panacea):
+            # Get the updated field items
+            modified_panacea_dictionary = {
+                item.get()[0]: item.get()[1]  # Each returned element is (key, value) pair
+                for item
+                in
+                [  # Process each of the parameters, results in Option value containing (key, value) pairs
+                    update(key, panacea.get_option(key))
+                    for key, update
+                    in update_dict.get('field').items()  # items that should select specific fields
+                ]
+                if item.is_defined()
+            }
+
+            new_panacea_dict = {
+                **{key: value for key, value in panacea._parameters.items() if
+                   key not in update_dict.get('field').keys()},
+                **modified_panacea_dictionary
+            }
+
+            new_panacea = panacea.__class__(new_panacea_dict)
+
+        # Apply the special updates
+        if update_dict.get('_special').get('_self') is not None:
+            result = update_dict.get('_special').get('_self')('', Some(new_panacea)).get()[1]
+
+            new_panacea = result if issubclass(type(result), PanaceaBase) else PanaceaLeaf(result)
+
+        return new_panacea
+
+    def update(self, panacea, bc: str = '') -> Option:
+
+        for_each_element = \
+            lambda key, value: self.update(panacea=value, bc=f'{bc}.{key}')
+
+        if issubclass(type(panacea), Panacea):
+            propagate = self.propagate_all(for_each_element)
+        elif issubclass(type(panacea), PanaceaLeaf):
+            propagate = lambda key, x: Some((key, x))
+        else:
+            raise AttributeError(
+                f"What just happened?! The tree has to have only nodes or leaves, got type {type(panacea)}"
+            )
+
+        do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
+
+        return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
