@@ -659,11 +659,11 @@ class Panacea(PanaceaBase):
             f'Object of type {self.__class__.__name__} is not flat, cannot perform reduction!'
 
         # Fill the result with the first element
-        result = self._parameters.get(parameter_names[0])
+        result = self.get(parameter_names[0])
 
         # Reduce the function `function` over all elements
         for parameter_name in parameter_names[1:]:
-            result = function(result, self._parameters.get(parameter_name))
+            result = function(result, self.get(parameter_name))
 
         return result
 
@@ -696,7 +696,7 @@ class Panacea(PanaceaBase):
 
         # Reduce the function `function` over all elements
         for parameter_name in parameter_names:
-            result = function(result, self._parameters.get(parameter_name))
+            result = function(result, self.get(parameter_name))
 
         return result
 
