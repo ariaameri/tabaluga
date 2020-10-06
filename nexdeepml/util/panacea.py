@@ -130,6 +130,20 @@ class PanaceaBase(ABC):
 
         return self.get_option(item).get_or_else(default_value)
 
+    def get_parameters(self) -> Dict:
+        """Gets the entire parameters.
+
+        Returns
+        -------
+        A shallow copy of the instance parameters
+
+        """
+
+        # Create a shallow copy of the parameters
+        out = {**self._parameters}
+
+        return out
+
     # Operations
 
     def map(self, func: FunctionType) -> PanaceaBase:
