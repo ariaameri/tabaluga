@@ -130,6 +130,24 @@ class PanaceaBase(ABC):
 
         return self.get_option(item).get_or_else(default_value)
 
+    # Operations
+
+    def map(self, func: FunctionType) -> PanaceaBase:
+        """Applies a function on the internal value and returns a new instance.
+
+        Parameters
+        ----------
+        func : FunctionType
+            The function to be applied on the internal value
+
+        Returns
+        -------
+        A new instance with the updated value
+
+        """
+
+        pass
+
     # Debugging mode
 
     def enable_debug_mode(self) -> PanaceaBase:
@@ -543,6 +561,24 @@ class Panacea(PanaceaBase):
         """Deep copy of the current instance."""
 
         return self.__class__(self.dict_representation())
+
+    # Operations
+
+    def map(self, func: FunctionType) -> PanaceaBase:
+        """Applies a function to parameters and return a new Panacea of that.
+
+        Parameters
+        ----------
+        func : FunctionType
+            The function to be applied on the internal parameters
+
+        Returns
+        -------
+        A new Panacea with the updated value
+
+        """
+
+        return self.__class__(func(self._parameters))
 
     # Representation
 
