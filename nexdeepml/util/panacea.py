@@ -2344,6 +2344,12 @@ class Modification:
 
             new_panacea = result if issubclass(type(result), PanaceaBase) else PanaceaLeaf(result)
 
+        if update_dict.get('_special').get('_value') is not None and issubclass(type(new_panacea), PanaceaLeaf):
+
+            result = update_dict.get('_special').get('_value')('', Some(new_panacea.get())).get()[1]
+
+            new_panacea = new_panacea.map(lambda x: result)
+
         return new_panacea
 
     def update(self, panacea, bc: str = '') -> Option:
