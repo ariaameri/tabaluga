@@ -162,6 +162,18 @@ class PanaceaBase(ABC):
 
         pass
 
+    # Checkers
+
+    def is_branch(self) -> bool:
+        """Method to return whether or not the current instance is a branch node or not."""
+
+        return True if issubclass(type(self), Panacea) else False
+
+    def is_leaf(self) -> bool:
+        """Method to return whether or not the current instance is a leaf node or not."""
+
+        return True if issubclass(type(self), PanaceaLeaf) else False
+
     # Debugging mode
 
     def enable_debug_mode(self) -> PanaceaBase:
