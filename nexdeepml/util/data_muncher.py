@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Callable
+from typing import List, Dict, Any, Callable, Union
 from .panacea import Panacea, PanaceaLeaf
 
 
@@ -27,7 +27,10 @@ class DataMuncher(Panacea):
 
         super().__init__(config_dict=data_dict, leaf_class=DataMuncherLeaf)
 
-    def update_map(self, filter_dict: Dict = None, functions: List[Callable[[Any], Any]] = None) -> DataMuncher:
+    def update_map(self,
+                   filter_dict: Dict = None,
+                   functions: Union[Callable[[Any], Any], List[Callable[[Any], Any]]] = None) \
+            -> DataMuncher:
         """Applies the functions appeared in `functions` in order to the matched elements.
 
         The filtering criteria should only result in leaf nodes.
@@ -38,8 +41,8 @@ class DataMuncher(Panacea):
         filter_dict : dict
             Dictionary containing the filtering criteria.
                 Refer to Modification class for more info.
-        functions : List[Callable[[Any], Any]]
-            List of functions to be applied on the elements in order
+        functions : Union[Callable[[Any], Any], List[Callable[[Any], Any]]]
+            (List of) functions to be applied on the elements in order
 
         Returns
         -------
@@ -47,20 +50,22 @@ class DataMuncher(Panacea):
 
         """
 
-        def function_chain_apply(x):
-            """Helper function to chain all the functions given in the `functions` list and applies them in order to
-            the given `x` input."""
-
-            result = x
-
-            # Apply the functions one-by-one and in order
-            for function in functions:
-                result = function(result)
-
-            return result
+        # Update the filter criteria to make sure it selects only the leaf nodes
+        self_selector = filter_dict.get('_self')
+        if self_selector is not None:
+            function_selector = self_selector.get('$function')
+            if function_selector is not None:
+                if isinstance(function_selector, list):
+                    filter_dict['_self']['$function'] += [lambda x: x.is_leaf()]
+                else:
+                    filter_dict['_self']['$function'] = [filter_dict['_self']['$function'], lambda x: x.is_leaf()]
+            else:
+                filter_dict['_self']['$function'] = lambda x: x.is_leaf()
+        else:
+            filter_dict['_self'] = {'$function': lambda x: x.is_leaf()}
 
         # Make the appropriate update dictionary to call the superclass update method
-        update_dict = {'$function': {'_value': function_chain_apply}}
+        update_dict = {'$function': {'_value': functions}}
 
         # Do the update
         result = super().update(filter_dict=filter_dict, update_dict=update_dict)
