@@ -574,6 +574,20 @@ class Panacea(PanaceaBase):
         else:
             return out
 
+    def get_parameters(self) -> Dict:
+        """Gets the entire parameters.
+
+        Returns
+        -------
+        A shallow copy of the instance parameters
+
+        """
+
+        # Create a shallow copy of the parameters
+        out = {**self._parameters}
+
+        return out
+
     def __getattr__(self, item):
         """Method to help with getting an attribute.
 
