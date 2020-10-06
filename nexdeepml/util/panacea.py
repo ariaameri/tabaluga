@@ -1292,7 +1292,7 @@ class Modification:
                             the value should be the regex expression
                         - $equal: checks for equality of the field with the given value
                             the value should be the value to check the field against
-                        - $function: a boolean function to apply on the field
+                        - $function: a (list of) boolean function to apply on the field
                             the value should be the function that gets a single parameter and returns a bool
 
             Examples
@@ -1390,13 +1390,13 @@ class Modification:
 
             return satisfied
 
-        def _function(self, func: FunctionType) -> Callable[[Option], bool]:
+        def _function(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[[Option], bool]:
             """Wrapper function for a function to query on an Option value.
 
             Parameters
             ----------
-            func : FunctionType
-                A function to apply on the Option value. Must return boolean
+            funcs : Union[FunctionType, List[FunctionType]]
+                A (list of) functions to apply on the Option value. Must return boolean
 
             Returns
             -------
@@ -1418,10 +1418,16 @@ class Modification:
 
                 """
 
-                return \
-                    x \
-                        .filter(func) \
-                        .is_defined()
+                result = x
+
+                # Perform all the filtering functions
+                for func in funcs:
+                    result = result.filter(func)
+
+                return result.is_defined()
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
 
             return helper
 
@@ -1801,10 +1807,6 @@ class Modification:
 
                 return Some((key, value))
 
-            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
-            # if not issubclass(type(value), PanaceaBase):
-            #     value = self.panacea.Leaf({'_value': value})
-
             return helper
 
         def _update(self, value: Any) -> Callable[[str, Option], Some]:
@@ -1844,10 +1846,6 @@ class Modification:
                     raise ValueError(f"The value {x} to be `update` does not exist!")
 
                 return Some((key, value))
-
-            # # If the value is PanaceaBase, leave it be, otherwise, set a PanaceaLeaf for it
-            # if not issubclass(type(value), PanaceaBase):
-            #     value = self.panacea.Leaf({'_value': value})
 
             return helper
 
@@ -1920,14 +1918,6 @@ class Modification:
 
                 return x.map(lambda a: (key, a + value))
 
-                # # Check if the Option is a leaf, then update its _value
-                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
-                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') + value}))
-                # elif x.is_defined():
-                #     return Some(x.get() + value)
-                # else:
-                #     return x  # which is nothing
-
             return helper
 
         def _mult(self, value: Any) -> Callable[[str, Option], Option]:
@@ -1962,23 +1952,15 @@ class Modification:
 
                 return x.map(lambda a: (key, a * value))
 
-                # # Check if the Option is a leaf, then update its _value
-                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
-                #     return Some(self.panacea.Leaf({'_value': x.get().get('_value') * value}))
-                # elif x.is_defined():
-                #     return Some(x.get() * value)
-                # else:
-                #     return x  # which is nothing
-
             return helper
 
-        def _function(self, func: FunctionType) -> Callable[[str, Option], Option]:
+        def _function(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[[str, Option], Option]:
             """Wrapper function for updating a value on an Option value by applying the function `func` to it.
 
             Parameters
             ----------
-            func: FunctionType
-                The function to apply to the Option value
+            funcs: Union[FunctionType, List[FunctionType]]
+                The (list of) function to apply to the Option value
 
             Returns
             -------
@@ -2002,24 +1984,27 @@ class Modification:
 
                 """
 
-                return x.map(func).map(lambda a: (key, a))
+                result = x
 
-                # # Check if the Option is a leaf, then update its _value
-                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
-                #     return Some(self.panacea.Leaf({'_value': func(x.get().get('_value'))}))
-                # else:
-                #     return x.map(func)
+                # Apply all the functions in order
+                for func in funcs:
+                    result = result.map(func)
+
+                return result.map(lambda a: (key, a))
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
 
             return helper
 
-        def _map(self, func: FunctionType) -> Callable[[str, Option], Option]:
+        def _map(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[[str, Option], Option]:
             """Wrapper function for updating a value on an Option value 'by mapping' the function `func` to the
             PanaceaBase instance within the Option value.
 
             Parameters
             ----------
-            func: FunctionType
-                The function to map to the Option value
+            funcs: Union[FunctionType, List[FunctionType]]
+                The (list of) function to map to the Option value
 
             Returns
             -------
@@ -2043,13 +2028,16 @@ class Modification:
 
                 """
 
-                return x.map(lambda a: a.map(func)).map(lambda a: (key, a))
+                result = x
 
-                # # Check if the Option is a leaf, then update its _value
-                # if x.exist(lambda a: isinstance(a, self.panacea.Leaf)):
-                #     return Some(self.panacea.Leaf({'_value': func(x.get().get('_value'))}))
-                # else:
-                #     return x.map(func)
+                # Apply all the functions in order
+                for func in funcs:
+                    result = result.map(lambda a: a.map(func))
+
+                return result.map(lambda a: (key, a))
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
 
             return helper
 
