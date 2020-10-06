@@ -379,16 +379,11 @@ class Panacea(PanaceaBase):
         if self is other:
             return True
 
-        # If parameters do not match, not equal
-        if other._parameters.keys() != self._parameters.keys():
-            return False
+        # Get the other instance parameters
+        other_parameters = other.get_parameters()
 
         # All parameters must be equal
-        for key, value in self._parameters.items():
-            if value != other._parameters.get(key):
-                return False
-
-        return True
+        return other_parameters == self._parameters
 
     def __ne__(self, other):
         """Returns whether two Panaceas are not the same."""
@@ -890,14 +885,14 @@ class PanaceaLeaf(PanaceaBase):
         """Check whether other has the same internal value as the current instance."""
 
         if isinstance(other, self.__class__):
-            return self.get() == other.get()
+            return self.contains(other.get())
         else:
             return False
 
     def _any_eq(self, other: Any):
         """Check whether other has the same value as the internal value of the current instance."""
 
-        return self.get() == other
+        return self.contains(other)
 
     def _leaf_value_lt(self, other: PanaceaLeaf):
         """Check whether other internal value is less than the current instance."""
