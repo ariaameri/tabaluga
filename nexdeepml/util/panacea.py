@@ -2210,6 +2210,14 @@ class Modification:
                 if filter_dict.get('_special').get('_self') is not None \
                 else True
 
+        satisfied &= \
+            filter_dict \
+                .get('_special') \
+                .get('_value') \
+                .filter(panacea.get_option('_value').filter(lambda x: issubclass(type(panacea), PanaceaLeaf))) \
+                if filter_dict.get('_special').get('_value') is not None \
+                else True
+
         return satisfied
 
     def filter(self, panacea, bc: str = '') -> Option:
