@@ -423,6 +423,23 @@ class Panacea(PanaceaBase):
 
         return self.__class__(func(self._parameters))
 
+    # Checkers
+
+    def contains(self, value: Any) -> bool:
+        """Check if the given `value` exists in the shallowest level of the instance."""
+
+        return value in self._parameters.values()
+
+    def exists(self, func: FunctionType) -> bool:
+        """Checks if the function `func` holds true for any of the internal parameters."""
+
+        return any(func(item) for item in self._parameters.values())
+
+    def for_all(self, func: FunctionType) -> bool:
+        """Checks if the function `func` holds true for all of the internal parameters."""
+
+        return all(func(item) for item in self._parameters.values())
+
     # Representation
 
     def __str__(self) -> str:
