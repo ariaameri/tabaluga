@@ -1188,150 +1188,87 @@ class PanaceaLeaf(PanaceaBase):
         return self
 
 
-
-    def _filter_helper(self, filter_dict, bc: str, bc_meta: str) -> Option:
-        """Method to help with filtering.
-            Performs filtering on internal value of the current instance.
-
-        Parameters
-        ----------
-        filter_dict : dict
-            Dictionary containing the filtering criteria whose values are instances of the Filter class
-        bc : str
-            The breadcrumb string so far
-        bc_meta : str
-            The meta breadcrumb string so far
-
-        Returns
-        -------
-        An Option value containing the results
-
-        """
-
-        # A placeholder for the result
-        result = nothing
-
-        # Check if the current instance satisfies the filtering
-        if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            result = Some(self)
-
-        return result
-
-    def _filter_checker(self, filter_dict: Dict, bc: str = '', bc_meta: str = '', this: Option = nothing) -> bool:
-
-        # Check if all filters are satisfied
-        satisfied = all(
-            filter.filter(self.get_option(key))
-            for key, filter
-            in filter_dict.get('field').items()  # items that should select specific fields
-        )
-
-        # Check special items that start with _
-        satisfied &= \
-            filter_dict\
-                .get('_special')\
-                .get('_bc')\
-                .filter(Some(bc)) \
-                if filter_dict.get('_special').get('_bc') is not None \
-                else True
-        satisfied &= \
-            filter_dict\
-                .get('_special')\
-                .get('_bc_meta')\
-                .filter(Some(bc_meta)) \
-                if filter_dict.get('_special').get('_bc_meta') is not None \
-                else True
-        satisfied &= \
-            filter_dict\
-                .get('_special')\
-                .get('_self')\
-                .filter(this.or_else(Some(self))) \
-                if filter_dict.get('_special').get('_self') is not None \
-                else True
-
-        return satisfied
-
-    def _find_one_helper(self, filter_dict: Dict, bc: str, bc_meta: str) -> Option:
-        """Method to help with finding the first element that satisfies criteria.
-            Performs filtering on internal value of the current instance.
-
-        Parameters
-        ----------
-        filter_dict : dict
-            Dictionary containing the filtering criteria whose values are instances of the Filter class
-        bc : str
-            The breadcrumb string so far
-        bc_meta : str
-            The meta breadcrumb string so far
-
-        Returns
-        -------
-        An Option value containing the results
-
-        """
-
-        # A placeholder for the result
-        result = nothing
-
-        # Check if the current instance satisfies the filtering
-        if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            result = Some(self._value)
-
-        return result
-
-    def _update_apply(self, update_dict: Dict) -> PanaceaBase:
-
-        new_panacea = nothing
-
-        # First apply the _value update, which is general, then apply the by field update, which is specific
-
-        # Apply the special _value update that applies only on the _value
-        if update_dict.get('_special').get('_value') is not None:
-            new_panacea: Option = update_dict.get('_special').get('_value')(Some(self._value))
-
-        # Apply the by field update
-        if update_dict.get('field').get('_value') is not None:
-            new_panacea: Option = update_dict.get('field').get('_value')(new_panacea)
-
-        # Apply the special _self update
-        if update_dict.get('_special').get('_self') is not None:
-            new_panacea: Option = update_dict.get('_special').get('_self')(new_panacea)
-
-        # Either create a new instance with the new data or return self
-        return new_panacea.fold(lambda x: self.__class__({'_value': x}), self)
-
-    def _update_helper(self, filter_dict, update_dict, bc: str, bc_meta: str) -> PanaceaBase:
-        """Method to help with filtering.
-            Performs filtering on internal value of the current instance.
-
-        Parameters
-        ----------
-        filter_dict : dict
-            Dictionary containing the filtering criteria whose values are instances of the Filter class
-        bc : str
-            The breadcrumb string so far
-        bc_meta : str
-            The meta breadcrumb string so far
-
-        Returns
-        -------
-        An Option value containing the results
-
-        """
-
-        # A placeholder for the result
-        result = self
-
-        # Check if the current instance satisfies the filtering
-        if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            result = self._update_apply(update_dict)
-
-        return result
-
-
 class Modification:
 
     def __init__(self, filter_dict: Dict = None, update_dict: Dict = None):
+        """Initializes the instance and create the modified filter and update dictionaries as Filter and Update
+        class methods.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                The keys of the dictionary are among these options:
+                    - the name of field: this will cause the filtering to be based on this specific field
+                    - special names that start with '_': these will cause the filtering to be based on special
+                        things specified by this key.
+                        A complete list of them are:
+                            - _bc: filter on the breadcrumb of the name of the fields
+                            - _self: filter on the current item itself
+                            - _value: filter based on the value of the leaf nodes only
+                For the value of dictionary, refer to class Filter for more info.
+        update_dict : dict
+            Dictionary containing the update rules.
+                The keys of the dictionary must contain the operators of the Update class. Refer to the Update class
+                    for more info.
+                The values of the dictionary should themselves be dictionaries with the folllwing structure.
+                    The keys of this dictionary are among these options:
+                        - the name of field: this will cause the updating to happen on the field
+                        - special names that start with '_': these will cause the updating to be based on special
+                            things specified by this key.
+                            A complete list of them are:
+                                - _self: update the current item itself
+                                - _value: update the value of the leaf nodes only, that is if the filter matches a leaf
+
+
+        Examples
+        --------
+
+        ##### Filter #####
+
+        Here, we will provide some examples for the `filter_dict` dictionary.
+        In both the following examples, we want to filtering based on a field with name `foo` and is equal to 10
+        >>> {'foo': 10}
+        >>> {'foo': {'$equal': 10}}
+
+        In this example, we want to filter if the field `foo` does not exist
+        >>> {'foo': {'$exists': 0}}
+
+        Now, we want to filter if the breadcrumb contains `foo` and is at depth 5. Note that the breadcrumb starts
+        with an initial '.'.
+        >>> {'_bc': {'$regex': r'(\.\w+){4}\.foo$'}}
+
+        In this example, we want to filter all the nodes whose values are int
+        >>> {'_value': {'$function': lambda a: isinstance(a, int)}}
+
+        ##### Update #####
+
+        Here, we will provide some examples for the `update_dict` dictionary.
+        We want to set a value of 10 for the field `foo`
+        >>> {'$set': {'foo': 10}}
+        We want to set a value of 10 for the non-existing field `foo`
+        >>> {'$set_only': {'foo': 10}}
+        We want to set a value of 10 for the existing field `foo`
+        >>> {'$update': {'foo': 10}}
+
+        Remove a field named `foo`
+        >>> {'$unset': {'foo': None}}
+
+        Rename the field `foo` to `bar`
+        >>> {'$rename': {'foo': 'bar'}}
+
+
+        ##### Filter and Update #####
+
+        Here, we will provide some examples for initializing the current class.
+        Filter the Panacea if it has the field `foo` then add the field `bar` with value of 10 to that instance
+        >>> Modification({'foo': {'$exists': 1}}, {'$set': {'bar': 10}})
+
+        Filter the Panacea to meet the criteria when inside a leaf node uniqely named `foo`
+            then change its value to `bar`
+        >>> Modification({'_bc': {'$regex': r'foo$'}}, {'$set': {'_value': 'foo'}})
+
+        """
 
         self.filter_dict = self.make_filter_dictionary(filter_dict or {})
         self.update_dict = self.make_update_dictionary(update_dict or {})
@@ -1345,10 +1282,33 @@ class Modification:
             Parameters
             ----------
             query : Dict
-                The query to do the filtering to be parsed
-                Right now, only these sub-queries/operators are supported:
-                    lambda functions with operator $function, whether it exists with operator $exist
-                The query has to be a dictionary with key containing the operator
+                The query dictionary to do the filtering to be parsed
+                `query` must be a dictionary with its keys being the operators of the Filter class and its values
+                    being the corresponding expression.
+                    Supported operators are:
+                        - $exists: checks whether a field exists
+                            the value can be 1 to denote the existence of the field and 0 otherwise
+                        - $regex: checks a string against a regex expression
+                            the value should be the regex expression
+                        - $equal: checks for equality of the field with the given value
+                            the value should be the value to check the field against
+                        - $function: a boolean function to apply on the field
+                            the value should be the function that gets a single parameter and returns a bool
+
+            Examples
+            --------
+            Here, we will provide some examples for the `query` dictionary.
+            In this example, want to filter based on the value being equal to 10
+            >>> {'$equal': 10}
+
+            In this example, we want to filter if value does not exist
+            >>> {'$exists': 0}
+
+            Now, we want to filter if the value is at depth 5.
+            >>> {'$regex': r'(\.\w+){4}\.foo$'}
+
+            In this example, we want to filter based on function that checks if the value is int
+            >>> {'$function': lambda a: isinstance(a, int)}
 
             """
 
@@ -1392,8 +1352,8 @@ class Modification:
                 if single_operator == '$function':
                     return self._function(value)
                 # Do the rest of the operations
-                elif single_operator == '$exist':
-                    return self._exist(value)
+                elif single_operator == '$exists':
+                    return self._exists(value)
                 elif single_operator == '$regex':
                     return self._regex(value)
                 elif single_operator == '$equal':
@@ -1465,7 +1425,7 @@ class Modification:
 
             return helper
 
-        def _exist(self, value: bool) -> Callable[[Option], bool]:
+        def _exists(self, value: bool) -> Callable[[Option], bool]:
             """Operator for checking if a variable exists.
 
             Parameters
@@ -1598,6 +1558,28 @@ class Modification:
                     which would set 'epochs' and 'other_thing' fields to 10 and 'hello'
                         and will increment 'batch' field by 5
 
+                The query containing the update rules to be parsed
+                    The keys of the dictionary are among these options:
+                        - the name of field: this will cause the filtering to be based on this specific field
+                        - special names that start with '_': these will cause the filtering to be based on special
+                            things specified by this key.
+                            A complete list of them are:
+                                - _bc: filter on the breadcrumb of the name of the fields
+                                - _self: filter on the current item itself
+                                - _value: filter based on the value of the leaf nodes only
+                    The value must be a dictionary with its keys being the operators of the Filter class and its values
+                        be the corresponding expression.
+                        If no dictionary is given for value, $equal operator is assumed.
+                        Supported operators are:
+                            - $exists: checks whether a field exists
+                                the value can be 1 to denote the existence of the field and 0 otherwise
+                            - $regex: checks a string against a regex expression
+                                the value should be the regex expression
+                            - $equal: checks for equality of the field with the given value
+                                the value should be the value to check the field against
+                            - $function: a boolean function to apply on the field
+                                the value should be the function that gets a single parameter and returns a bool
+
             """
 
             self.query = query
@@ -1702,30 +1684,6 @@ class Modification:
             """
 
             return self._query_dict
-
-        # def update(self, x: Option) -> PanaceaBase:
-        #     """Method to perform the update on an Option value.
-        #
-        #     This updating is based on the query given in the constructor.
-        #
-        #     Parameters
-        #     ----------
-        #     x : Option
-        #         An Option value to perform the updating on
-        #
-        #     Returns
-        #     -------
-        #     The result of the updating in form of an PanaceaBase instance
-        #
-        #     """
-        #
-        #     # Perform all the updates on the current item
-        #     filter_list = [func(x) for func in self._function_list]
-        #
-        #     # Check if all the filters are satisfied
-        #     satisfied = all(filter_list)
-        #
-        #     return satisfied
 
         def _unset(self, value: Any) -> Callable[[str, Option], Option]:
             """Wrapper function for unsetting a value on an Option value.
@@ -2097,8 +2055,35 @@ class Modification:
 
     # General traversals
 
-    def traverse(self, panacea: PanaceaBase, bc: str, do_after_satisfied, propagate) -> Option:
+    def traverse(self,
+                 panacea: PanaceaBase,
+                 bc: str,
+                 do_after_satisfied: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]],
+                 propagate: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+                 ) \
+            -> Option[(str, PanaceaBase)]:
+        """Traverses the tree of panacea, checks if it meets the criteria and does operations after that, or propagates
+        the operation to its children.
 
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to traverse through
+        bc : str
+            The breadcrumb so far
+        do_after_satisfied : : Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            The function to be called if panacea meets the filtering criteria
+        propagate: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            The function to be called if panacea did not meet the filtering criteria.
+            This function should propagate the desired operation to the children of the instance or return
+
+        Returns
+        -------
+        An Option value of type Option[(str, PanaceaBase)] where (str, PanaceaBase) is the key/value pair of the result.
+
+        """
+
+        # Get the current instance key
         key = bc.split('.')[-1]
 
         # Check if self is satisfied
@@ -2109,29 +2094,44 @@ class Modification:
         else:
             return propagate(key, panacea)
 
-    def propagate_all(self, function_to_call_for_each_element):
+    def propagate_all(self,
+                      function_to_call_for_each_element: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]) \
+            -> Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]:
+        """Propagation function that goes through all the children of the panacea instance.
 
-        def helper(key, panacea) -> Option:
+        Parameters
+        ----------
+        function_to_call_for_each_element : Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            A function to be called on each of the children elements during the propagation
 
-            # new_dict = \
-            #     {  # Keep only the filtered parameters that are not empty, i.e. that are not Nothing
-            #         key: value.get()
-            #         for key, value
-            #         in
-            #         [  # Process and filter each of the self._parameters
-            #             function_to_call_for_each_element(key, value)
-            #             for key, value
-            #             in panacea._parameters.items()
-            #         ]
-            #         if value.is_defined()  # filter out the Nothing ones
-            #     }
+        Returns
+        -------
+        A function of type Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]] that can be called to propagate the
+        operation through all children of the panacea instance
 
-            # print([item.get() for item in [  # Process each of the parameters, results in Option value containing (key, value) pairs
-            #             function_to_call_for_each_element(key, value)
-            #             for key, value
-            #             in panacea._parameters.items()
-            #         ] if item.is_defined()])
+        """
 
+        def helper(key: str, panacea: PanaceaBase) -> Option[(str, PanaceaBase)]:
+            """Helper method to do the propagation and takes care of closure of function_to_call_for_each_element.
+
+            It calls function_to_call_for_each_element on the (key, panacea) pair given and returns the result as an
+            Option value of the PanaceaBase class.
+
+            Parameters
+            ----------
+            key : str
+                The name of the key of the given panacea
+            panacea : PanaceaBase
+                The panacea element
+
+            Returns
+            -------
+            An Option value of the type Option[(str, PanaceaBase)] containing the propagation result of all the children
+
+            """
+
+            # Construct a new dictionary for making a new class whose values are generated by
+            # function_to_call_for_each_element function
             new_dict = \
                 {
                     item.get()[0]: item.get()[1]  # Each returned element is (key, value) pair
@@ -2140,12 +2140,12 @@ class Modification:
                     [  # Process each of the parameters, results in Option value containing (key, value) pairs
                         function_to_call_for_each_element(key, value)
                         for key, value
-                        in panacea._parameters.items()
+                        in panacea.get_parameters().items()
                     ]
                     if item.is_defined()
                 }
 
-
+            # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
             if new_dict:
                 return Some((key, panacea.__class__(new_dict)))
             else:
@@ -2153,11 +2153,47 @@ class Modification:
 
         return helper
 
-    def propagate_one(self, function_to_call_for_each_element):
+    def propagate_one(self,
+                      function_to_call_for_each_element: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]) \
+            -> Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]:
+        """Propagation function that goes through the children of the panacea instance and returns the first one that
+        matches function_to_call_for_each_element.
 
-        def helper(key, panacea) -> Option:
+        Parameters
+        ----------
+        function_to_call_for_each_element : Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            A function to be called on each of the children elements during the propagation
 
-            for key, value in panacea._parameters.items():
+        Returns
+        -------
+        A function of type Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]] that can be called to propagate the
+        operation through the children of the panacea instance to return the first child that matches according to
+        function_to_call_for_each_element.
+
+        """
+
+        def helper(key: str, panacea: PanaceaBase) -> Option[(str, PanaceaBase)]:
+            """Helper method to do the propagation and takes care of closure of function_to_call_for_each_element.
+
+            It calls function_to_call_for_each_element on the (key, panacea) pair given and returns the first result
+            found as an Option value
+
+            Parameters
+            ----------
+            key : str
+                The name of the key of the given panacea, not currently used
+            panacea : PanaceaBase
+                The panacea element
+
+            Returns
+            -------
+            An Option value of the type Option[(str, PanaceaBase)] containing the propagation result of the first child
+            that matches according to function_to_call_for_each_element.
+
+            """
+
+            # Go over each children of the panacea instance and return the result as soon as it is a match
+            for key, value in panacea.get_parameters().items():
 
                 # Get the results of finding in the current parameter
                 result: Option = function_to_call_for_each_element(key, value)
@@ -2166,6 +2202,7 @@ class Modification:
                 if result.is_defined():
                     return result
 
+            # If none of the children matches, return nothing
             return nothing
 
         return helper
@@ -2210,6 +2247,20 @@ class Modification:
         return processed_filter_dict
 
     def filter_check_self(self, panacea: PanaceaBase, bc: str = '') -> bool:
+        """Method to check if `panacea` satisfies the criteria addressed by self.filter_dict.
+
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            PanaceaBase instance to check for meeting the criteria
+        bc : str
+            The breadcrumb so far
+
+        Returns
+        -------
+        A boolean indicating the result
+
+        """
 
         # Load the filter dictionary
         filter_dict = self.filter_dict
@@ -2241,6 +2292,7 @@ class Modification:
                 if filter_dict.get('_special').get('_self') is not None \
                 else True
 
+        # For special item '_value', `panacea` has to be a leaf
         satisfied &= \
             filter_dict \
                 .get('_special') \
@@ -2251,11 +2303,35 @@ class Modification:
 
         return satisfied
 
-    def filter(self, panacea, bc: str = '') -> Option:
+    def filter(self, panacea: PanaceaBase, bc: str = '') -> Option[(str, PanaceaBase)]:
+        """Method to perform the filtering on `panacea`.
 
+        It prunes the `panacea` tree (in case of branch node) and returns only its branches that satisfy the filtering
+        criteria
+
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to perform the filtering on
+        bc : str, optional
+            The breadcrumb so far
+
+        Returns
+        -------
+        The result of filtering in form of Option value of type Option[(str, PanaceaBase)] where (str, PanaceaBase) is
+        the key/value pair of the result.
+
+        """
+
+        # For each of the elements in the propagation, we should do the filtering again with updated bc
         for_each_element = \
             lambda key, value: self.filter(panacea=value, bc=f'{bc}.{key}')
 
+        # For propagation
+        # Remember that propagation happens when the instance panacea did not meet the filtering criteria
+        # If the given `panacea` is a branch node, propagate again
+        # If the given `panacea` is a leaf node, return nothing, as there is no more children to propagate and
+        # the `panacea` instance did not meet the filtering criteria
         if issubclass(type(panacea), Panacea):
             propagate = self.propagate_all(for_each_element)
         elif issubclass(type(panacea), PanaceaLeaf):
@@ -2265,15 +2341,39 @@ class Modification:
                 f"What just happened?! The tree has to have only nodes or leaves, got type {type(panacea)}"
             )
 
+        # If the `panacea` instance met the filtering criteria
+        # After that, do nothing, just return it in the compatible form
         do_after_satisfied = lambda key, panacea: Some((key, panacea))
 
+        # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
-    def find_one(self, panacea, bc: str = '') -> Option:
+    def find_one(self, panacea: PanaceaBase, bc: str = '') -> Option[Any]:
+        """Method to find the very first single element on `panacea` that satisfies the filtering criteria and returns
+        it.
 
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to search for
+        bc : str, optional
+            The breadcrumb so far
+
+        Returns
+        -------
+        The result of finding the very single element that satisfies the filtering criteria in form of Option value.
+
+        """
+
+        # For each of the elements in the propagation, we should do the finding one again with updated bc
         for_each_element = \
             lambda key, value: self.find_one(panacea=value, bc=f'{bc}.{key}')
 
+        # For propagation
+        # Remember that propagation happens when the instance panacea did not meet the filtering criteria
+        # If the given `panacea` is a branch node, propagate again
+        # If the given `panacea` is a leaf node, return nothing, as there is no more children to propagate and
+        # the `panacea` instance did not meet the filtering criteria
         if issubclass(type(panacea), Panacea):
             propagate = self.propagate_one(for_each_element)
         elif issubclass(type(panacea), PanaceaLeaf):
@@ -2281,8 +2381,12 @@ class Modification:
         else:
             raise AttributeError(f"What just happened?! got of type {type(panacea)}")
 
+        # If the `panacea` instance met the filtering criteria
+        # After that, if it is a branch node, return it as Option value, and if it is a leaf node, return its value
+        # as Option value
         do_after_satisfied = lambda key, x: Some(x) if issubclass(type(x), Panacea) else Some(x.get())
 
+        # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
     # Update
@@ -2324,13 +2428,30 @@ class Modification:
         return processed_update_dict
 
     def update_self(self, panacea: PanaceaBase) -> PanaceaBase:
+        """Method to update the `panacea` instance based on the update rules and returns the result.
+
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            PanaceaBase instance to update
+
+        Returns
+        -------
+        A new copy of the `panacea` instanec with updated properties
+
+        """
 
         # Load the update dictionary
         update_dict = self.update_dict
 
+        # Dummy variable
         new_panacea = panacea
 
+        # First the field update rules are applied
+        # Then, on the result, _special rules are applied
+
         if issubclass(type(panacea), Panacea):
+
             # Get the updated field items
             modified_panacea_dictionary = {
                 item.get()[0]: item.get()[1]  # Each returned element is (key, value) pair
@@ -2344,33 +2465,64 @@ class Modification:
                 if item.is_defined()
             }
 
+            # Create a new dictionary in order to make a new instance
+            # The items that are not modified by the update rules should reappear as-is
             new_panacea_dict = {
-                **{key: value for key, value in panacea._parameters.items() if
+                # Items not modified by the update rules
+                **{key: value for key, value in panacea.get_parameters().items() if
                    key not in update_dict.get('field').keys()},
+                # Items modified by the update rules
                 **modified_panacea_dictionary
             }
 
+            # Generate a new class from the modified parameters
             new_panacea = panacea.__class__(new_panacea_dict)
 
         # Apply the special updates
         if update_dict.get('_special').get('_self') is not None:
-            result = update_dict.get('_special').get('_self')('', Some(new_panacea)).get()[1]
 
-            new_panacea = result if issubclass(type(result), PanaceaBase) else PanaceaLeaf(result)
+            # Apply the update rule
+            # Note that the result can be anything, anything that the user says, not necessarily a leaf
+            new_panacea: Any = update_dict.get('_special').get('_self')('', Some(new_panacea)).get()[1]
 
+        # If we have a `_value' item and new_panacea (after all the updates yet) is a leaf, update it
         if update_dict.get('_special').get('_value') is not None and issubclass(type(new_panacea), PanaceaLeaf):
 
+            # Get the result of applying the update rule to the internal value
             result = update_dict.get('_special').get('_value')('', Some(new_panacea.get())).get()[1]
 
+            # Make a new leaf from the new value
             new_panacea = new_panacea.map(lambda x: result)
 
         return new_panacea
 
-    def update(self, panacea, bc: str = '') -> Option:
+    def update(self, panacea, bc: str = '') -> Option[(str, PanaceaBase)]:
+        """Method to (filter and) update the `panacea` instance.
+         It updates the locations that met the filtering criteria and leave the rest untouched.
 
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to (filter and) update
+        bc : str, optional
+            The breadcrumb so far
+
+        Returns
+        -------
+        The result of updating in form of Option value of type Option[(str, PanaceaBase)] where (str, PanaceaBase) is
+        the key/value pair of the result.
+
+        """
+
+        # For each of the elements in the propagation, we should do the updating again with updated bc
         for_each_element = \
             lambda key, value: self.update(panacea=value, bc=f'{bc}.{key}')
 
+        # For propagation
+        # Remember that propagation happens when the instance panacea did not meet the filtering criteria
+        # If the given `panacea` is a branch node, propagate again
+        # If the given `panacea` is a leaf node, return itself, as there is no more children to propagate and
+        # the `panacea` instance did not meet the filtering criteria but we want to leave it untouched
         if issubclass(type(panacea), Panacea):
             propagate = self.propagate_all(for_each_element)
         elif issubclass(type(panacea), PanaceaLeaf):
@@ -2380,6 +2532,9 @@ class Modification:
                 f"What just happened?! The tree has to have only nodes or leaves, got type {type(panacea)}"
             )
 
+        # If the `panacea` instance met the filtering criteria
+        # After that, do the updating and return the result in a correct way
         do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
 
+        # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
