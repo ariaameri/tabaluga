@@ -610,9 +610,9 @@ class Panacea(PanaceaBase):
 
         parameter_names = list(self._parameters.keys())
 
-        # Check if non of the parameters are leaf of subtype PanaceaLeaf, i.e. the instance is flat
+        # Check if non of the parameters are leaf of subtype Panacea, i.e. the instance is flat
         check = all([
-            not issubclass(type(self._parameters.get(parameter_name)), PanaceaLeaf)
+            not issubclass(type(self._parameters.get(parameter_name)), Panacea)
             for parameter_name
             in parameter_names
             if not parameter_name.startswith('_')
