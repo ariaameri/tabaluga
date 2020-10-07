@@ -183,9 +183,13 @@ class PanaceaBase(ABC):
         self.__old___dict__ = self.__dict__
 
         # Update the dictionary and pass the method down to children
-        self.__dict__ = {**self.__dict__, **self._parameters}
+        parameters_to_add = {
+            **{key: value for key, value in self._parameters.items() if value.is_branch()},
+            **{key: value.get() for key, value in self._parameters.items() if value.is_leaf()}
+        }
+        self.__dict__ = {**self.__dict__, **parameters_to_add}
         for key, item in self._parameters.items():
-            if issubclass(type(item), PanaceaBase):
+            if issubclass(type(item), Panacea):
                 item.enable_debug_mode()
 
         return self
