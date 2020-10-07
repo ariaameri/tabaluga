@@ -1655,6 +1655,10 @@ class Modification:
                     function = self._set
                 elif single_operator == '$set_only':
                     function = self._set_only
+                elif single_operator == '$set_on_insert':
+                    function = self._set_on_insert
+                elif single_operator == '$update_only':
+                    function = self._update_only
                 elif single_operator == '$update':
                     function = self._update
                 elif single_operator == '$rename':
@@ -1780,7 +1784,7 @@ class Modification:
 
                 # If x Option exists, update it, otherwise, set it
                 if x.is_defined():
-                    result: Some = self._update(value)(key, x)
+                    result: Some = self._update_only(value)(key, x)
                 else:
                     result: Some = self._set_only(value)(key, x)
 
@@ -1828,7 +1832,43 @@ class Modification:
 
             return helper
 
-        def _update(self, value: Any) -> Callable[[str, Option], Some]:
+        def _set_on_insert(self, value: Any) -> Callable[[str, Option], Option]:
+            """Wrapper function for setting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, raise error
+                    If Option value does not exist, ignore
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value to set a value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value
+
+                Returns
+                -------
+                Option of (key, value) pair with the set value
+
+                """
+
+                return x.map(lambda a: (key, a)).or_else(Some((key, value)))
+
+            return helper
+
+        def _update_only(self, value: Any) -> Callable[[str, Option], Some]:
             """Wrapper function for updating a value on an Option value that does exist.
 
             Parameters
@@ -1865,6 +1905,42 @@ class Modification:
                     raise ValueError(f"The value {x} to be `update` does not exist!")
 
                 return Some((key, value))
+
+            return helper
+
+        def _update(self, value: Any) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value that does exist and ignore if not exist.
+
+            Parameters
+            ----------
+            value : Any
+                A value to update the Option value with.
+                    If Option value exists, i.e. it is a PanaceaBase, update its value
+                    If Option value does not exist, ignore
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value to update it.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value
+
+                Returns
+                -------
+                Option of (key, value) pair with the updated value
+
+                """
+
+                return x.map(lambda a: (key, value))
 
             return helper
 
