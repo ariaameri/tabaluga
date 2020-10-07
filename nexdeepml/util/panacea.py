@@ -104,6 +104,9 @@ class PanaceaBase(ABC):
         """
 
         # Get the item from the returned option
+        if '.' in item:
+            return self.get_option(item.split('.')[0]).get().get('.'.join(item.split('.')[1:]))
+
         out = self.get_option(item)
 
         # Raise an error if the item does not exist
