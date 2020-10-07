@@ -26,10 +26,17 @@ class TheProgressBar:
         self.print_lock = threading.Lock()
 
         # Create a threading.Event for knowing when to write the progress bar
-        self.event = threading.Event()
+        self.event_print = threading.Event()
 
         # A daemon thread placeholder for running the update of the progress bar
-        self.run_thread: threading.Thread = None  # Setting it to None will cause the daemon process not to run
+        # Also, a daemon thread placeholder for when on pause
+        self.run_thread: threading.Thread = threading.Thread(
+            name='run_daemon_thread',
+            target=self.run,
+            args=(),
+            daemon=True
+        )  # Setting it to None will cause the daemon process not to run
+        self.check_for_resume_thread: threading.Thread = None
 
         # Get a CursorModifier that contains ANSI escape codes for the cursor
         self.cursor_modifier = self.CursorModifier()
@@ -135,13 +142,10 @@ class TheProgressBar:
         self._direct_write(self.cursor_modifier.get("hide"))
 
         # Get the running daemon thread
-        self.run_thread = threading.Thread(
-            name='run_daemon_thread',
-            target=self.run,
-            args=(),
-            daemon=True
-        )
         self.run_thread.start()
+
+        # Set the printing event on to start with the printing of the progress bar
+        self.event_print.set()
 
         return self
 
@@ -150,6 +154,18 @@ class TheProgressBar:
 
         # Register self to the external console file
         self.stdout_handler.register_handler(self)
+
+    def _pause_external_stdout_handler(self):
+        """Method to pause the external stdout handler in case one is passed in the constructor."""
+
+        # Pause the external console file
+        self.stdout_handler.pause_handler(self)
+
+    def _resume_external_stdout_handler(self):
+        """Method to resume the external stdout handler."""
+
+        # Resume the external console file
+        self.stdout_handler.resume_handler(self)
 
     def _deactivate_external_stdout_handler(self):
         """Method to deactivate the external stdout handler in case one is passed in the constructor."""
@@ -175,6 +191,97 @@ class TheProgressBar:
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_beginning=False)
 
+    def pause(self) -> TheProgressBar:
+        """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
+
+        This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # If the instance is already paused, skip
+        if self.state_info.get('paused') is True:
+            return self
+
+        # Update the state to know we are paused
+        self.state_info = self.state_info.update({}, {'paused': True})
+
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self.original_sysout
+        else:
+            self._pause_external_stdout_handler()
+
+        # Show cursor
+        sys.stdout.write(self.cursor_modifier.get("show"))
+        sys.stdout.flush()
+
+        # Pause printing
+        self.event_print.clear()
+
+        return self
+
+    def _look_to_resume(self) -> TheProgressBar:
+        """Looks constantly to resumes the progress bar. This method should be called after pause to cause a thread
+        to constantly look for a chance to resume.
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # If the instance is not paused, skip
+        if self.state_info.get('paused') is False:
+            return self
+
+        # Run the thread for checking when to resume
+        self.check_for_resume_thread = threading.Thread(
+            name='check_for_resume_daemon_thread',
+            target=self._run_check_for_resume(),
+            args=(),
+            daemon=True
+        )
+        self.check_for_resume_thread.start()
+
+        return self
+
+    def resume(self) -> TheProgressBar:
+        """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # If the instance is not paused, skip
+        if self.state_info.get('paused') is False:
+            return self
+
+        # Update the state to know we are not paused
+        self.state_info = self.state_info.update({}, {'paused': False})
+
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self
+        else:
+            self._resume_external_stdout_handler()
+
+        # Hide cursor
+        self._direct_write(self.cursor_modifier.get("hide"))
+
+        # No longer look if we should resume
+        self.check_for_resume_thread = None
+
+        # Start printing
+        self.event_print.set()
+
+        return self
+
     def run(self) -> None:
         """Prints the progress bar and takes care of other controls.
 
@@ -183,11 +290,29 @@ class TheProgressBar:
 
         while self.run_thread:
 
+            # Wait for the event to write
+            self.event_print.wait()
+
             # Print the progress bar only if it is focused on
+            # If we are not focused, pause
             if self._check_if_focused():
                 self._print_progress_bar()
+            else:
+                self.pause()
+                self._look_to_resume()  # Constantly check if we can resume
 
             time.sleep(1 / self._get_update_frequency())
+
+    def _run_check_for_resume(self) -> None:
+        """Checks to see if we are in focus to resume the printing."""
+
+        # Check until we are in focus
+        while self._check_if_focused() is False:
+
+            time.sleep(1 / self._get_update_frequency())
+
+        # If we are in focus, resume
+        self.resume()
 
     def _check_if_focused(self) -> bool:
         """Checks whether the terminal is focused on the progress bar so that it should be printed.
@@ -842,7 +967,11 @@ class TheProgressBar:
 
         # Rule: update at least 2 times and at most 60 times in a second unless needed to be faster
         # Also be twice as fast as the update time difference
-        freq = float(np.clip(2 * average_freq, 2, 60))
+        # Also, if we are on pause, update with frequency 1
+        if self.state_info.get('paused') is True:
+            freq = 1.0
+        else:
+            freq = float(np.clip(2 * average_freq, 2, 60))
 
         return freq
 
@@ -856,8 +985,10 @@ class TheProgressBar:
 
         """
 
-        self.stdout_handler.write(msg)
-        self.stdout_handler.flush()
+        # Only write if we are not paused
+        if self.state_info.get('paused') is False:
+            self.stdout_handler.write(msg)
+            self.stdout_handler.flush()
 
     def write(self, msg: str) -> None:
         """Prints a message to the output.
