@@ -765,9 +765,6 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.deactivate()
 
-        # Redirect the stream handler of the this logger to use stdout
-        self._handler.setStream(sys.stdout)
-
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the TheProgressBar progress bar with description set to message.
 
