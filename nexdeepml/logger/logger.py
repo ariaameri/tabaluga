@@ -459,8 +459,9 @@ class LoggerManager(BaseEventManager, ABC):
         """
 
         # Add the console handler
+        # Update each and every logger config that we have within our config
         self.console_file = LoggerConsoleFile().activate()
-        config = config.update('console_handler', self.console_file)
+        config = config.update({'_bc': {'$regex': r'\.\w+$'}}, {'$set': {'console_handler': self.console_file}})
 
         super().__init__(config)
 
@@ -690,7 +691,7 @@ class TheProgressBarLogger(Logger):
 
         # Making sure the logger is going to write to the console
         # Make sure it does not write any prefix
-        config = config.update('console', True).update('format', '')
+        config = config.update({}, {'$set': {'console': True, 'format': ''}})
 
         super().__init__(config)
 

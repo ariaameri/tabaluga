@@ -104,19 +104,29 @@ class SampleImagePreprocessManager(PreprocessManager):
         # data = info['data']['data']
         data = info['data']
 
-        labels = data.get('labels')
-        labels = self.workers['labels_background_to_color'].process(labels)
-        processed_data = data.update('labels', labels)
+        # labels = data.get('labels')
+        # labels = self.workers['labels_background_to_color'].process(labels)
+        # processed_data = data.update('labels', labels)
+        #
+        # # processed_data = self.workers['image_resizer'].resize(data)
+        # processed_data = processed_data.map(self.workers['image_resizer'].process)
+        # # processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        # processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        # processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
+        #
+        # labels = processed_data.get('labels')
+        # labels = self.workers['label_one_hot_decoder'].process(labels)
+        # processed_data = processed_data.update('labels', labels)
 
-        # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = processed_data.map(self.workers['image_resizer'].process)
-        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
-        processed_data = processed_data.map(self.workers['image_normalizer'].process)
-        processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
-
-        labels = processed_data.get('labels')
-        labels = self.workers['label_one_hot_decoder'].process(labels)
-        processed_data = processed_data.update('labels', labels)
+        processed_data = \
+            data\
+                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['labels_background_to_color'].process)\
+                .update_map({}, [
+                        self.workers['image_resizer'].process,
+                        self.workers['image_normalizer'].process,
+                        self.workers['image_bwhc_to_bcwh'].process
+                    ])\
+                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['label_one_hot_decoder'].process)
 
         return processed_data
 
