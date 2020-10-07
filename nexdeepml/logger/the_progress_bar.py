@@ -52,14 +52,11 @@ class TheProgressBar:
                 'progress_bar': '',  # The whole progress bar, consisting of the previous fields
             },
             'console': {  # Information regarding the console
-                'width': -1,
-                'column': -1
+                'rows': -1,
+                'columns': -1
             }
         }
         self.progress_bar_info = DataMuncher(initial_progress_bar_info)
-
-        # The description to write at the end of the progress bar
-        self.description: str = ''
 
         # Book keeping for the information regarding the collected statistics
         initial_statistics_info = {
@@ -84,15 +81,10 @@ class TheProgressBar:
             'external_stdout_handler': True if stdout_handler is None else False,
             'item': {
                 'total_items_count': -1,  # Count of total number of batches expected
-                'current_item_index': -1  # Current batch item/index/number
+                'current_item_index': 0  # Current batch item/index/number
             }
         }
         self.state_info = DataMuncher(initial_state_info)
-
-        # TODO: Take care of these two variables by using self.state_info
-        # The total number of items and the current item
-        self.number_of_items: int = -1
-        self.current_item: int = 0
 
         # A buffer for the messages to be printed
         self.buffer: List = []
@@ -122,14 +114,16 @@ class TheProgressBar:
             return self
 
         # Update the state to know we are activated
-        self.state_info = self.state_info.update('activated', True)
+        self.state_info = self.state_info.update({}, {'activated': True})
 
         # Set the initial time
         current_time = time.time()
         self.statistics_info = \
             self.statistics_info\
-                .update('time.initial_run_time', current_time)\
-                .update('time.initial_progress_bar_time', current_time)
+                .update(
+                    {'_bc': '.time'},
+                    {'time.initial_run_time': current_time, 'initial_progress_bar_time': current_time}
+                )
 
         # Redirect stdout just in case there is no stdout handler from outside
         if self.state_info.get('external_stdout_handler') is False:
@@ -225,7 +219,7 @@ class TheProgressBar:
 
         """
 
-        self.number_of_items = number_of_items
+        self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}}, {'total_items_count': number_of_items})
 
         return self
 
@@ -239,18 +233,20 @@ class TheProgressBar:
         """
 
         # Print the progress bar and leave it if we have done any progress
-        if self.current_item != 0:
+        if self.state_info.get('item.current_item_index') != 0:
             self._print_progress_bar(return_to_beginning=False)
 
         # Set the initial time
         current_time = time.time()
         self.statistics_info = \
             self.statistics_info\
-                .update('time.initial_progress_bar_time', current_time)\
-                .update('time.last_update_time', current_time)
+                .update(
+                    {'_bc': {'$regex': 'time$'}},
+                    {'initial_progress_bar_time': current_time, 'last_update_time': current_time}
+                )
 
         # Reset the current item counter
-        self.current_item = 0
+        self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}}, {'current_item_index': 0})
 
         return self
 
@@ -266,17 +262,28 @@ class TheProgressBar:
 
         if count >= 0:
             # Update current item
-            self.current_item += count
+            self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
+                                                     {'$inc': {'current_item_index': count}})
 
             # Keep track of an average number of elements in each update
             self.statistics_info = \
                 self.statistics_info.update(
-                    'average.average_item_per_update',
-                    self._exp_average(self.statistics_info.get('average').get('average_item_per_update'), count)
+                    {'_bc': {'$regex': 'average$'}},
+                    {'average_item_per_update':
+                         self._exp_average(
+                             self.statistics_info.get('average.average_item_per_update'),
+                             count
+                         )
+                    }
                 )
 
             # Update the time
             self._update_time_counter()
+
+            # Update the progress bar
+            # self._update_bar_prefix()
+            # self._update_bar_suffix()
+            self._update_progress_bar()
 
     class CursorModifier:
 
@@ -355,7 +362,23 @@ class TheProgressBar:
 
         """
 
-        self.description = self._modify_description(description)
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'progress_bar$'}},
+            {'description': self._modify_description(description)}
+        )
+
+    def _get_bar_description(self) -> str:
+        """Returns the description of the progress bar.
+
+        Returns
+        ----------
+        The description string of the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description')
 
     def _modify_description(self, description: str) -> str:
         """Modifies the description of the progress bar.
@@ -384,10 +407,11 @@ class TheProgressBar:
         """
 
         # Get the progress bar
-        progress_bar = self._get_progress_bar()
+        progress_bar = self._make_and_get_progress_bar()
 
         # Clear the line and write it
-        progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
+        # progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
+        progress_bar_with_space: str = self.cursor_modifier.get('clear_until_end')
         progress_bar_with_space += f'{progress_bar}'
 
         if return_to_beginning:
@@ -415,7 +439,7 @@ class TheProgressBar:
         # Print the progress bar
         self._direct_write(progress_bar)
 
-    def _get_progress_bar(self) -> str:
+    def _make_and_get_progress_bar(self) -> str:
         """Returns a string containing the progress bar.
 
         Returns
@@ -425,15 +449,24 @@ class TheProgressBar:
         """
 
         # Get console's width and height
+        self._update_terminal_size()
         columns, rows = self._get_terminal_size()
+        # columns, rows = self._get_terminal_size()
 
+        # Update and get the elements of the progress bar
+        self._update_bar_prefix()
+        self._update_bar_suffix()
         bar_prefix = self._get_bar_prefix()
         bar_suffix = self._get_bar_suffix()
+        description = self._get_bar_description()
+        # bar_prefix = self._make_and_get_bar_prefix()
+        # bar_suffix = self._make_and_get_bar_suffix()
 
-        # Calculate the written char length of the prefix, suffix, and the first line of description
-        len_bar_prefix = len(bar_prefix)
-        len_bar_suffix = len(bar_suffix)
-        len_bar_desc = len(self.description.split('\n')[0])
+        # Calculate the written char length of the prefix, suffix, and the first line of description without the
+        # special unicode or console non-printing characters
+        len_bar_prefix = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', bar_prefix))
+        len_bar_suffix = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', bar_suffix))
+        len_bar_desc = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', description.split('\n')[0]))
 
         remaining_columns = \
             int(np.clip(
@@ -442,19 +475,41 @@ class TheProgressBar:
                 50
             ))  # -3 for the spaces between the fields
 
-        bar = self._get_bar(remaining_columns)
+        # Update the bar and get it
+        self._update_bar(remaining_columns)
+        bar = self._get_bar()
 
-        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
+        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {description}'
 
         # Trim the progress bar to the number of columns of the console
-        progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
-
-        # Always reset the color back to normal
-        progress_bar += f'{CCC.reset.all}'
+        # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
 
         return progress_bar
 
-    def _get_terminal_size(self) -> (int, int):
+    def _get_progress_bar(self) -> str:
+        """Returns the stored string containing the progress bar.
+
+        Returns
+        -------
+        A string containing the progress bar
+
+        """
+
+        # Retrieve and return
+        return self.progress_bar_info.get('progress_bar.progress_bar')
+
+    def _update_progress_bar(self) -> None:
+        """Updates the stored string that contains the whole progress bar."""
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'progress_bar$'}},
+                {'progress_bar': self._make_and_get_progress_bar()}
+            )
+
+    def _make_and_get_terminal_size(self) -> (int, int):
+        """Returns the stored size of the terminal in form of (columns, rows)."""
 
         env = os.environ
 
@@ -484,7 +539,24 @@ class TheProgressBar:
             #    cr = (25, 80)
         return int(cr[1]), int(cr[0])
 
-    def _get_bar(self, length: int) -> str:
+    def _get_terminal_size(self) -> (int, int):
+        """Returns the stored size of the terminal in form of (columns, rows)."""
+
+        return (self.progress_bar_info.get('console.columns'), self.progress_bar_info.get('console.rows'))
+
+    def _update_terminal_size(self) -> None:
+        """Updates the stored data for the terminal size."""
+
+        columns, rows = self._make_and_get_terminal_size()
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'console$'}},
+                {'rows': rows, 'columns': columns}
+            )
+
+    def _make_and_get_bar(self, length: int) -> str:
         """Returns a string containing the bar itself.
 
         Parameters
@@ -519,7 +591,36 @@ class TheProgressBar:
 
         return bar
 
-    def _get_bar_prefix(self) -> str:
+    def _get_bar(self) -> str:
+        """Returns the stored string containing the bar itself.
+
+        Returns
+        -------
+        A string containing the bar
+
+        """
+
+        # Retrieve and return
+        return self.progress_bar_info.get('progress_bar.bar')
+
+    def _update_bar(self, length: int) -> None:
+        """Updates the stored containing the bar.
+
+        Parameters
+        ----------
+        length : int
+            The length of the bar
+
+        """
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'progress_bar$'}},
+                {'bar': self._make_and_get_bar(length)}
+            )
+
+    def _make_and_get_bar_prefix(self) -> str:
         """Returns the string that comes before the bar.
 
         Returns
@@ -535,6 +636,28 @@ class TheProgressBar:
 
         return bar_prefix
 
+    def _get_bar_prefix(self) -> str:
+        """Returns the stored string that comes before the bar.
+
+        Returns
+        -------
+        A string that comes before the bar
+
+        """
+
+        # Retrieve and return
+        return self.progress_bar_info.get('progress_bar.prefix')
+
+    def _update_bar_prefix(self) -> None:
+        """Updates the stored string that comes before the bar."""
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'progress_bar$'}},
+                {'prefix': self._make_and_get_bar_prefix()}
+            )
+
     def _get_percentage(self) -> float:
         """Returns the percentage of the process.
 
@@ -545,12 +668,12 @@ class TheProgressBar:
         """
 
         # The percentage of the progress
-        percent: float = self.current_item / self.number_of_items
+        percent: float = self.state_info.get('item.current_item_index') / self.state_info.get('item.total_items_count')
         percent = float(np.clip(percent, 0., 1.))
 
         return percent
 
-    def _get_bar_suffix(self) -> str:
+    def _make_and_get_bar_suffix(self) -> str:
         """Returns the string that comes after the bar.
 
         Returns
@@ -565,7 +688,7 @@ class TheProgressBar:
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('last_update_time'))
+        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time.last_update_time'))
         delta_time = now - last_update_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -578,10 +701,10 @@ class TheProgressBar:
                                      f':' \
                                      f'{seconds:02d}' \
                                      f'.' \
-                                     f'{microseconds:4d}'
+                                     f'{microseconds:04d}'
 
         # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('initial_progress_bar_time'))
+        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time.initial_progress_bar_time'))
         delta_time = now - init_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -596,6 +719,28 @@ class TheProgressBar:
 
         return bar_suffix
 
+    def _get_bar_suffix(self) -> str:
+        """Returns the stored string that comes after the bar.
+
+        Returns
+        -------
+        A string that comes after the bar
+
+        """
+
+        # Retrieve and return
+        return self.progress_bar_info.get('progress_bar.suffix')
+
+    def _update_bar_suffix(self) -> None:
+        """Updates the stored string that comes after the bar."""
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'progress_bar$'}},
+                {'suffix': self._make_and_get_bar_suffix()}
+            )
+
     def _get_fractional_progress(self) -> str:
         """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
 
@@ -606,12 +751,12 @@ class TheProgressBar:
         """
 
         # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(self.number_of_items))) if self.number_of_items > 0 else 5
+        length_items = int(np.ceil(np.log10(self.state_info.get('item.total_items_count')))) if self.state_info.get('item.total_items_count') > 0 else 5
 
         # Create the string
-        fractional_progress: str = f'{self.current_item: {length_items}d}'
+        fractional_progress: str = f'{self.state_info.get("item.current_item_index"): {length_items}d}'
         fractional_progress += f'/'
-        fractional_progress += f'{self.number_of_items}' if self.number_of_items > 0 else '?'
+        fractional_progress += f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
 
         return fractional_progress
 
@@ -632,17 +777,26 @@ class TheProgressBar:
         """Updates the internal average time counter."""
 
         # Figure current item time
-        delta_time = time.time() - self.statistics_info.get('time').get('last_update_time')
+        delta_time = time.time() - self.statistics_info.get('time.last_update_time')
 
         # Update the moving average
         self.statistics_info = \
             self.statistics_info.update(
-                'average.average_time_per_update',
-                self._exp_average(self.statistics_info.get('average').get('average_time_per_update'), delta_time)
+                {'_bc': {'$regex': 'average$'}},
+                {'average_time_per_update':
+                     self._exp_average(
+                         self.statistics_info.get('average.average_time_per_update'),
+                         delta_time
+                     )
+                 }
             )
 
         # Update the last time
-        self.statistics_info = self.statistics_info.update('time.last_update_time', time.time())
+        self.statistics_info = \
+            self.statistics_info.update(
+                {'_bc': {'$regex': 'time$'}},
+                {'last_update_time': time.time()}
+            )
 
     def _get_update_frequency(self) -> float:
         """Returns the number of times in a second that the progress bar should be updated.
@@ -720,7 +874,7 @@ class TheProgressBarColored(TheProgressBar):
 
     # TODO: Code duplication, fix it
 
-    def _get_bar_prefix(self) -> str:
+    def _make_and_get_bar_prefix(self) -> str:
         """Returns the string that comes before the bar.
 
         Returns
@@ -729,16 +883,16 @@ class TheProgressBarColored(TheProgressBar):
 
         """
 
-        # The percentage of the progress
-        percent: float = self._get_percentage() * 100
+        # Get the original one
+        bar_prefix = super()._make_and_get_bar_prefix()
 
         bar_prefix = f'{CCC.foreground.set_88_256.grey74}' \
-                     f'{percent:6.2f}%' \
+                     f'{bar_prefix}' \
                      f'{CCC.reset.all}'
 
         return bar_prefix
 
-    def _get_bar_suffix(self) -> str:
+    def _make_and_get_bar_suffix(self) -> str:
         """Returns the string that comes after the bar.
 
         Returns
@@ -768,7 +922,7 @@ class TheProgressBarColored(TheProgressBar):
                                      f':' \
                                      f'{seconds:02d}' \
                                      f'.' \
-                                     f'{microseconds:4d}'
+                                     f'{microseconds:04d}'
 
         # Time elapsed since the beginning
         init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('initial_progress_bar_time'))
@@ -798,20 +952,20 @@ class TheProgressBarColored(TheProgressBar):
         """
 
         # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(self.number_of_items))) if self.number_of_items > 0 else 5
+        length_items = int(np.ceil(np.log10(self.state_info.get('item.total_items_count')))) if self.state_info.get('item.total_items_count') > 0 else 5
 
         # Create the string
         fractional_progress: str = f'{CCC.foreground.set_88_256.gold1}' \
-                                   f'{self.current_item: {length_items}d}'
+                                   f'{self.state_info.get("item.current_item_index"): {length_items}d}'
         fractional_progress += f'{CCC.foreground.set_88_256.grey46}' \
                                f'/'
         fractional_progress += f'{CCC.foreground.set_88_256.orange2}' + \
-                               f'{self.number_of_items}' if self.number_of_items > 0 else '?'
+                               f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
         fractional_progress += f'{CCC.reset.all}'
 
         return fractional_progress
 
-    def _get_progress_bar(self) -> str:
+    def _make_and_get_progress_bar(self) -> str:
         """Returns a string containing the progress bar.
 
         Returns
@@ -820,30 +974,8 @@ class TheProgressBarColored(TheProgressBar):
 
         """
 
-        # Get console's width and height
-        columns, rows = self._get_terminal_size()
-
-        bar_prefix = self._get_bar_prefix()
-        bar_suffix = self._get_bar_suffix()
-
-        # Calculate the written char length of the prefix, suffix, and the first line of description
-        len_bar_prefix = len(re.sub(r'\\x1b\[.+?m', '', repr(bar_prefix)))
-        len_bar_suffix = len(re.sub(r'\\x1b\[.+?m', '', repr(bar_suffix)))
-        len_bar_desc = len(re.sub(r'\\x1b\[.+?m', '', repr(self.description.split('\n')[0])))
-
-        remaining_columns = \
-            int(np.clip(
-                columns - len_bar_prefix - len_bar_suffix - 3 - len_bar_desc,
-                5,
-                50
-            ))  # -3 for the spaces between the fields
-
-        bar = self._get_bar(remaining_columns)
-
-        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {self.description}'
-
-        # Trim the progress bar to the number of columns of the console
-        # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
+        # Get the original progress bar
+        progress_bar = super()._make_and_get_progress_bar()
 
         # Always reset the color back to normal
         progress_bar += f'{CCC.reset.all}'
