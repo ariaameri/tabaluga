@@ -128,7 +128,7 @@ class PanaceaBase(ABC):
 
         """
 
-        return self.get_option(item).get_or_else(default_value)
+        return self.get_option(item).fold(lambda x: x.get() if isinstance(x, self.Leaf) else x, default_value)
 
     def get_parameters(self) -> Dict:
         """Gets the entire parameters.
