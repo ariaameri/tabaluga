@@ -42,6 +42,9 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_info_dict = {}
         self.val_info_dict = {}
 
+        # Register OS signals to be caught
+        self._register_signal_catch()
+
     def create_callback(self) -> Union[CallbackManager, Callback]:
         """Creates an instance of the callback and returns it."""
 
@@ -212,3 +215,11 @@ class Trainer(base.BaseEventManager, ABC):
         elif os_signal == signal.SIGCONT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+
+    def _register_signal_catch(self):
+        """Registers what signals should be caught by this instance."""
+
+        signal.signal(signal.SIGINT, self.signal_catcher)
+        signal.signal(signal.SIGTERM, self.signal_catcher)
+        signal.signal(signal.SIGTSTP, self.signal_catcher)
+        signal.signal(signal.SIGCONT, self.signal_catcher)
