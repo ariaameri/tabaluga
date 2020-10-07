@@ -521,8 +521,24 @@ class TheProgressBar:
 
         return description
 
+    def get_progress_bar_string(self, return_to_beginning: bool = False) -> str:
+        """Returns the progress bar along with its cursor modifier ANSI escape codes
+
+        Returns
+        -------
+        return_to_beginning: bool, optional
+            Whether to return the cursor to the beginning of the progress bar
+
+        """
+
+        # Return only the string and not the '\n' at the end if we should not return to the beginning
+        result = self._get_progress_bar_with_spaces(return_to_beginning)
+        result = result[:-1] if return_to_beginning is False else result
+
+        return result
+
     def _get_progress_bar_with_spaces(self, return_to_beginning: bool = True) -> str:
-        """Retunrs the progress bar along with its cursor modifier ANSI escape codes
+        """Returns the progress bar along with its cursor modifier ANSI escape codes
 
         Returns
         -------
