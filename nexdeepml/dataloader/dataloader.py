@@ -1,8 +1,7 @@
 from abc import ABC, abstractmethod
-
+from pathlib import Path
 from ..base import base
 from ..util.config import ConfigParser
-import os
 from typing import List
 import pandas as pd
 import numpy as np
@@ -73,20 +72,20 @@ class DataManager(base.BaseEventManager, ABC):
         # Generate the train, validation, and test metadata
         self._generate_train_val_test_metadata()
 
-    def _check_file(self, file_path: str) -> bool:
+    def _check_file(self, file_path: Path) -> bool:
         """"Helper function to check a single file.
 
         Parameters
         ----------
-        file_path : str
+        file_path : Path
             The path of the file
         """
 
         # Check that the file is not a folder
-        check = os.path.isfile(file_path)
+        check = file_path.is_file()
 
         # Check criteria for the file name
-        check = check & self._filter_file_name(file_path.split('/')[-1])
+        check &= self._filter_file_name(file_path.name)
 
         return check
 
@@ -115,35 +114,30 @@ class DataManager(base.BaseEventManager, ABC):
         if self._folders is None:
             raise Exception("No folders given to read files from!")
         for folder in self._folders:
-            if os.path.exists(folder) is False:
+            if Path(folder).exists() is False:
                 raise Exception(f'The folder {folder} does not exist!')
 
-        file_nested_names = [os.listdir(folder) for folder in self._folders]  # File names in nested lists
+        file_nested_paths = [list(Path(folder).iterdir()) for folder in self._folders]  # File names in nested lists
+
         # Flatten the file names and make absolute paths
-        file_paths = [os.path.join(folder_name, file_name)
-                      for file_list, folder_name in zip(file_nested_names, self._folders)
-                      for file_name in file_list]
+        file_paths = [file_path
+                      for file_paths in file_nested_paths
+                      for file_path in file_paths]
         # Check each file based on the criteria
         file_paths = [file_path for file_path in file_paths if self._check_file(file_path)]
         # Retrieve the folder path and file names
-        folder_paths = [os.path.dirname(file_name)
-                        for file_name in file_paths]
-        folder_names = [os.path.split(folder_path)[1]
-                        for folder_path in folder_paths]
-        file_names = [os.path.split(file_path)[1]
-                      for file_path in file_paths]
-        file_extension = [file_name.split('.')[1].lower()
-                          for file_name in file_names]
-        file_names = [file_name.split('.')[0]
-                      for file_name in file_names]
+        folder_paths = [file_name.parent for file_name in file_paths]
+        folder_names = [folder_path.name for folder_path in folder_paths]
+        file_names = [file_path.stem for file_path in file_paths]
+        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
 
         # Create data frame of all the files in the folder
         self.metadata = pd.DataFrame({
-            'folder_path': folder_paths,
+            'folder_path': [str(item) for item in folder_paths],
             'folder_name': folder_names,
             'file_name': file_names,
-            'file_extension': file_extension,
-            'path': file_paths
+            'file_extension': file_extensions,
+            'path': [str(item) for item in file_paths]
         })
 
     def _build_metadata_from_mongo(self) -> None:
