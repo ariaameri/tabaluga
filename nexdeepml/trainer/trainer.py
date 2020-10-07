@@ -8,6 +8,7 @@ from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal
 import sys
+import os
 
 
 class Trainer(base.BaseEventManager, ABC):
@@ -203,3 +204,11 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_os_signal(info)
             print('Termination signal received, exiting...', file=sys.stderr)
             sys.exit(0)
+        elif os_signal == signal.SIGTSTP:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
+            signal.signal(os_signal, signal.SIG_DFL)
+            os.kill(os.getpid(), os_signal)
+        elif os_signal == signal.SIGCONT:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
