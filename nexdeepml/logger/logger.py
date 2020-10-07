@@ -15,6 +15,7 @@ from datetime import datetime
 from numbers import Number
 from collections import OrderedDict
 import threading
+import signal
 
 
 class Logger(BaseWorker):
@@ -464,6 +465,13 @@ class LoggerManager(BaseEventManager, ABC):
         config = config.update({'_bc': {'$regex': r'\.\w+$'}}, {'$set': {'console_handler': self.console_file}})
 
         super().__init__(config)
+
+    def on_os_signal(self, info: Dict = None):
+
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
+            self.console_file.deactivate()
 
 
 class TQDMLogger(Logger, io.StringIO):

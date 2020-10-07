@@ -196,8 +196,10 @@ class Trainer(base.BaseEventManager, ABC):
         if os_signal == signal.SIGINT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            print('Interrupt signal received, exiting...', file=sys.stderr)
             sys.exit(1)
         elif os_signal == signal.SIGTERM:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            print('Termination signal received, exiting...', file=sys.stderr)
             sys.exit(0)

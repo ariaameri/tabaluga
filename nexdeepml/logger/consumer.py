@@ -39,6 +39,14 @@ class SampleLoggerManager(LoggerManager):
     def on_end(self, info: Dict = None):
         self.workers['train_tpb'].close()
 
+    def on_os_signal(self, info: Dict = None):
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
+            self.workers['train_tpb'].close()
+
+        super().on_os_signal(info)
+
 
 class SampleTheProgressBarLoggerManager(LoggerManager):
 
@@ -87,4 +95,4 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
         if os_signal == signal.SIGINT:
             self.workers['train_tpb'].close()
 
-        sys.exit(1)
+        super().on_os_signal(info)
