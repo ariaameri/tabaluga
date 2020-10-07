@@ -27,8 +27,9 @@ class BaseWorker:
         # Set the configuration
         self._config = config
 
-        # Set the logger handler placeholder
-        self._logger: Logger
+        # Set the logger handler
+        if config is not None:
+            self._logger: Logger = config.get_or_else('universal_logger', None)
 
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
