@@ -415,7 +415,21 @@ class TheProgressBar:
         progress_bar_with_space += f'{progress_bar}'
 
         if return_to_beginning:
-            number_of_lines = progress_bar.count(f'\n')
+            # Get the progress bar without special characters
+            progress_bar_with_space_without_special_chars = self._remove_non_printing_chars(progress_bar_with_space)
+            # Get the terminal size
+            console_columns, _ = self._get_terminal_size()
+            # Figure how many lines will be wrapped to the next
+            number_of_lines = \
+                sum(
+                    (len(item.expandtabs())-1) // console_columns
+                    for item
+                    in progress_bar_with_space_without_special_chars.split('\n')
+                    if item != ''
+                )
+            # Figure how many lines we have
+            number_of_lines += progress_bar.count(f'\n')
+            # Compensate for the lines to be printed and go back to the beginning of all of them
             progress_bar_with_space += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
             progress_bar_with_space += f'\r'
         else:
