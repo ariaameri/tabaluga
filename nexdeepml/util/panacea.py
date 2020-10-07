@@ -1209,7 +1209,7 @@ class PanaceaLeaf(PanaceaBase):
 
 class Modification:
 
-    def __init__(self, filter_dict: Dict = None, update_dict: Dict = None):
+    def __init__(self, filter_dict: Dict = None, update_dict: Dict = None, condition_dict: Dict = None):
         """Initializes the instance and create the modified filter and update dictionaries as Filter and Update
         class methods.
 
@@ -1239,6 +1239,11 @@ class Modification:
                                 - _self: update the current item itself
                                 - _value: update the value of the leaf nodes only, that is if the filter matches a leaf
 
+        condition_dict : dict
+            Dictionary containing the condition of update/filter.
+                The keys/value possible pair are among these options:
+                    - 'deep': True/False: tells the update rule whether it should go down deep and update. Otherwise,
+                            if set to False, will update only the shallowest level matched.
 
         Examples
         --------
@@ -1291,6 +1296,7 @@ class Modification:
 
         self.filter_dict = self.make_filter_dictionary(filter_dict or {})
         self.update_dict = self.make_update_dictionary(update_dict or {})
+        self.condition_dict = condition_dict or {}
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
@@ -2617,7 +2623,11 @@ class Modification:
 
         # If the `panacea` instance met the filtering criteria
         # After that, do the updating and return the result in a correct way
-        do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
+        # If we should go even deeper than the shallowest level matched, go deeper!
+        if self.condition_dict.get('deep') is True:
+            do_after_satisfied = lambda key, panacea: propagate(key, self.update_self(panacea))
+        else:
+            do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
 
         # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
