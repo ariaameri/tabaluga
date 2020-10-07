@@ -4,6 +4,7 @@ from ..util.data_muncher import DataMuncher
 import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
+from ..logger.logger import Logger
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal
@@ -42,6 +43,10 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_info_dict = {}
         self.val_info_dict = {}
 
+        # Set the universal logger
+        self._universal_logger = self._create_universal_logger()
+        self.set_logger(self._universal_logger)
+
         # Register OS signals to be caught
         self._register_signal_catch()
 
@@ -54,6 +59,13 @@ class Trainer(base.BaseEventManager, ABC):
         """Creates an instance of the model and returns it."""
 
         pass
+
+    def _create_universal_logger(self) -> Logger:
+        """Creates a universal logger instance and returns it."""
+
+        logger = Logger(self._config.get('universal_logger'))
+
+        return logger
 
     def train(self) -> List[Dict]:
         """Performs the training and validation.
