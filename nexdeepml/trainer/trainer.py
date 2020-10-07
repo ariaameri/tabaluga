@@ -212,21 +212,23 @@ class Trainer(base.BaseEventManager, ABC):
         if os_signal == signal.SIGINT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
-            print('Interrupt signal received, exiting...', file=sys.stderr)
+            self._log('Interrupt signal received, exiting...', 'error')
             sys.exit(1)
         elif os_signal == signal.SIGTERM:
             info = {'signal': os_signal}
             self.on_os_signal(info)
-            print('Termination signal received, exiting...', file=sys.stderr)
+            self._log('Termination signal received, exiting...', 'error')
             sys.exit(0)
         elif os_signal == signal.SIGTSTP:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            self._log('Terminal stop signal received.', 'warning')
             signal.signal(os_signal, signal.SIG_DFL)
             os.kill(os.getpid(), os_signal)
         elif os_signal == signal.SIGCONT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            self._log('Continue signal received.', 'info')
 
     def _register_signal_catch(self):
         """Registers what signals should be caught by this instance."""
