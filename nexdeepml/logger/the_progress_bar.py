@@ -464,9 +464,9 @@ class TheProgressBar:
 
         # Calculate the written char length of the prefix, suffix, and the first line of description without the
         # special unicode or console non-printing characters
-        len_bar_prefix = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', bar_prefix))
-        len_bar_suffix = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', bar_suffix))
-        len_bar_desc = len(re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', description.split('\n')[0]))
+        len_bar_prefix = len(self._remove_non_printing_chars(bar_prefix).expandtabs())
+        len_bar_suffix = len(self._remove_non_printing_chars(bar_suffix).expandtabs())
+        len_bar_desc = len(self._remove_non_printing_chars(description.split('\n')[0]).expandtabs())
 
         remaining_columns = \
             int(np.clip(
@@ -759,6 +759,22 @@ class TheProgressBar:
         fractional_progress += f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
 
         return fractional_progress
+
+    def _remove_non_printing_chars(self, message: str) -> str:
+        """Removes the unicode and non-printing characters from the string given and returns it.
+
+        Parameters
+        ----------
+        message : str
+            String to remove characters from
+
+        Returns
+        -------
+        A string containing `message` with special characters removed
+
+        """
+
+        return re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', message)
 
     def _get_item_per_second(self) -> float:
         """Returns the average number of items processed in a second.
