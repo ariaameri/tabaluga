@@ -45,6 +45,12 @@ class SampleLoggerManager(LoggerManager):
         if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
             self.workers['train_tpb'].close()
 
+        if os_signal == signal.SIGTSTP:
+            self.workers['train_tpb'].pause()
+
+        if os_signal == signal.SIGCONT:
+            self.workers['train_tpb'].resume()
+
         super().on_os_signal(info)
 
 
