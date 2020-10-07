@@ -105,9 +105,6 @@ class TheProgressBar:
         # Stop the run thread
         self.run_thread = None
 
-        # Print the progress bar and leave it
-        self._print_progressbar(return_to_beginning=False)
-
         # Show cursor
         self._direct_write(self.cursor_modifier.get("show"))
 
@@ -116,6 +113,9 @@ class TheProgressBar:
             sys.stdout = self.original_sysout
         else:
             self.stdout_handler.deregister_handler(self)
+
+        # Print the progress bar and leave it
+        self._print_progressbar(return_to_beginning=False)
 
     def run(self) -> None:
         """Prints the progress bar and takes care of other controls.
