@@ -132,8 +132,8 @@ class SampleLoggerCallback(ManagerCallback):
     def create_workers(self):
         """Create the Logger instance"""
 
-        # self.workers['logger'] = SampleLoggerManager(self._config)
-        self.workers['logger'] = SampleTheProgressBarLoggerManager(self._config)
+        self.workers['logger'] = SampleLoggerManager(self._config)
+        # self.workers['logger'] = SampleTheProgressBarLoggerManager(self._config)
 
     def on_train_epoch_begin(self, info: Dict = None):
 
