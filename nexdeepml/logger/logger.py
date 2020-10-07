@@ -765,6 +765,16 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.deactivate()
 
+    def pause(self) -> None:
+        """Pauses the TheProgressBar instance."""
+
+        self._the_progress_bar.pause()
+
+    def resume(self) -> None:
+        """Resumes the TheProgressBar instance."""
+
+        self._the_progress_bar.resume()
+
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the TheProgressBar progress bar with description set to message.
 
