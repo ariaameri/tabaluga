@@ -30,10 +30,10 @@ class Trainer(base.BaseEventManager, ABC):
         self.val_data: DataMuncher = DataMuncher()
 
         # Set placeholder for callbacks
-        self.callback: Type[CallbackManager] = self.create_callback()
+        self.callback: CallbackManager = self.create_callback()
 
         # Set placeholder for model
-        self.model: Type[ModelManager] = self.create_model()
+        self.model: ModelManager = self.create_model()
 
         # Create history list for keeping the history of the net
         self.history = []
@@ -41,12 +41,12 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_info_dict = {}
         self.val_info_dict = {}
 
-    def create_callback(self) -> Union[Type[CallbackManager], Type[Callback]]:
+    def create_callback(self) -> Union[CallbackManager, Callback]:
         """Creates an instance of the callback and returns it."""
 
         pass
 
-    def create_model(self) -> Union[Type[ModelManager], Type[Model]]:
+    def create_model(self) -> Union[ModelManager, Model]:
         """Creates an instance of the model and returns it."""
 
         pass
@@ -196,8 +196,10 @@ class Trainer(base.BaseEventManager, ABC):
         if os_signal == signal.SIGINT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            print('Interrupt signal received, exiting...', file=sys.stderr)
             sys.exit(1)
         elif os_signal == signal.SIGTERM:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            print('Termination signal received, exiting...', file=sys.stderr)
             sys.exit(0)

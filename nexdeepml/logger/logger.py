@@ -15,6 +15,7 @@ from datetime import datetime
 from numbers import Number
 from collections import OrderedDict
 import threading
+import signal
 
 
 class Logger(BaseWorker):
@@ -459,10 +460,18 @@ class LoggerManager(BaseEventManager, ABC):
         """
 
         # Add the console handler
+        # Update each and every logger config that we have within our config
         self.console_file = LoggerConsoleFile().activate()
-        config = config.update('console_handler', self.console_file)
+        config = config.update({'_bc': {'$regex': r'\.\w+$'}}, {'$set': {'console_handler': self.console_file}})
 
         super().__init__(config)
+
+    def on_os_signal(self, info: Dict = None):
+
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
+            self.console_file.deactivate()
 
 
 class TQDMLogger(Logger, io.StringIO):
@@ -690,7 +699,7 @@ class TheProgressBarLogger(Logger):
 
         # Making sure the logger is going to write to the console
         # Make sure it does not write any prefix
-        config = config.update('console', True).update('format', '')
+        config = config.update({}, {'$set': {'console': True, 'format': ''}})
 
         super().__init__(config)
 
@@ -755,9 +764,6 @@ class TheProgressBarLogger(Logger):
         """Finishes and closes the TheProgressBar instance."""
 
         self._the_progress_bar.deactivate()
-
-        # Redirect the stream handler of the this logger to use stdout
-        self._handler.setStream(sys.stdout)
 
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the TheProgressBar progress bar with description set to message.

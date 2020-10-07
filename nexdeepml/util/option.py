@@ -208,7 +208,35 @@ class Option(Generic[T], ABC):
 
         Returns
         -------
+        A boolean indicating whether an internal value does not exist
+
+        """
+
+        pass
+
+    def is_defined(self) -> bool:
+        """Returns whether or not an internal value exist.
+
+        Returns
+        -------
         A boolean indicating whether an internal value exist
+
+        """
+
+        return not self.is_empty()
+
+    @abstractmethod
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
 
         """
 
@@ -307,7 +335,7 @@ class Some(Option):
     def flatten(self) -> Option[Any]:
         """Returns the nested Option value within."""
 
-        return self._value if isinstance(self._value, Some) else Nothing()
+        return self._value if isinstance(self._value, Some) else nothing
 
     def map(self, function: Callable[[T], Any]) -> Some:
         """Method to apply the function to the internal value.
@@ -357,7 +385,7 @@ class Some(Option):
 
         """
 
-        return self if function(self._value) is True else Nothing()
+        return self if function(self._value) is True else nothing
 
     def is_empty(self) -> bool:
         """Returns whether or not an internal value exist.
@@ -369,6 +397,22 @@ class Some(Option):
         """
 
         return False
+
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
+
+        """
+
+        return self._value == x
 
 
 class Nothing(Option):
@@ -511,3 +555,23 @@ class Nothing(Option):
         """
 
         return True
+
+    def contains(self, x: Any) -> bool:
+        """Tests whether the option contains a given value as an element.
+
+        Parameters
+        ----------
+        x : Any
+            The value to check against the internal value
+
+        Returns
+        -------
+        A boolean result of whether `x` is equal to internal value
+
+        """
+
+        return False
+
+
+# An instance that should be passed around and imported elsewhere
+nothing = Nothing()

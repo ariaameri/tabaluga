@@ -41,7 +41,7 @@ class TheProgressBar:
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
-        
+
         # Book keeping for the information regarding the progress bar
         initial_progress_bar_info = {
             'progress_bar': {  # Everything related to the string of the progress bar
@@ -169,9 +169,6 @@ class TheProgressBar:
         # Stop the run thread
         self.run_thread = None
 
-        # Print the progress bar and leave it
-        self._print_progress_bar(return_to_beginning=False)
-
         # Show cursor
         self._direct_write(self.cursor_modifier.get("show"))
 
@@ -180,6 +177,9 @@ class TheProgressBar:
             sys.stdout = self.original_sysout
         else:
             self._deactivate_external_stdout_handler()
+
+        # Print the progress bar and leave it
+        self._print_progress_bar(return_to_beginning=False)
 
     def run(self) -> None:
         """Prints the progress bar and takes care of other controls.

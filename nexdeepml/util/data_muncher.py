@@ -1,11 +1,9 @@
 from __future__ import annotations
-from typing import List, Dict, Any
-from types import FunctionType
-from .config import ConfigParser
-import re
+from typing import List, Dict, Any, Callable, Union
+from .panacea import Panacea, PanaceaLeaf
 
 
-class DataMuncher(ConfigParser):
+class DataMuncher(Panacea):
     """A class to contain all data in order."""
 
     # Set static variables
@@ -27,40 +25,71 @@ class DataMuncher(ConfigParser):
         elif type(data_dict) is not dict:
             data_dict = {'data': data_dict}
 
-        super().__init__(data_dict)
+        super().__init__(config_dict=data_dict, leaf_class=DataMuncherLeaf)
 
-    def map(self, function: FunctionType, filter_dict: Dict = {}, update_regex: str = ''):
+    def update_map(self,
+                   filter_dict: Dict = None,
+                   functions: Union[Callable[[Any], Any], List[Callable[[Any], Any]]] = None) \
+            -> DataMuncher:
+        """Applies the functions appeared in `functions` in order to the matched elements.
 
-        return self.map_helper(function, filter_dict, update_regex)
+        The filtering criteria should only result in leaf nodes.
+        The functions will be applied on the _value of the leaf node.
 
-    def map_helper(self, function: FunctionType, filter_dict: Dict = {}, update_regex: str = '', bc: str = '', bc_meta: str = ''):
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to Modification class for more info.
+        functions : Union[Callable[[Any], Any], List[Callable[[Any], Any]]]
+            (List of) functions to be applied on the elements in order
 
-        def map_helper(data, key_name: str = ''):
+        Returns
+        -------
+        An instance of DataMuncher class with the updated attribute
 
-            if type(data) is type(self):
-                out = data.map_helper(function, {}, update_regex, key_name, bc_meta)
-            elif type(data) == list:
-                out = [map_helper(item, key_name) for item in data]
+        """
+
+        # Update the filter criteria to make sure it selects only the leaf nodes
+        self_selector = filter_dict.get('_self')
+        if self_selector is not None:
+            function_selector = self_selector.get('$function')
+            if function_selector is not None:
+                if isinstance(function_selector, list):
+                    filter_dict['_self']['$function'] += [lambda x: x.is_leaf()]
+                else:
+                    filter_dict['_self']['$function'] = [filter_dict['_self']['$function'], lambda x: x.is_leaf()]
             else:
-                out = function(data) if re.search(update_regex, key_name) else data
+                filter_dict['_self']['$function'] = lambda x: x.is_leaf()
+        else:
+            filter_dict['_self'] = {'$function': lambda x: x.is_leaf()}
 
-            return out
+        # Make the appropriate update dictionary to call the superclass update method
+        update_dict = {'$function': {'_value': functions}}
 
-        bc_meta = bc_meta + self._parameters.get('_meta', '')
+        # Do the update
+        result = super().update(filter_dict=filter_dict, update_dict=update_dict)
 
-        if self._filter_checker(filter_dict, bc, bc_meta) is True:
-            value = {key: map_helper(value, bc + f'.{key}') for key, value in self._parameters.items()}
-            return self.__class__(value)
+        return result
 
-        final_dict = {**self._parameters,
-                      **{
-                          key: value.map_helper(function, filter_dict, update_regex, bc + f'.{key}', bc_meta)
-                          for key, value
-                          in self._parameters.items()
-                          if type(value) is type(self)
-                        }
-                      }
 
-        # TODO: what if I want to get to a variable directly with filtering and update it?
+class DataMuncherLeaf(PanaceaLeaf):
+    """A leaf node class to contain all data in order."""
 
-        return self.__class__(final_dict)
+    # Set static variables
+    item_begin_symbol = f'\u273f'
+    item_color = f'\033[33m'
+    begin_list_symbol = f'-'
+    begin_list_color = f'\033[38;5;70m'
+    begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
+
+    def __init__(self, value: Any):
+        """Initializes the class based on the input value.
+
+        Parameters
+        ----------
+        value : Any
+            The value to store
+        """
+
+        super().__init__(value)
