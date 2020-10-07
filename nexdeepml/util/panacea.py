@@ -266,7 +266,7 @@ class PanaceaBase(ABC):
         # Return
         return found_one
 
-    def update(self, filter_dict: Dict = None, update_dict: Dict = None) -> PanaceaBase:
+    def update(self, filter_dict: Dict = None, update_dict: Dict = None, condition_dict: Dict = None) -> PanaceaBase:
         """Update an entry in the config and return a new Panacea.
 
         Parameters
@@ -277,6 +277,9 @@ class PanaceaBase(ABC):
         update_dict : dict
             Dictionary containing the updating rules.
                 Refer to Modification class for more info.
+        condition_dict : dict
+            Dictionary containing the conditions of updating.
+                Refer to Modification class for more info.
 
         Returns
         -------
@@ -285,7 +288,7 @@ class PanaceaBase(ABC):
         """
 
         # Make the Modification instance
-        modifier = Modification(filter_dict=filter_dict, update_dict=update_dict)
+        modifier = Modification(filter_dict=filter_dict, update_dict=update_dict, condition_dict=condition_dict)
 
         # Perform the update
         updated: Option[(str, PanaceaBase)] = modifier.update(panacea=self)
