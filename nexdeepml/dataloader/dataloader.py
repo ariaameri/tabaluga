@@ -100,6 +100,8 @@ class DataManager(base.BaseEventManager, ABC):
         """
 
         check = False if file_name.startswith('.') else True
+        # Take care of MacOS special files
+        check &= file_name not in ['Icon\r']
 
         return check
 
