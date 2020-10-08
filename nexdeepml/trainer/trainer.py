@@ -45,7 +45,7 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Set the universal logger
         self._universal_logger = self._create_universal_logger()
-        self.set_logger(self._universal_logger)
+        self.set_universal_logger(self._universal_logger)
 
         # Register OS signals to be caught
         self._register_signal_catch()
