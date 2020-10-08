@@ -57,8 +57,14 @@ class BaseWorker:
         # Modify the message
         message = self._modify_log_message(msg, level)
 
+        # Momentarily change the name of the logger
+        self._universal_logger.set_name(f'{str(self.__class__.__name__)} via Universal Logger')
+
         # Log
         self._universal_logger.log(message, level)
+
+        # Change the name back
+        self._universal_logger.set_name(f'Universal Logger')
 
     def _modify_log_message(self, msg: str, level: str = 'debug') -> str:
         """Modifies the log message according to the level and returns it.
