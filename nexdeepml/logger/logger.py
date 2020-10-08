@@ -83,6 +83,18 @@ class Logger(BaseWorker):
             ))
         self._logger.addHandler(self._handler)
 
+    def set_name(self, name: str) -> None:
+        """Changes the name of the current logger handler
+
+        Parameters
+        ----------
+        name : str
+            New name to be set
+
+        """
+
+        self._logger.name = name
+
     def get_abilities(self) -> List[str]:
         """Method to return the list of abilities for the logger.
 
