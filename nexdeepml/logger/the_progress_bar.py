@@ -537,34 +537,46 @@ class TheProgressBar:
 
         return description
 
-    def get_progress_bar_string(self, return_to_beginning: bool = False) -> str:
+    def get_progress_bar_string(self, terminal_size: (int, int) = None, return_to_beginning: bool = False) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
+
+        Parameters
+        -------
+        terminal_size: (int, int), optional
+            User-defined terminal size so that the method behaves according to this size, mainly used in non-master mode
+        return_to_beginning: bool, optional
+            Whether to return the cursor to the beginning of the progress bar
 
         Returns
         -------
-        return_to_beginning: bool, optional
-            Whether to return the cursor to the beginning of the progress bar
+        String containing the progress bar
 
         """
 
         # Return only the string and not the '\n' at the end if we should not return to the beginning
-        result = self._get_progress_bar_with_spaces(return_to_beginning)
+        result = \
+            self._get_progress_bar_with_spaces(
+                terminal_size=terminal_size,
+                return_to_beginning=return_to_beginning
+        )
         result = result[:-1] if return_to_beginning is False else result
 
         return result
 
-    def _get_progress_bar_with_spaces(self, return_to_beginning: bool = True) -> str:
+    def _get_progress_bar_with_spaces(self, terminal_size: (int, int) = None, return_to_beginning: bool = True) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
 
         Returns
         -------
+        terminal_size: (int, int), optional
+            User-defined terminal size so that the method behaves according to this size, mainly used in non-master mode
         return_to_beginning: bool, optional
             Whether to return the cursor to the beginning of the progress bar
 
         """
 
         # Get the progress bar
-        progress_bar = self._make_and_get_progress_bar()
+        progress_bar = self._make_and_get_progress_bar(terminal_size=terminal_size)
 
         # Clear the line and write it
         # progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
@@ -614,8 +626,13 @@ class TheProgressBar:
         # Print the progress bar
         self._direct_write(progress_bar)
 
-    def _make_and_get_progress_bar(self) -> str:
+    def _make_and_get_progress_bar(self, terminal_size: (int, int) = None) -> str:
         """Returns a string containing the progress bar.
+
+        Parameters
+        ----------
+        terminal_size : (int, int), optional
+            The given terminal size so that the method behaves according to this size, mainly used in non-master mode
 
         Returns
         -------
@@ -624,7 +641,7 @@ class TheProgressBar:
         """
 
         # Get console's width and height
-        self._update_terminal_size()
+        self._update_terminal_size(terminal_size=terminal_size)
         columns, rows = self._get_terminal_size()
         # columns, rows = self._get_terminal_size()
 
@@ -719,10 +736,21 @@ class TheProgressBar:
 
         return (self.progress_bar_info.get('console.columns'), self.progress_bar_info.get('console.rows'))
 
-    def _update_terminal_size(self) -> None:
-        """Updates the stored data for the terminal size."""
+    def _update_terminal_size(self, terminal_size: (int, int) = None) -> None:
+        """Updates the stored data for the terminal size.
 
-        columns, rows = self._make_and_get_terminal_size()
+        Parameters
+        ----------
+        terminal_size: (int, int), optional
+            Optional terminal size to update the internal knowledge of terminal size. If not given, will be inferred
+                from the actual terminal.
+
+        """
+
+        if terminal_size is None:
+            columns, rows = self._make_and_get_terminal_size()
+        else:
+            columns, rows = terminal_size
 
         # Retrieve and store
         self.progress_bar_info = \
@@ -1162,8 +1190,13 @@ class TheProgressBarColored(TheProgressBar):
 
         return fractional_progress
 
-    def _make_and_get_progress_bar(self) -> str:
+    def _make_and_get_progress_bar(self, terminal_size: (int, int) = None) -> str:
         """Returns a string containing the progress bar.
+
+        Parameters
+        ----------
+        terminal_size : (int, int), optional
+            The given terminal size so that the method behaves according to this size, mainly used in non-master mode
 
         Returns
         -------
@@ -1172,7 +1205,7 @@ class TheProgressBarColored(TheProgressBar):
         """
 
         # Get the original progress bar
-        progress_bar = super()._make_and_get_progress_bar()
+        progress_bar = super()._make_and_get_progress_bar(terminal_size=terminal_size)
 
         # Always reset the color back to normal
         progress_bar += f'{CCC.reset.all}'
