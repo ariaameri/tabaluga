@@ -3,6 +3,7 @@ from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
 import cv2
 
 
@@ -50,12 +51,31 @@ class ImageLoader(dataloader.DataLoader):
 
         """
 
+        def load_single_image(row_tuple: (int, pd.Series)) -> np.ndarray:
+            """Helper method to load a single image.
+
+            Parameters
+            ----------
+            row_tuple : (int, pd.Series)
+                Input, which is an element returned by pd.DataFrame.iterrows(), that contains the 'path' column which
+                    contains the path to the image to be loaded
+
+            Returns
+            -------
+            Numpy array of the loaded image
+
+            """
+
+            return cv2.cvtColor(cv2.imread(row_tuple[1]['path']), cv2.COLOR_BGR2RGB)
+
+        # Load the images with max of 5 threads
+        thread_pool = ThreadPoolExecutor(5)
+
+        # Load the images
         images = np.array(
-            [
-                cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
-                for index, row
-                in metadata.iterrows()
-            ]
+            list(
+                thread_pool.map(load_single_image, metadata.iterrows())
+            )
         )
 
         return images
