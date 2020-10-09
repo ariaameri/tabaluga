@@ -84,6 +84,7 @@ class TheProgressBar:
         initial_state_info = {
             'activated': False,  # Whether the instance has been activated---it can be activated only once
             'paused': False,  # Whether we are on pause mode
+            'master': False,  # Whether we are in master mode, meaning we are responsible for printing the progress bar
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is None else False,
             'item': {
@@ -107,8 +108,16 @@ class TheProgressBar:
 
         return self.deactivate()
 
-    def activate(self) -> TheProgressBar:
+    def activate(self, master_mode: bool = True) -> TheProgressBar:
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
+
+        Parameters
+        ----------
+        master_mode : bool, optional
+            Whether this instance should behave in master mode.
+                When master mode is on, this instance takes care of printing the progress bar and takes care of stdout.
+                When master mode is off, this instance only updates its own state and can be accessed with the method
+                    `get_progress_bar_string` to retrieve the string of the progress bar.
 
         Returns
         -------
@@ -119,6 +128,9 @@ class TheProgressBar:
         # If the instance is already activated, skip
         if self.state_info.get('activated') is True:
             return self
+
+        # Update the master mode
+        self.state_info = self.state_info.update({}, {'master': master_mode})
 
         # Update the state to know we are activated
         self.state_info = self.state_info.update({}, {'activated': True})
@@ -131,6 +143,10 @@ class TheProgressBar:
                     {'_bc': '.time'},
                     {'time.initial_run_time': current_time, 'initial_progress_bar_time': current_time}
                 )
+
+        # If not in master mode, no need to print, thus return now
+        if master_mode is False:
+            return self
 
         # Redirect stdout just in case there is no stdout handler from outside
         if self.state_info.get('external_stdout_handler') is False:
@@ -408,7 +424,7 @@ class TheProgressBar:
             # Update the progress bar
             # self._update_bar_prefix()
             # self._update_bar_suffix()
-            self._update_progress_bar()
+            # self._update_progress_bar()
 
     class CursorModifier:
 
@@ -587,6 +603,10 @@ class TheProgressBar:
             Whether to return the cursor to the beginning of the progress bar
 
         """
+
+        # If we are in paused mode or non-master mode, do not do anything
+        if self.state_info.get('paused') is True or self.state_info.get('master') is False:
+            return
 
         # Get the progress bar with spaces
         progress_bar = self._get_progress_bar_with_spaces(return_to_beginning=return_to_beginning)
