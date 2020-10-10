@@ -389,6 +389,9 @@ class TheProgressBar:
         # Reset the current item counter
         self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}}, {'current_item_index': 0})
 
+        # Reset the description
+        self.set_description('')
+
         return self
 
     def update(self, count: int) -> None:
