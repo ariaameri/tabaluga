@@ -25,7 +25,7 @@ class BaseWorker:
         """
 
         # Set the configuration
-        self._config = config
+        self._config = config if config is not None else ConfigParser({})
 
         # Set the logger handler
         if config is not None:
