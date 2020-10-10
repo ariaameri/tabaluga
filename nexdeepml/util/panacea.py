@@ -6,6 +6,8 @@ import re
 from itertools import chain
 from .option import Some, nothing, Option
 from abc import ABC, abstractmethod
+import multiprocessing
+from concurrent.futures import ThreadPoolExecutor
 
 
 class PanaceaBase(ABC):
@@ -1252,6 +1254,8 @@ class Modification:
                 The keys/value possible pair are among these options:
                     - 'deep': True/False: tells the update rule whether it should go down deep and update. Otherwise,
                             if set to False, will update only the shallowest level matched.
+                    - 'thread_max_count': int: the maximum number of threads to use for multithreading updates.
+                    - 'process_max_count': int: the maximum number of processes to use for multithreading updates.
 
         Examples
         --------
@@ -1302,9 +1306,10 @@ class Modification:
 
         """
 
+        self.condition_dict = condition_dict or {}
+
         self.filter_dict = self.make_filter_dictionary(filter_dict or {})
         self.update_dict = self.make_update_dictionary(update_dict or {})
-        self.condition_dict = condition_dict or {}
 
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
@@ -1574,7 +1579,7 @@ class Modification:
     class Update:
         """A class that parses, holds and updates the update rules for Panacea."""
 
-        def __init__(self, query: Dict):
+        def __init__(self, query: Dict, condition_dict: Dict = None):
             """Initializer to the class which will parse the update rule/query and create the corresponding actions.
 
             Parameters
@@ -1619,12 +1624,30 @@ class Modification:
                             - $function: a boolean function to apply on the field
                                 the value should be the function that gets a single parameter and returns a bool
 
+            condition_dict : dict, optional
+            Dictionary containing the condition of update.
+                The keys/value possible pair are among these options:
+                    - 'thread_max_count': int: the maximum number of threads to use for multithreading updates.
+                    - 'process_max_count': int: the maximum number of processes to use for multithreading updates.
+
             """
 
             self.query = query
 
             # Parse the query and get the dictionary of functions corresponding to the queries
             self._query_dict: Dict[str, Callable[[Option], PanaceaBase]] = self._parser(self.query)
+
+            self.condition_dict = self._process_condition(condition_dict or {})
+
+        def _process_condition(self, condition_dict):
+
+            condition_dict['process_max_count'] = \
+                min(multiprocessing.cpu_count(), condition_dict.get('process_max_count') or 5)
+
+            condition_dict['thread_max_count'] = \
+                min(multiprocessing.cpu_count() * 5, condition_dict.get('process_max_count') or 5)
+
+            return condition_dict
 
         def _parser(self, query: Dict) -> Dict[str, Callable[[Option], PanaceaBase]]:
             """Method to parse the query given and turn it into actions or a list of functions to be called.
@@ -1685,6 +1708,13 @@ class Modification:
                     function = self._function
                 elif single_operator == '$map':
                     function = self._map
+                elif single_operator == '$map_on_value':
+                    function = self._map_on_value
+                elif single_operator == '$map_on_value_thread':
+                    function = self._map_on_value_thread
+                # TODO: FIx multiprocessing, it does not currently work
+                # elif single_operator == '$map_on_value_process':
+                #     function = self._map_on_value_process
                 else:
                     raise AttributeError(f"Such operator {single_operator} does not exist for updating!")
 
@@ -2129,7 +2159,8 @@ class Modification:
                 key : str
                     Name of the Option value
                 x : Option
-                    An Option value to 'map' `func` to
+                    An Option value to 'map' `func` to, the object within the Option has to have a map method, such as
+                        a PanaceaBase
 
                 Returns
                 -------
@@ -2144,6 +2175,235 @@ class Modification:
                     result = result.map(lambda a: a.map(func))
 
                 return result.map(lambda a: (key, a))
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
+
+            return helper
+
+        def _map_on_value(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[[str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by mapping the functions `funcs` to the
+            iterable element within the Option value. Thus, the given value has to be a leaf.
+
+            Note that the returned value is always a LIST.
+
+            The difference of this method and `_map` is that `_map` calls the method `map` on the received object
+                whereas the current method `_map_on_value` does the mapping on ITERABLE object itself within the
+                received object, which must be a PanaceaLeaf.
+
+                For example, if the input is PanacecLeaf([45, 46, 47]]) and we want to apply a function `func` to it,
+                    the method `map` will call `PanaceaLeaf([45, 46, 47]).map(func)`
+                    the method `map_on_value` will perform `map(func, [45, 46, 47])`
+
+            Parameters
+            ----------
+            funcs: Union[FunctionType, List[FunctionType]]
+                The (list of) function to map to the iterable element within Option value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to 'map' `func` to it. It should be noted that the object
+                    entrapped within the Option value has to be iterable.
+
+                    Note that the returned value is always a LIST.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to 'map' `func` to, the value within has to be a leaf containing an iterable
+                        If the value inside is not a leaf, will ignore
+
+                Returns
+                -------
+                Option value with the updated value which is a LIST
+
+                """
+
+                def extra_help(item):
+                    """Additional helper function to be passed as a new function to the `_map` method.
+
+                    Parameters
+                    ----------
+                    item : Any
+                        An iterable item (that is inside a leaf node)
+
+                    Returns
+                    -------
+                    A list of the result with the closure-ized functions applied
+
+                    """
+
+                    result = item
+
+                    # Apply all the functions in order
+                    for func in funcs:
+                        result = (func(item) for item in result)
+
+                    return list(result)
+
+                # Check if the item is a leaf and get its internal value
+                result = x.filter(lambda a: a.is_leaf())
+
+                # Pose this problem as a map problem on the leaf
+                return self._map(extra_help)(key, result)
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
+
+            return helper
+
+        # TODO: Try to fix this, the following does not work!
+        def _map_on_value_process(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[
+            [str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by mapping the functions `funcs` to the
+            iterable element within the Option value using multiprocessing. Thus, the given value has to be a leaf.
+
+            This method is just like the method `map_on_value` but utilizes multithreading.
+            The max number of workers can be given using the `condition_dict` in the initializer.
+
+            For more info, refer to the method `map_on_value`.
+
+            Parameters
+            ----------
+            funcs: Union[FunctionType, List[FunctionType]]
+                The (list of) function to map to the iterable element within Option value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to 'map' `func` to it using multiprocessing.
+                    It should be noted that the object entrapped within the Option value has to be iterable.
+
+                    Note that the returned value is always a LIST.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to 'map' `func` to, the value within has to be a leaf containing an iterable
+                        If the value inside is not a leaf, will ignore
+
+                Returns
+                -------
+                Option value with the updated value which is a LIST
+
+                """
+
+                def extra_help(item):
+                    """Additional helper function to be passed as a new function to the `_map` method.
+
+                    Parameters
+                    ----------
+                    item : Any
+                        An iterable item (that is inside a leaf node)
+
+                    Returns
+                    -------
+                    A list of the result with the closure-ized functions applied
+
+                    """
+
+                    result = item
+
+                    with multiprocessing.Pool(self.condition_dict.get('process_max_count')) as executor:
+                        # Apply all the functions in order
+                        for func in funcs:
+                            result = executor.map(func, result)
+
+                    return list(result)
+
+                # Check if the item is a leaf and get its internal value
+                result = x.filter(lambda a: a.is_leaf())
+
+                # Pose this problem as a map problem on the leaf
+                return self._map(extra_help)(key, result)
+
+            # Make sure the `funcs` is a list
+            funcs = [funcs] if not isinstance(funcs, list) else funcs
+
+            return helper
+
+        def _map_on_value_thread(self, funcs: Union[FunctionType, List[FunctionType]]) -> Callable[
+            [str, Option], Option]:
+            """Wrapper function for updating a value on an Option value by mapping the functions `funcs` to the
+            iterable element within the Option value using multithreading. Thus, the given value has to be a leaf.
+
+            This method is just like the method `map_on_value` but utilizes multithreading.
+            The max number of workers can be given using the `condition_dict` in the initializer.
+
+            For more info, refer to the method `map_on_value`.
+
+            Parameters
+            ----------
+            funcs: Union[FunctionType, List[FunctionType]]
+                The (list of) function to map to the iterable element within Option value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value, to 'map' `func` to it using multithreading.
+                    It should be noted that the object entrapped within the Option value has to be iterable.
+
+                    Note that the returned value is always a LIST.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to 'map' `func` to, the value within has to be a leaf containing an iterable
+                        If the value inside is not a leaf, will ignore
+
+                Returns
+                -------
+                Option value with the updated value which is a LIST
+
+                """
+
+                def extra_help(item):
+                    """Additional helper function to be passed as a new function to the `_map` method.
+
+                    Parameters
+                    ----------
+                    item : Any
+                        An iterable item (that is inside a leaf node)
+
+                    Returns
+                    -------
+                    A list of the result with the closure-ized functions applied
+
+                    """
+
+                    result = item
+
+                    with ThreadPoolExecutor(self.condition_dict.get('thread_max_count')) as executor:
+                        # Apply all the functions in order
+                        for func in funcs:
+                            result = executor.map(func, result)
+
+                    return list(result)
+
+                # Check if the item is a leaf and get its internal value
+                result = x.filter(lambda a: a.is_leaf())
+
+                # Pose this problem as a map problem on the leaf
+                return self._map(extra_help)(key, result)
 
             # Make sure the `funcs` is a list
             funcs = [funcs] if not isinstance(funcs, list) else funcs
@@ -2511,7 +2771,7 @@ class Modification:
         }
 
         # Process the update_dict and get a modified update dictionary
-        processed_update_dict: Dict = self.Update(update_dict).get_modified_query()
+        processed_update_dict: Dict = self.Update(update_dict, condition_dict=self.condition_dict).get_modified_query()
 
         # Split the dictionary into two keys: `field` and `_special`
         # The `field` key contains all the selectors corresponding to the name of the fields
