@@ -991,7 +991,11 @@ class TheProgressBar:
 
         """
 
-        average_item_per_second = self.statistics_info.get('average').get('average_item_per_update')
+        average_item_per_second = \
+            self.statistics_info.get('average.average_item_per_update') \
+            / \
+            self.statistics_info.get('average.average_time_per_update')
+
 
         return average_item_per_second
 
