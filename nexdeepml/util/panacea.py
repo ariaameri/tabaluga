@@ -95,17 +95,14 @@ class PanaceaBase(ABC):
         Parameters
         ----------
         item : str
-            Item to look for in the shallowest level
+            Item to look for in the shallowest level or in the deeper level where levels are separated by '.'
+                For example item1.item2 will look at item1 in the shallowest level and will look for item2 inside item1.
 
         Returns
         -------
         Value of the item
 
         """
-
-        # Get the item from the returned option
-        if '.' in item:
-            return self.get_option(item.split('.')[0]).get().get('.'.join(item.split('.')[1:]))
 
         out = self.get_option(item)
 
@@ -567,7 +564,8 @@ class Panacea(PanaceaBase):
         Parameters
         ----------
         item : str
-            Item to look for in the shallowest level
+            Item to look for in the shallowest level or in the deeper level where levels are separated by '.'
+                For example item1.item2 will look at item1 in the shallowest level and will look for item2 inside item1.
 
         Returns
         -------
@@ -575,6 +573,13 @@ class Panacea(PanaceaBase):
 
         """
 
+        # Go deeper if we see the pattern 'item1.item2'
+        if '.' in item:
+            return \
+                self.get_option(item.split('.')[0]).get()\
+                    .get_option('.'.join(item.split('.')[1:]))
+
+        # Look for the item and return it
         if item in self._parameters.keys():
             return Some(self._parameters.get(item))
         else:
