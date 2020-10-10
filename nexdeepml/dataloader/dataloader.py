@@ -5,6 +5,7 @@ from ..util.config import ConfigParser
 from typing import List
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
 
 class DataManager(base.BaseEventManager, ABC):
@@ -422,6 +423,10 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Set the metadata
         self.metadata: pd.DataFrame = metadata
 
+        # Flag for if we should load the data with multithreading
+        self.multithreading: bool = config.get_or_else('multithreading', True)
+        self.thread_count: int = config.get_or_else('multithreading_count', 5)
+
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1
         self.number_of_iterations: int = -1
@@ -478,7 +483,6 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self.number_of_iterations
 
-    @abstractmethod
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
 
@@ -490,6 +494,55 @@ class DataLoader(base.BaseEventWorker, ABC):
         Returns
         -------
         Loaded data
+
+        """
+
+        # Load the data
+        # Load data with multithreading
+        if self.multithreading is True:
+            # Load the data with threads
+            thread_pool = ThreadPoolExecutor(self.thread_count)
+            data = list(
+                    thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
+                )
+        else:
+            data = [
+                self.load_single_data(row[1]) for row in metadata.iterrows()
+            ]
+
+        data = self.load_data_post(data)
+
+        return data
+
+    @abstractmethod
+    def load_single_data(self, row: pd.Series):
+        """Loads a single file whose path is given.
+
+        Parameters
+        ----------
+        row : pd.Series
+            Pandas row entry of that specific data
+
+        Returns
+        -------
+        Loaded data
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_data_post(self, data: List):
+        """Reforms the data already loaded into the desired format.
+
+        Parameters
+        ----------
+        data : List
+            The already loaded data in a list
+
+        Returns
+        -------
+        Loaded data in the desired format
 
         """
 
