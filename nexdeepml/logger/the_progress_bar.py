@@ -404,7 +404,7 @@ class TheProgressBar:
 
         """
 
-        if count >= 0:
+        if count > 0:
             # Update current item
             self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
                                                      {'$inc': {'current_item_index': count}})
