@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 import albumentations as A
 from abc import abstractmethod
+from torchvision import transforms
 
 
 class ImageNormalizer(preprocess.Preprocess):
@@ -115,6 +116,56 @@ class ImageResizer(preprocess.Preprocess):
             raise Exception('Unrecognized format passed to the image resizer!')
 
         return output
+
+
+class ImageTransformationPyTorch(preprocess.Preprocess):
+    """Abstract class for image transformations using torchvision.transforms."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the pre-process instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed
+
+        """
+
+        super().__init__(config)
+
+        # Build the transformer
+        self.transformer: transforms.Compose = self.build_transformer()
+
+    @abstractmethod
+    def build_transformer(self) -> transforms.Compose:
+        """Abstract method to create the transformer for the torchvision.transforms library for image transformation.
+
+        Returns
+        -------
+        An instance of torchvision.transforms.Compose class to do the image transformation.
+
+        """
+
+        pass
+
+    def process(self, data: np.ndarray):
+        """Transforms the input images.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Single images to be transformed.
+
+        Returns
+        -------
+        The transformed image.
+
+        """
+
+        # Do the augmentations
+        trans_images = self.transformer(data)
+
+        return trans_images
 
 
 class ImageAugmentationAlbumentations(preprocess.Preprocess):
