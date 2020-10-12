@@ -202,6 +202,27 @@ class SampleLoggerCallback(ManagerCallback):
             **info
         })
 
+    def on_val_epoch_begin(self, info: Dict = None):
+
+        self.workers['logger'].on_val_epoch_begin({
+            'number_of_iterations': self.trainer.number_of_iterations,
+            'epoch': self.trainer.epoch,
+            **self.trainer.train_info_dict,
+        })
+
+    def on_val_batch_end(self, info: Dict = None):
+
+        info = {
+            'epoch': self.trainer.epoch,
+            **self.trainer.train_info_dict,  # Will stay the same
+            **self.trainer.val_info_dict
+        }
+
+        self.workers['logger'].on_val_batch_end({
+            'batch_size': 1,
+            **info
+        })
+
 
 class SampleCallbackManager(CallbackManager):
     """Simple CallbackManager that manages all instances of Callback's."""
