@@ -110,6 +110,10 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
+        # Reset the train and validation info dictionaries
+        self.train_info_dict = {}
+        self.val_info_dict = {}
+
         # Training
         if self.epoch == 0:
             self.on_train_begin()
