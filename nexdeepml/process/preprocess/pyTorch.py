@@ -23,7 +23,7 @@ class ToTorchTensor(preprocess.Preprocess):
         """
 
         # Set the dtype that should be used for conversion
-        self.dtype = config.dtype or torch.float
+        self.dtype = config.get_or_else('dtype', torch.float)
 
         super().__init__(config)
 
@@ -72,7 +72,7 @@ class ToTorchGPU(preprocess.Preprocess):
         super().__init__(config)
 
         # Bookkeeping for the number of the gpu to use
-        self.gpu_number: int = config.gpu_number or 0
+        self.gpu_number: int = config.get_or_else('gpu_number', 0)
 
         # Check to see if cuda is available and then create the device
         self.is_cuda_available: bool = torch.cuda.is_available()
