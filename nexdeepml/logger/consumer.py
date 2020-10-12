@@ -1,42 +1,57 @@
 from .logger import LoggerManager, Logger, TQDMLogger, TheProgressBarLogger
 from ..util.config import ConfigParser
 from typing import Dict
+import sys
+import signal
 
 
 class SampleLoggerManager(LoggerManager):
 
     def __init__(self, config: ConfigParser):
-
         super().__init__(config)
 
         self.create_workers()
 
     def create_workers(self):
-
-        self.workers['train_tqdm']: TQDMLogger
+        self.workers['train_tpb']: TheProgressBarLogger
 
     def on_train_begin(self, info: Dict = None):
-
-        self.workers['train_tqdm']: TQDMLogger = TQDMLogger(self._config.tqdm)
+        self.workers['train_tpb']: TheProgressBarLogger = \
+            TheProgressBarLogger(
+                self._config
+                    .get_or_else('TheProgressBar', ConfigParser())
+                    .update({}, {'$set': {'console_handler': self.console_file}})
+            ).activate()
 
     def on_train_epoch_begin(self, info: Dict = None):
-
         number_of_iterations = info['number_of_iterations']
         epochs = info['epochs']
         epoch = info['epoch']
 
-        self.workers['train_tqdm'].set_number_epochs(epochs)
-        self.workers['train_tqdm'].reset(number_of_iterations)
-        self.workers['train_tqdm'].update(0, {'epoch': epoch})
+        self.workers['train_tpb'].set_number_epochs(epochs)
+        self.workers['train_tpb'].reset(number_of_iterations)
+        self.workers['train_tpb'].update(0, {'epoch': epoch})
 
     def on_batch_end(self, info: Dict = None):
-
         batch_size = info.pop('batch_size')
-        self.workers['train_tqdm'].update(batch_size, info)
+        self.workers['train_tpb'].update(batch_size, info)
 
     def on_end(self, info: Dict = None):
+        self.workers['train_tpb'].close()
 
-        self.workers['train_tqdm'].close()
+    def on_os_signal(self, info: Dict = None):
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
+            self.workers['train_tpb'].close()
+
+        if os_signal == signal.SIGTSTP:
+            self.workers['train_tpb'].pause()
+
+        if os_signal == signal.SIGCONT:
+            self.workers['train_tpb'].resume()
+
+        super().on_os_signal(info)
 
 
 class SampleTheProgressBarLoggerManager(LoggerManager):
@@ -54,7 +69,11 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_train_begin(self, info: Dict = None):
 
         self.workers['train_tpb']: TheProgressBarLogger = \
-            TheProgressBarLogger(self._config.TheProgressBar).activate()
+            TheProgressBarLogger(
+                self._config
+                .get_or_else('TheProgressBar', ConfigParser())
+                .update('console_handler', self.console_file)
+            ).activate()
 
     def on_train_epoch_begin(self, info: Dict = None):
 
@@ -74,3 +93,12 @@ class SampleTheProgressBarLoggerManager(LoggerManager):
     def on_end(self, info: Dict = None):
 
         self.workers['train_tpb'].close()
+
+    def on_os_signal(self, info: Dict = None):
+
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT:
+            self.workers['train_tpb'].close()
+
+        super().on_os_signal(info)

@@ -1,34 +1,14 @@
 from .dataloader import DataLoaderManager, DataManager
 from .image import ImageLoader
 from ..util.config import ConfigParser
+from ..util.data_muncher import DataMuncher
 import numpy as np
 from typing import Dict, OrderedDict
 
 
-class SampleDataLoaderManager(DataLoaderManager):
-    """A simple DataLoaderManager that creates DataLoader's for its metadata."""
-
-    def __init__(self, config, metadata):
-        super().__init__(config, metadata)
-
-    # def __str__(self):
-    #     """Short explanation of the instance."""
-    #
-    #     string = f'Image data loader manager'
-    #
-    #     return string
-
-    def create_workers(self):
-        self.workers['image_loader'] = ImageLoader(self._config, self.metadata)
-
-    def __getitem__(self, item):
-
-        return self.workers[0][item]
-
-
 class SampleDataManager(DataManager):
     """A simple DataManager that creates train, val, and test DataLoaderManager and manages them."""
-    
+
     def __init__(self, config: ConfigParser):
         """Initialize the instance.
 
@@ -50,9 +30,24 @@ class SampleDataManager(DataManager):
     def create_workers(self):
         """Creates DataLoaderManagers (workers) for train, val, and test data."""
 
-        self.workers['train'] = SampleDataLoaderManager(self._config.train, self.train_metadata)
-        self.workers['val'] = SampleDataLoaderManager(self._config.val, self.val_metadata)
-        self.workers['test'] = SampleDataLoaderManager(self._config.test, self.test_metadata)
+        if not self.train_metadata.empty:
+            self.workers['train'] = \
+                SampleDataLoaderManager(
+                    self._config.get_or_else('train', None),
+                    self.train_metadata
+                )
+        if not self.val_metadata.empty:
+            self.workers['val'] = \
+                SampleDataLoaderManager(
+                    self._config.get_or_else('val', None),
+                    self.val_metadata
+                )
+        if not self.test_metadata.empty:
+            self.workers['test'] = \
+                SampleDataLoaderManager(
+                    self._config.get_or_else('test', None),
+                    self.test_metadata
+                )
 
     def on_train_epoch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, update the batch size of the train data loader."""
@@ -87,3 +82,36 @@ class SampleDataManager(DataManager):
         val_data = self.workers['val'][batch]
 
         return val_data
+
+
+class SampleDataLoaderManager(DataLoaderManager):
+    """A simple DataLoaderManager that creates DataLoader's for its metadata."""
+
+    def __init__(self, config, metadata):
+        super().__init__(config, metadata)
+
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image data loader manager'
+    #
+    #     return string
+
+    def modify_metadata(self) -> None:
+        """Modifies the metadata and groups them into separate multi-index-ed data frames based on folder name."""
+
+        super().modify_metadata()
+
+        self._regroup_metadata('folder_name', False)
+
+    def create_workers(self):
+
+        self.workers['image_loader'] = ImageLoader(self._config, self.metadata.loc['img'])
+        self.workers['label_loader'] = ImageLoader(self._config, self.metadata.loc['labels'])
+
+    def __getitem__(self, item):
+
+        images = self.workers['image_loader'][item]
+        labels = self.workers['label_loader'][item]
+
+        return DataMuncher({'data': images, 'labels': labels})

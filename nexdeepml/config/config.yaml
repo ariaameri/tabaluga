@@ -4,6 +4,10 @@ trainer:
   epochs:
     10
 
+  universal_logger:
+    name: 'Universal Logger'
+    console: True
+
   model:
     model:
       d_in:

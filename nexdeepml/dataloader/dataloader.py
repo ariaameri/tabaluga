@@ -1,11 +1,11 @@
 from abc import ABC, abstractmethod
-
+from pathlib import Path
 from ..base import base
 from ..util.config import ConfigParser
-import os
 from typing import List
 import pandas as pd
 import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 
 
 class DataManager(base.BaseEventManager, ABC):
@@ -28,18 +28,18 @@ class DataManager(base.BaseEventManager, ABC):
         self._folders: List[str] = []
 
         # Get the input type
-        self._input_type: str = config.input_type
+        self._input_type: str = config.get('input_type')
 
         # Get random seed and shuffle boolean
-        self._seed = config.seed if config.seed is not None else None
-        self._shuffle: bool = config.shuffle if config.shuffle is not None else False
+        self._seed = config.get_or_else('seed', None)
+        self._shuffle: bool = config.get_or_else('shuffle', False)
 
         # Get test and validation ratios
-        self._test_ratio: float = config.test_ratio if config.test_ratio is not None else 0
-        self._val_ratio: float = config.val_ratio if config.val_ratio is not None else 0
+        self._test_ratio: float = config.get_or_else('test_ratio', 0)
+        self._val_ratio: float = config.get_or_else('val_ratio', 0)
 
         # Set batch size
-        self.batch_size: int = config.batch_size
+        self.batch_size: int = config.get('batch_size')
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
@@ -67,23 +67,26 @@ class DataManager(base.BaseEventManager, ABC):
         elif self._input_type == 'mongo':
             self._build_metadata_from_mongo()
 
+        # Regroup the metadata based on the criteria of file name
+        self._regroup_metadata('file_name')
+
         # Generate the train, validation, and test metadata
         self._generate_train_val_test_metadata()
 
-    def _check_file(self, file_path: str) -> bool:
+    def _check_file(self, file_path: Path) -> bool:
         """"Helper function to check a single file.
 
         Parameters
         ----------
-        file_path : str
+        file_path : Path
             The path of the file
         """
 
         # Check that the file is not a folder
-        check = os.path.isfile(file_path)
+        check = file_path.is_file()
 
         # Check criteria for the file name
-        check = check & self._filter_file_name(file_path.split('/')[-1])
+        check &= self._filter_file_name(file_path.name)
 
         return check
 
@@ -97,6 +100,8 @@ class DataManager(base.BaseEventManager, ABC):
         """
 
         check = False if file_name.startswith('.') else True
+        # Take care of MacOS special files
+        check &= file_name not in ['Icon\r']
 
         return check
 
@@ -104,33 +109,36 @@ class DataManager(base.BaseEventManager, ABC):
         """This method goes over the specified folders, read files and creates a pandas data frame from them."""
 
         # Folders containing the data
-        self._folders: List[str] = self._config.folders
+        self._folders: List[str] = self._config.get('folders')
 
         # Check if folder list is given
         if self._folders is None:
             raise Exception("No folders given to read files from!")
         for folder in self._folders:
-            if os.path.exists(folder) is False:
+            if Path(folder).exists() is False:
                 raise Exception(f'The folder {folder} does not exist!')
 
-        file_nested_names = [os.listdir(folder) for folder in self._folders]  # File names in nested lists
+        file_nested_paths = [list(Path(folder).iterdir()) for folder in self._folders]  # File names in nested lists
+
         # Flatten the file names and make absolute paths
-        file_paths = [os.path.join(folder_name, file_name)
-                      for file_list, folder_name in zip(file_nested_names, self._folders)
-                      for file_name in file_list]
+        file_paths = [file_path
+                      for file_paths in file_nested_paths
+                      for file_path in file_paths]
         # Check each file based on the criteria
         file_paths = [file_path for file_path in file_paths if self._check_file(file_path)]
         # Retrieve the folder path and file names
-        folder_paths = [os.path.dirname(file_name)
-                        for file_name in file_paths]
-        file_names = [file_name.split('/')[-1]
-                      for file_name in file_paths]
+        folder_paths = [file_name.parent for file_name in file_paths]
+        folder_names = [folder_path.name for folder_path in folder_paths]
+        file_names = [file_path.stem for file_path in file_paths]
+        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
 
         # Create data frame of all the files in the folder
         self.metadata = pd.DataFrame({
-            'folder': folder_paths,
-            'filename': file_names,
-            'path': file_paths
+            'folder_path': [str(item) for item in folder_paths],
+            'folder_name': folder_names,
+            'file_name': file_names,
+            'file_extension': file_extensions,
+            'path': [str(item) for item in file_paths]
         })
 
     def _build_metadata_from_mongo(self) -> None:
@@ -138,11 +146,40 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
+    def _regroup_metadata(self, criterion=None) -> None:
+        """Groups the metadata.
+
+        Each group of data (e.g. containing data and label) should have.
+        Each group must have its own unique index, where indices are range.
+        Each group will be recovered by metadata.loc[index]
+
+        Parameters
+        ----------
+        criterion : str or List[str]
+            The name of the columns based on which the metadata should be categorized
+
+        """
+
+        if criterion is None:
+            return
+
+        # Group based on the criterion
+        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
+
+        # Rename the indices to be range
+        # Also rename the index level 0 name to be 'index' (instead of `criterion`)
+        metadata = metadata.rename(
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+        )
+        metadata.index.names = [None, *metadata.index.names[1:]]
+
+        self.metadata = metadata
+
     def _generate_train_val_test_metadata(self) -> None:
         """The method creates train, validation, and test metadata."""
 
         # Get count of each set
-        total_data_count = len(self.metadata)
+        total_data_count = self.metadata.index.get_level_values(0).unique().size
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -157,15 +194,25 @@ class DataManager(base.BaseEventManager, ABC):
         train_indices = indices[(test_count+val_count):]
 
         # Create the train, validation, and test metadata
-        self.test_metadata = self.metadata.iloc[test_indices]
-        self.val_metadata = self.metadata.iloc[val_indices]
-        self.train_metadata = self.metadata.iloc[train_indices]
+        self.test_metadata = self.metadata.loc[test_indices]
+        self.val_metadata = self.metadata.loc[val_indices]
+        self.train_metadata = self.metadata.loc[train_indices]
 
         # Update the column names of the data frames
         [self.train_metadata, self.val_metadata, self.test_metadata] = \
-            [df.assign(original_index=df.index).reset_index(drop=True)
-             for df
-             in [self.train_metadata, self.val_metadata, self.test_metadata]]
+            [
+                df
+                .assign(original_index=df.index.get_level_values(0))
+                .rename(
+                    index={
+                        key: value
+                        for value, key
+                        in enumerate(df.index.get_level_values(0).unique(), start=0)
+                    }
+                )
+                for df
+                in [self.train_metadata, self.val_metadata, self.test_metadata]
+            ]
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
@@ -222,6 +269,38 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Update the metadata
         self.metadata = self.metadata.iloc[selection]
+
+    def _regroup_metadata(self, criterion=None, reset_index: bool = True) -> None:
+        """Groups the metadata.
+
+        Each group of data (e.g. containing data and label) should have.
+        Each group must have its own unique index, where indices are range.
+        Each group will be recovered by metadata.loc[index]
+
+        Parameters
+        ----------
+        criterion : str or List[str]
+            The name of the columns based on which the metadata should be categorized
+        reset_index : bool, optional
+            Whether or not to reset the level-0 indexing to range. If not given, will reset
+
+        """
+
+        if criterion is None:
+            return
+
+        # Group based on the criterion
+        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
+
+        # Rename the indices to be range
+        # Also rename the index level 0 name to be 'index' (instead of criterion)
+        if reset_index:
+            metadata = metadata.rename(
+                index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+            )
+            metadata.index.names = [None, *metadata.index.names[1:]]
+
+        self.metadata = metadata
 
     def _check_file(self, file_path: str) -> bool:
         """"Helper function to check a single file.
@@ -344,6 +423,10 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Set the metadata
         self.metadata: pd.DataFrame = metadata
 
+        # Flag for if we should load the data with multithreading
+        self.multithreading: bool = config.get_or_else('multithreading', True)
+        self.thread_count: int = config.get_or_else('multithreading_count', 5)
+
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1
         self.number_of_iterations: int = -1
@@ -400,7 +483,6 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self.number_of_iterations
 
-    @abstractmethod
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
 
@@ -412,6 +494,55 @@ class DataLoader(base.BaseEventWorker, ABC):
         Returns
         -------
         Loaded data
+
+        """
+
+        # Load the data
+        # Load data with multithreading
+        if self.multithreading is True:
+            # Load the data with threads
+            thread_pool = ThreadPoolExecutor(self.thread_count)
+            data = list(
+                    thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
+                )
+        else:
+            data = [
+                self.load_single_data(row[1]) for row in metadata.iterrows()
+            ]
+
+        data = self.load_data_post(data)
+
+        return data
+
+    @abstractmethod
+    def load_single_data(self, row: pd.Series):
+        """Loads a single file whose path is given.
+
+        Parameters
+        ----------
+        row : pd.Series
+            Pandas row entry of that specific data
+
+        Returns
+        -------
+        Loaded data
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def load_data_post(self, data: List):
+        """Reforms the data already loaded into the desired format.
+
+        Parameters
+        ----------
+        data : List
+            The already loaded data in a list
+
+        Returns
+        -------
+        Loaded data in the desired format
 
         """
 

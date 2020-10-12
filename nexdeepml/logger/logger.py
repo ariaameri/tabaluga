@@ -5,14 +5,17 @@ from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
-from typing import Dict, List
+from typing import Dict, List, Union, Any
 import logging
 import sys
 from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
-from copy import deepcopy
+from numbers import Number
+from collections import OrderedDict
+import threading
+import signal
 
 
 class Logger(BaseWorker):
@@ -50,32 +53,47 @@ class Logger(BaseWorker):
         super().__init__(config)
 
         # The level at which we log
-        self._level: int = config.level if config.level is not None else logging.INFO
+        self._level: int = config.get_or_else('level', logging.INFO)
 
         # Get the logger
-        self._logger = logging.getLogger(config.name if config.name is not None else str(self._counter[0]))
+        self._logger = logging.getLogger(config.get_or_else('name', str(self._counter[0])))
         self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
 
         # TODO: Should we have logging to both the console and the file?
         # Determine whether to write to file or console and get the handlers
-        self.console = config.console
+        self.console = config.get_or_else('console', False)
         if self.console is True:
-            self._handler = logging.StreamHandler(sys.stdout)
+            # Get the handler
+            self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] =\
+                config.get_or_else('console_handler', sys.stdout)
+            self._handler = logging.StreamHandler(self.console_file)
         else:
             file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             file_name = f'{file_name}.txt'
-            self._handler = logging.FileHandler(config.file_name if config.file_name is not None else file_name)
+            self._handler = logging.FileHandler(config.get_or_else('file_name', file_name))
 
         # Set the level, format, and attach
-        self._handler.setLevel(config.level if config.level is not None else logging.INFO)
-        self._format = config.format if config.format is not None else self._create_format()
+        self._handler.setLevel(config.get_or_else('level', logging.INFO))
+        self._format = config.get_or_else('format', self._create_format())
         self._handler.setFormatter(
             logging.Formatter(
                 self._format
             ))
         self._logger.addHandler(self._handler)
+
+    def set_name(self, name: str) -> None:
+        """Changes the name of the current logger handler
+
+        Parameters
+        ----------
+        name : str
+            New name to be set
+
+        """
+
+        self._logger.name = name
 
     def get_abilities(self) -> List[str]:
         """Method to return the list of abilities for the logger.
@@ -234,6 +252,212 @@ class Logger(BaseWorker):
         self._handler.level = level
 
 
+class LoggerConsoleFile:
+    """Class to hold the console handler and act as one."""
+
+    def __init__(self):
+        
+        # Keep the stack of console (file) handlers to write to as an ordered dictionary
+        self.handlers_stack: OrderedDict[Any, LoggerConsoleFile.ConsoleFile] = \
+            OrderedDict({'sysout': self.ConsoleFile(sys.stdout)})
+
+        # Keep track of the active console handler
+        self.active_handler: Any = self.handlers_stack['sysout']
+
+        # Keep track of whether or not this class is activated
+        self.activated: bool = False
+
+        # A lock to control printing to the stdout
+        self.print_lock: threading.Lock = threading.Lock()
+
+    def __enter__(self):
+
+        self.activate()
+
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+
+        self.deactivate()
+
+        return self
+
+    def activate(self):
+        """Activate the class to do the redirection of the stdout to this class and redirect stdout."""
+
+        # Reroute stdout to this class to take care of all the printings
+        sys.stdout = self
+
+        # We are activated!
+        self.activated = True
+
+        return self
+
+    def deactivate(self):
+        """Deactivate the class and returns stdout to itself."""
+
+        # Revert stdout
+        sys.stdout = self.handlers_stack['sysout'].handler
+
+        # And... deactivated!
+        self.activated = False
+
+        return self
+
+    def find_active(self):
+        """Find the active handler on top of the stack and puts in in the self.active_handler variable."""
+
+        # Find the name of the name of the handler and if it is not paused,
+        for index in range(len(self.handlers_stack.keys()) - 1, -1, -1):
+            name = list(self.handlers_stack.keys())[index]
+            item = self.handlers_stack[name]
+            if item.ready() is True:
+                self.active_handler = item
+                return
+
+    def register_handler(self, handler):
+        """Add a console (file) handler to the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Add the handler if it does not exist
+        if handler not in self.handlers_stack.keys():
+            self.handlers_stack[handler] = self.ConsoleFile(handler)
+
+        # Update the new active handler
+        self.find_active()
+
+    def deregister_handler(self, handler):
+        """Delete a console (file) handler from the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Delete the handler if it exists
+        if handler in self.handlers_stack.keys():
+            del self.handlers_stack[handler]
+
+        # Update the new active handler
+        self.find_active()
+
+    def pause_handler(self, handler):
+        """Pause a console (file) handler on the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Pause the handler, i.e. call pause() on it
+        if handler in self.handlers_stack.keys():
+            self.handlers_stack[handler].pause()
+
+        # Update the new active handler
+        self.find_active()
+
+    def resume_handler(self, handler):
+        """Resumes a possible paused console (file) handler on the stack.
+
+        Parameters
+        ----------
+        handler
+            A console handler
+
+        """
+
+        # Resume the handler, i.e. call resume() on it
+        if handler in self.handlers_stack.keys():
+            self.handlers_stack[handler].resume()
+
+        # Update the new active handler
+        self.find_active()
+
+    def revert(self):
+        """Reverts the current handler to the previous one."""
+
+        # Revert only when it has more than 1 item in the stack
+        # if len(self.handlers_stack) > 1:
+        #     del self.handlers_stack[-1]
+
+        if len(self.handlers_stack.keys()) > 1:
+            del self.handlers_stack[list(self.handlers_stack.keys())[-1]]
+
+        # Update the new active handler
+        self.find_active()
+
+    def __getattr__(self, item):
+        """Look for the item in the item on top of the stack and then in sysout.stdout if could not find it."""
+
+        # If not activate yet, just return the attribute of stdout
+        if self.activated is False:
+            return getattr(self.handlers_stack['sysout'], item)
+
+        # Get the attribute from the active file
+        attr = getattr(self.active_handler, item)
+
+        # If the item could not be found, look in sysout finally
+        return attr or getattr(self.handlers_stack['sysout'], item)
+
+    class ConsoleFile:
+        """Nested class as a thin wrapper to only hold the stdout handler and its specifications."""
+
+        def __init__(self, handler):
+            """Initializer for the class.
+
+            Parameters
+            ----------
+            handler
+                Handler to stdout
+
+            """
+
+            # Set the handler
+            self.handler = handler
+
+            # Flag to know whether or not we are paused
+            self.paused = False
+
+        def pause(self) -> None:
+            """Method to pause using this handler."""
+
+            self.paused = True
+
+        def resume(self) -> None:
+            """Method to resume using this handler."""
+
+            self.paused = False
+
+        def ready(self) -> bool:
+            """Method to return whether or not this instance is ready to act as a console file or not.
+
+            Returns
+            -------
+            A boolean indicating whether it is ready to act a console file.
+
+            """
+
+            ready = not self.paused
+
+            return ready
+
+        def __getattr__(self, item):
+
+            attr = getattr(self.handler, item)
+
+            return attr
+
+
 class LoggerManager(BaseEventManager, ABC):
     """"An abstract class that manages Logger instances and calls their events on the occurrence of events."""
 
@@ -247,7 +471,19 @@ class LoggerManager(BaseEventManager, ABC):
 
         """
 
+        # Add the console handler
+        # Update each and every logger config that we have within our config
+        self.console_file = LoggerConsoleFile().activate()
+        config = config.update({'_bc': {'$regex': r'\.\w+$'}}, {'$set': {'console_handler': self.console_file}})
+
         super().__init__(config)
+
+    def on_os_signal(self, info: Dict = None):
+
+        os_signal = info['signal']
+
+        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
+            self.console_file.deactivate()
 
 
 class TQDMLogger(Logger, io.StringIO):
@@ -399,7 +635,7 @@ class TQDMLogger(Logger, io.StringIO):
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
@@ -475,12 +711,12 @@ class TheProgressBarLogger(Logger):
 
         # Making sure the logger is going to write to the console
         # Make sure it does not write any prefix
-        config = config.update('console', True).update('format', '')
+        config = config.update({}, {'$set': {'console': True, 'format': ''}})
 
         super().__init__(config)
 
         # Create the instance of the TheProgressBar
-        self._the_progress_bar = TheProgressBarColored()
+        self._the_progress_bar = TheProgressBarColored(self.console_file)
 
         # The number of total items and epochs
         self._total: int = -1
@@ -504,9 +740,6 @@ class TheProgressBarLogger(Logger):
         """
 
         self._the_progress_bar.activate()
-
-        # Redirect the stream handler of the this logger to use TPB
-        self._handler.setStream(self._the_progress_bar)
 
         return self
 
@@ -544,8 +777,15 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.deactivate()
 
-        # Redirect the stream handler of the this logger to use stdout
-        self._handler.setStream(sys.stdout)
+    def pause(self) -> None:
+        """Pauses the TheProgressBar instance."""
+
+        self._the_progress_bar.pause()
+
+    def resume(self) -> None:
+        """Resumes the TheProgressBar instance."""
+
+        self._the_progress_bar.resume()
 
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
         """Update the TheProgressBar progress bar with description set to message.
@@ -606,14 +846,15 @@ class TheProgressBarLogger(Logger):
                     message += f'{SUC.horizontal_bar} '
                     message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
                                f'{CCC.reset.all}: ' \
-                               f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
-                               f'{CCC.reset.all}' \
+                               f'{CCC.foreground.set_88_256.orange1}'
+                    message += f'{value: .5e}' if issubclass(type(value), Number) else f'{value}'
+                    message += f'{CCC.reset.all}' \
                                f'\n'
 
             return message
 
         # Make a copy of the dictionary to modify it
-        msg_dict_copy = deepcopy(msg_dict)
+        msg_dict_copy = {**msg_dict}
 
         message = ''
 
