@@ -41,11 +41,17 @@ class SampleDataManagerCallback(ManagerCallback):
     def on_train_epoch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, update the batch size of the train data loader."""
 
+        # Create the 'train' entry in the trainer's data
+        self.trainer.data = self.trainer.data.update({}, {'$set_on_insert': {'train': {}}})
+
         self.trainer.batch_size, self.trainer.number_of_iterations = \
             self.workers['data_manager'].on_train_epoch_begin()
 
     def on_val_epoch_begin(self, info: Dict = None):
         """On beginning of val epoch, update the batch size of the val data loader."""
+
+        # Create the 'val' entry in the trainer's data
+        self.trainer.data = self.trainer.data.update({}, {'$set_on_insert': {'val': {}}})
 
         self.trainer.batch_size, self.trainer.number_of_iterations = \
             self.workers['data_manager'].on_val_epoch_begin()
@@ -53,18 +59,38 @@ class SampleDataManagerCallback(ManagerCallback):
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, load the batch data and put it in the trainer."""
 
-        self.trainer.train_data = \
-            self.workers['data_manager'].on_batch_begin({
-                'batch': self.trainer.batch
-            })
+        # Update the training data
+        self.trainer.data = \
+            self.trainer.data.update(
+                {},
+                {'$update_only':
+                    {'train':
+                          self.workers['data_manager'].on_batch_begin(
+                              {
+                                  'batch': self.trainer.batch
+                              }
+                          )
+                    }
+                }
+            )
 
     def on_val_batch_begin(self, info: Dict = None):
         """On beginning of val epoch, load the batch data and put it in the trainer."""
 
-        self.trainer.val_data = \
-            self.workers['data_manager'].on_val_batch_begin({
-                'batch': self.trainer.batch
-            })
+        # Update the validation data
+        self.trainer.data = \
+            self.trainer.data.update(
+                {},
+                {'$update_only':
+                    {'val':
+                        self.workers['data_manager'].on_val_batch_begin(
+                            {
+                                'batch': self.trainer.batch
+                            }
+                        )
+                    }
+                }
+            )
 
 
 class SampleDataProcessCallback(ManagerCallback):
@@ -99,18 +125,38 @@ class SampleDataProcessCallback(ManagerCallback):
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train data."""
 
-        self.trainer.train_data = \
-            self.workers['data_process'].on_batch_begin({
-                'data': self.trainer.train_data
-            })
+        # Update the training data
+        self.trainer.data = \
+            self.trainer.data.update(
+                {},
+                {'$update_only':
+                    {'train':
+                        self.workers['data_process'].on_batch_begin(
+                            {
+                                'data': self.trainer.data.get('train')
+                            }
+                        )
+                    }
+                }
+            )
 
     def on_val_batch_begin(self, info: Dict = None):
         """On beginning of val epoch, process the loaded val data."""
 
-        self.trainer.val_data = \
-            self.workers['data_process'].on_val_batch_begin({
-                'data': self.trainer.val_data
-            })
+        # Update the validation data
+        self.trainer.data = \
+            self.trainer.data.update(
+                {},
+                {'$update_only':
+                    {'val':
+                        self.workers['data_process'].on_val_batch_begin(
+                            {
+                                'data': self.trainer.data.get('val')
+                            }
+                        )
+                    }
+                }
+            )
 
 
 class SampleLoggerCallback(ManagerCallback):
