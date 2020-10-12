@@ -193,8 +193,8 @@ class SampleLoggerCallback(ManagerCallback):
 
         info = {
             'epoch': self.trainer.epoch,
-            'train_loss': 1e-3,
-            'val_loss': 1e-3
+            **self.trainer.train_info_dict,
+            # **self.trainer.val_info_dict  # No need for validation here!
         }
 
         self.workers['logger'].on_batch_end({
