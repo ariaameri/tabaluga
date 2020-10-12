@@ -45,21 +45,37 @@ class SamplePyTorchTrainer(Trainer):
 
         self.optimizer = torch.optim.Adam(self.model.parameters())
 
-        self.criterion = torch.nn.MSELoss()
+        # self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.CrossEntropyLoss()
 
     def create_workers(self):
 
-        self.workers['callback'] = SampleCallbackManager(self._config.callback, self)
+        self.workers['callback'] = SampleCallbackManager(self._config.get('callback'), self)
 
     def create_model(self):
 
-        self.model = SamplePyTorchModelManager(self._config.model)
+        self.model = SamplePyTorchModelManager(self._config.get('model'))
 
     def train_one_batch(self) -> Dict:
 
-        return {}
+        # Get the neural net output
+        deep_out = self.model(self.data.get('train.data'))
+
+        self.optimizer.zero_grad()
+
+        loss = self.criterion(deep_out[0], self.data.get('train.labels'))
+
+        self.optimizer.step()
+
+        return {'train_loss': loss}
 
     def val_one_batch(self) -> Dict:
 
-        return {}
+        # Get the neural net output
+        with torch.no_grad():
+            deep_out = self.model(self.data.get('train.data'))
+
+            loss = self.criterion(deep_out[0], self.data.get('train.labels'))
+
+        return {'val_loss': loss}
 
