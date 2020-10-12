@@ -1,6 +1,6 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
-from typing import List, Dict, Union, Type
+from typing import List, Dict, Union
 from abc import ABC, abstractmethod
 import numpy as np
 import re
@@ -25,10 +25,11 @@ class BaseWorker:
         """
 
         # Set the configuration
-        self._config = config
+        self._config = config if config is not None else ConfigParser({})
 
-        # Set the logger handler placeholder
-        self._logger: Type[Logger]
+        # Set the logger handler
+        if config is not None:
+            self._universal_logger: Logger = config.get_or_else('universal_logger', None)
 
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
@@ -40,9 +41,9 @@ class BaseWorker:
 
         """
 
-        print(self._config.str_representation(depth=depth))
+        self._config.print(depth=depth)
 
-    def _log(self, msg: str, level: str = 'debug') -> None:
+    def _universal_log(self, msg: str, level: str = 'debug') -> None:
         """Logs the given message at the given level.
 
         Parameters
@@ -56,8 +57,14 @@ class BaseWorker:
         # Modify the message
         message = self._modify_log_message(msg, level)
 
+        # Momentarily change the name of the logger
+        self._universal_logger.set_name(f'{str(self.__class__.__name__)} via Universal Logger')
+
         # Log
-        self._logger.log(message, level)
+        self._universal_logger.log(message, level)
+
+        # Change the name back
+        self._universal_logger.set_name(f'Universal Logger')
 
     def _modify_log_message(self, msg: str, level: str = 'debug') -> str:
         """Modifies the log message according to the level and returns it.
@@ -77,17 +84,17 @@ class BaseWorker:
 
         return msg
 
-    def set_logger(self, logger: Type[Logger]) -> None:
+    def set_universal_logger(self, logger: Logger) -> None:
         """Set the instance of the general logger for this worker.
 
         Parameters
         ----------
-        logger : Type[Logger]
+        logger : Logger
             An instance of the Logger class of general logging
 
         """
 
-        self._logger = logger
+        self._universal_logger = logger
 
 
 class BaseManager(BaseWorker, ABC):
@@ -107,7 +114,7 @@ class BaseManager(BaseWorker, ABC):
 
         self.workers: Workers = Workers()
 
-    def get_worker(self, index: Union[str, int]) -> Type[BaseWorker]:
+    def get_worker(self, index: Union[str, int]) -> BaseWorker:
         """Returns the worker given its index.
 
         Parameters
@@ -141,21 +148,21 @@ class BaseManager(BaseWorker, ABC):
 
         raise NotImplementedError
 
-    def set_logger(self, logger: Type[Logger]) -> None:
+    def set_universal_logger(self, logger: Logger) -> None:
         """Set the instance of the general logger for this worker.
 
         Parameters
         ----------
-        logger : Type[Logger]
+        logger : Logger
             An instance of the Logger class of general logging
 
         """
 
-        super().set_logger(logger)
+        super().set_universal_logger(logger)
 
         # Set logger for the workers
         for worker in self.workers:
-            worker.set_logger(logger=self._logger)
+            worker.set_universal_logger(logger=self._universal_logger)
 
 
 class BaseEventWorker(BaseWorker):
@@ -870,14 +877,14 @@ class Workers:
         # Book keeping for iteration
         self._current_iteration_count: int = 0
 
-    def register_worker(self, name: str, worker: Type[BaseWorker], rank: int = -1) -> None:
+    def register_worker(self, name: str, worker: BaseWorker, rank: int = -1) -> None:
         """Registers a new worker (or manager).
 
         Parameters
         ----------
         name : str
             The name of the worker (or manager)
-        worker : Type[BaseWorker]
+        worker : BaseWorker
             The reference to the worker (or manager)
         rank : int, optional
             Rank of the worker (or manager) in the list. If not given, will insert at the end
@@ -900,14 +907,14 @@ class Workers:
 
         self.__dict__[name] = worker
 
-    def replace_worker(self, name: str, worker: Type[BaseWorker]) -> None:
+    def replace_worker(self, name: str, worker: BaseWorker) -> None:
         """Replaces an existing worker.
 
         Parameters
         ----------
         name : str
             The name of the worker to be replaced
-        worker : Type[BaseWorker]
+        worker : BaseWorker
             The worker reference to be replaced
 
         """
@@ -917,7 +924,7 @@ class Workers:
         else:
             raise Exception(f'Could not find the worker with the name {name} to replace it!')
 
-    def append(self, worker: Type[BaseWorker], name: str = None) -> None:
+    def append(self, worker: BaseWorker, name: str = None) -> None:
 
         def name_finder(guess: int = 0) -> str:
 
@@ -945,7 +952,7 @@ class Workers:
 
         return self
 
-    def __next__(self) -> Type[BaseWorker]:
+    def __next__(self) -> BaseWorker:
         """Iterate over the workers"""
 
         # If we have not run out of workers
@@ -963,7 +970,7 @@ class Workers:
             self._current_iteration_count = 0
             raise StopIteration
 
-    def __getitem__(self, item) -> Union[Type[BaseWorker], None]:
+    def __getitem__(self, item) -> Union[BaseWorker, None]:
         """Get a worker.
 
         item can be string, return worker by name, or int, return worker by rank.

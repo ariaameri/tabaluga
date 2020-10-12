@@ -3,6 +3,7 @@ from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List
+from concurrent.futures import ThreadPoolExecutor
 import cv2
 
 
@@ -32,33 +33,37 @@ class ImageLoader(dataloader.DataLoader):
     #
     #     return string
 
-    def load_data(self, metadata: pd.DataFrame) -> np.ndarray:
-        """Loads images provided in the metadata data frame.
+    def load_single_data(self, row: pd.Series) -> np.ndarray:
+        """Helper method to load a single image.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
-            Panda's data frame containing the image metadata to be loaded
+        row: pd.Series
+            The Pandas dataframe row corresponding to the current element
 
         Returns
         -------
-        Numpy array of images : np.ndarray
-
-        NOTE: This function returns a list of numpy arrays and not a single numpy array.
-                This is because images might be of different sizes and may need to be
-                preprocessed at a later time.
+        Numpy array of the loaded image
 
         """
 
-        images = np.array(
-            [
-                cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
-                for index, row
-                in metadata.iterrows()
-            ]
-        )
+        return cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
 
-        return images
+    def load_data_post(self, data: List) -> np.ndarray:
+        """Reforms the image data already loaded into a numpy array.
+
+        Parameters
+        ----------
+        data : List
+            The already loaded image data in a list
+
+        Returns
+        -------
+        Loaded data in numpy array format
+
+        """
+
+        return np.array(data)
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.

@@ -66,5 +66,5 @@ def symbols_unicode_modifier(symbols_unicode_dict: Dict) -> Dict:
 
 SymbolParser = ConfigParser
 
-SYMBOL_UNICODE_CONFIG = SymbolParser(symbols_unicode_modifier(symbols_unicode))
+SYMBOL_UNICODE_CONFIG = SymbolParser(symbols_unicode_modifier(symbols_unicode)).enable_debug_mode()
 

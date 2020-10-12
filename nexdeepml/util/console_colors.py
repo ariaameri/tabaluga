@@ -366,5 +366,5 @@ class ColorParser(ConfigParser):
         return f'{value}This is some sample text{self.reset.all}'
 
 
-CONSOLE_COLORS_CONFIG = ColorParser(console_color_modifier(console_colors))
+CONSOLE_COLORS_CONFIG = ColorParser(console_color_modifier(console_colors)).enable_debug_mode()
 

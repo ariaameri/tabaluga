@@ -4,10 +4,12 @@ from ..util.data_muncher import DataMuncher
 import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
+from ..logger.logger import Logger
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal
 import sys
+import os
 
 
 class Trainer(base.BaseEventManager, ABC):
@@ -19,7 +21,7 @@ class Trainer(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Total number of epochs, total batch count, batch size, current epoch, and current batch number
-        self.epochs: int = self._config.epochs
+        self.epochs: int = self._config.get('epochs')
         self.number_of_iterations: int = -1  # Has to be set by the data loader
         self.batch_size: int = -1  # Has to be set by the data loader
         self.epoch: int = 0
@@ -30,10 +32,10 @@ class Trainer(base.BaseEventManager, ABC):
         self.val_data: DataMuncher = DataMuncher()
 
         # Set placeholder for callbacks
-        self.callback: Type[CallbackManager] = self.create_callback()
+        self.callback: CallbackManager = self.create_callback()
 
         # Set placeholder for model
-        self.model: Type[ModelManager] = self.create_model()
+        self.model: ModelManager = self.create_model()
 
         # Create history list for keeping the history of the net
         self.history = []
@@ -41,15 +43,29 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_info_dict = {}
         self.val_info_dict = {}
 
-    def create_callback(self) -> Union[Type[CallbackManager], Type[Callback]]:
+        # Set the universal logger
+        self._universal_logger = self._create_universal_logger()
+        self.set_universal_logger(self._universal_logger)
+
+        # Register OS signals to be caught
+        self._register_signal_catch()
+
+    def create_callback(self) -> Union[CallbackManager, Callback]:
         """Creates an instance of the callback and returns it."""
 
         pass
 
-    def create_model(self) -> Union[Type[ModelManager], Type[Model]]:
+    def create_model(self) -> Union[ModelManager, Model]:
         """Creates an instance of the model and returns it."""
 
         pass
+
+    def _create_universal_logger(self) -> Logger:
+        """Creates a universal logger instance and returns it."""
+
+        logger = Logger(self._config.get('universal_logger'))
+
+        return logger
 
     def train(self) -> List[Dict]:
         """Performs the training and validation.
@@ -196,8 +212,28 @@ class Trainer(base.BaseEventManager, ABC):
         if os_signal == signal.SIGINT:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            self._universal_log('Interrupt signal received, exiting...', 'error')
             sys.exit(1)
         elif os_signal == signal.SIGTERM:
             info = {'signal': os_signal}
             self.on_os_signal(info)
+            self._universal_log('Termination signal received, exiting...', 'error')
             sys.exit(0)
+        elif os_signal == signal.SIGTSTP:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
+            self._universal_log('Terminal stop signal received.', 'warning')
+            signal.signal(os_signal, signal.SIG_DFL)
+            os.kill(os.getpid(), os_signal)
+        elif os_signal == signal.SIGCONT:
+            info = {'signal': os_signal}
+            self.on_os_signal(info)
+            self._universal_log('Continue signal received.', 'info')
+
+    def _register_signal_catch(self):
+        """Registers what signals should be caught by this instance."""
+
+        signal.signal(signal.SIGINT, self.signal_catcher)
+        signal.signal(signal.SIGTERM, self.signal_catcher)
+        signal.signal(signal.SIGTSTP, self.signal_catcher)
+        signal.signal(signal.SIGCONT, self.signal_catcher)
