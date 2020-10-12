@@ -1332,6 +1332,12 @@ class Modification:
                             the value should be the value to check the field against
                         - $function: a (list of) boolean function to apply on the field
                             the value should be the function that gets a single parameter and returns a bool
+                        - $or: a list of boolean queries to apply on the field and return the or of their results
+                            the value should be a list of queries
+                            * Currently, query of key '_bc' is not supported
+                        - $and: a list of boolean queries to apply on the field and return the and of their results
+                            the value should be a list of queries
+                            * Currently, query of key '_bc' is not supported
 
             Examples
             --------
@@ -1347,6 +1353,9 @@ class Modification:
 
             In this example, we want to filter based on function that checks if the value is int
             >>> {'$function': lambda a: isinstance(a, int)}
+
+            Let's have the value of `foo` to be 5 and the value of `bar` be either 6 or 8
+            >>> {'$and': [{'foo': 5}, {'$or': [{'bar': 6}, {'bar': 8}]}]}
 
             """
 
@@ -1396,6 +1405,10 @@ class Modification:
                     return self._regex(value)
                 elif single_operator == '$equal':
                     return self._equal(value)
+                elif single_operator == '$or':
+                    return self._or(value)
+                elif single_operator == '$and':
+                    return self._and(value)
                 else:
                     raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
 
@@ -1573,6 +1586,98 @@ class Modification:
                 """
 
                 return x.exist(lambda item: item == value)
+
+            return helper
+
+        def _or(self, criteria: List) -> Callable[[Option], bool]:
+            """Operator to 'or' the operators within.
+
+            Parameters
+            ----------
+            criteria : List
+                List containing the key/operators to be or-ed
+
+            Returns
+            -------
+            A function for filtering
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not Option x satisfies or of some operators.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value containing the instance of the Panacea
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x value satisfies any of the criteria
+
+                """
+
+                # Get the Panacea instance
+                panacea = x.get()
+
+                # Check all the criteria sequentially
+                for criterion in modifiers:
+
+                    # TODO: '_bc' does not work, fix it!
+                    # If any of the results is true, the whole thing is true
+                    if criterion.filter_check_self(panacea, '') is True:
+                        return True
+
+                return False
+
+            # Make modification off of the list of filters
+            modifiers: List[Modification] = [Modification(criterion) for criterion in criteria]
+
+            return helper
+
+        def _and(self, criteria: List) -> Callable[[Option], bool]:
+            """Operator to 'and' the operators within.
+
+            Parameters
+            ----------
+            criteria : List
+                List containing the key/operators to be and-ed
+
+            Returns
+            -------
+            A function for filtering
+
+            """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not Option x satisfies and of some operators.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value containing the instance of the Panacea
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x value satisfies all the criteria
+
+                """
+
+                # Get the Panacea instance
+                panacea = x.get()
+
+                # Check all the criteria sequentially
+                for criterion in modifiers:
+
+                    # TODO: '_bc' does not work, fix it!
+                    # If any of the results is false, the whole thing is false
+                    if criterion.filter_check_self(panacea, '') is False:
+                        return False
+
+                return True
+
+            # Make modification off of the list of filters
+            modifiers: List[Modification] = [Modification(criterion) for criterion in criteria]
 
             return helper
 
@@ -2582,15 +2687,22 @@ class Modification:
         """
 
         # Replace the key/value pairs whose value is not a dictionary with the '$equal' operator for the value
-        filter_dict = {
+        filter_dict_modified = {
             # Elements that are already in dictionary form that Filter class accept
-            **{key: value for key, value in filter_dict.items() if isinstance(value, dict)},
+            **{key: value for key, value in filter_dict.items()
+               if isinstance(value, dict) and not key.startswith('$')},
             # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
-            **{key: {'$equal': value} for key, value in filter_dict.items() if not isinstance(value, dict)}
+            **{key: {'$equal': value} for key, value in filter_dict.items()
+               if not isinstance(value, dict) and not key.startswith('$')}
         }
+        # Add operator keys
+        operators_dict = {key: value for key, value in filter_dict.items() if key.startswith('$')}
+        if operators_dict:
+            self_dict = filter_dict_modified.get('_self') or {}
+            filter_dict_modified['_self'] = {**self_dict, **operators_dict}
 
         # Process the criteria for each of the filter_dict fields into an instance of the Filter class
-        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict.items()}
+        processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict_modified.items()}
 
         # Split the dictionary into two keys: `field` and `_special`
         # The `field` key contains all the selectors corresponding to the name of the fields
