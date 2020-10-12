@@ -4,6 +4,7 @@ from abc import ABC
 import torch
 import numpy as np
 from .unet import unet
+from .joint_stem_detection.joint_stem_pytorch import CropWeed
 
 
 class SamplePyTorchModelManager(model.ModelPyTorchManager):
@@ -30,7 +31,9 @@ class SamplePyTorchModelManager(model.ModelPyTorchManager):
     def create_workers(self) -> None:
         """Creates model instances as workers."""
 
-        self.workers['model1'] = self.model1
+        # self.workers['model1'] = self.model1
+
+        self.workers['joint_stem'] = CropWeed()
 
     def forward(self, x):
         """Feedforward of the neural network.
@@ -42,7 +45,9 @@ class SamplePyTorchModelManager(model.ModelPyTorchManager):
 
         """
 
-        out = self.workers['model1'](x)
+        # out = self.workers['model1'](x)
+
+        out = self.workers['joint_stem'](x)
 
         return out
 
