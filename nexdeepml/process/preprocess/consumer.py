@@ -1,10 +1,14 @@
 from .preprocess import PreprocessManager, Preprocess
-from .image import ImageNormalizer, ImageResizer, BWHCToBCWH, OneHotDecoder
+from .image import BWHCToBCWH, OneHotDecoder, ImageAugmentationAlbumentations
+from .image import ImageTransformationPyTorch
+import albumentations as A
 from .pyTorch import ToTorchTensor, ToTorchGPU
 from ...util.config import ConfigParser
 from typing import Dict
 import numpy as np
 import torch
+from torchvision import transforms
+import cv2
 
 
 class BackgroundToColor(Preprocess):
@@ -63,6 +67,116 @@ class BackgroundToColor(Preprocess):
         return output
 
 
+class NecessaryTransformationalAugmentation(ImageAugmentationAlbumentations):
+    """Class to perform some necessary augmentations using Albumentations for preprocessing the data."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed
+
+        """
+
+        super().__init__(config)
+
+    def build_transformer(self) -> A.Compose:
+        """Creates the transformer for the albumentations package for necessary image augmentation as preprocessing.
+
+        Returns
+        -------
+        An instance of the albumentations.Compose class to do the image augmentations.
+
+        """
+
+        # Resize
+        resizer = A.Resize(
+            *self._config.get('resize.destination_image_size'),
+            interpolation=self._config.get_or_else('interpolation', cv2.INTER_AREA)
+        )
+
+        # Divide all pixels by 255 and return float32
+        normalizer = A.ToFloat(max_value=255)
+
+        compose = A.Compose([resizer, normalizer])
+
+        return compose
+
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """To make life easier, we assume only a single item is given as input and it is iterable.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A single numpy array consisting of at least 1 batch
+
+        Returns
+        -------
+        numpy array of the result
+
+        """
+
+        result = np.array([self.transformer(image=item)['image'] for item in data])
+
+        return result
+
+
+class TransformationsPyTorch(ImageTransformationPyTorch):
+    """Abstract class for image transformations using torchvision.transforms."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the pre-process instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed
+
+        """
+
+        super().__init__(config)
+
+        # Build the transformer
+        self.transformer: transforms.Compose = self.build_transformer()
+
+    def build_transformer(self) -> transforms.Compose:
+        """Abstract method to create the transformer for the torchvision.transforms library for image transformation.
+
+        Returns
+        -------
+        An instance of torchvision.transforms.Compose class to do the image transformation.
+
+        """
+
+        # Convert to torch tensor, from the form (W, H, C) to tensor of from (C, W, H)
+        to_tensor = transforms.ToTensor()
+
+        # Create the transformer object
+        transformer = transforms.Compose([to_tensor])
+
+        return transformer
+
+    def process(self, data: np.ndarray):
+        """To make life easier, we assume only a single item is given as input and it is iterable.
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A single numpy array consisting of at least 1 batch
+
+        Returns
+        -------
+        numpy array of the result
+
+        """
+
+        result = torch.stack([self.transformer(item) for item in data], 0)
+
+        return result
+
+
 class SampleImagePreprocessManager(PreprocessManager):
     """A simple class to manage Preprocess instances."""
 
@@ -92,13 +206,13 @@ class SampleImagePreprocessManager(PreprocessManager):
 
         self.workers['labels_background_to_color'] = BackgroundToColor(ConfigParser())
 
-        self.workers['image_resizer'] = ImageResizer(self._config.get('resize'))
+        self.workers['necessary_functional_aug'] = NecessaryTransformationalAugmentation(
+            self._config.filter({'_bc': {'$regex': r'(resize|normalize)$'}})
+        )
 
-        self.workers['image_normalizer'] = ImageNormalizer()
+        self.workers['pytorch_transforms'] = TransformationsPyTorch(ConfigParser())
 
-        self.workers['image_bwhc_to_bcwh'] = BWHCToBCWH()
-
-        self.workers['label_one_hot_decoder'] = OneHotDecoder(ConfigParser({"axis": 1}))
+        self.workers['label_one_hot_decoder'] = OneHotDecoder(ConfigParser({"axis": -1}))
 
         self.workers['to_torch_tensor'] = ToTorchTensor(ConfigParser())
 
@@ -110,63 +224,25 @@ class SampleImagePreprocessManager(PreprocessManager):
         # data = info['data']['data']
         data = info['data']
 
-        # labels = data.get('labels')
-        # labels = self.workers['labels_background_to_color'].process(labels)
-        # processed_data = data.update('labels', labels)
-        #
-        # # processed_data = self.workers['image_resizer'].resize(data)
-        # processed_data = processed_data.map(self.workers['image_resizer'].process)
-        # # processed_data = self.workers['image_normalizer'].normalize(processed_data)
-        # processed_data = processed_data.map(self.workers['image_normalizer'].process)
-        # processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
-        #
-        # labels = processed_data.get('labels')
-        # labels = self.workers['label_one_hot_decoder'].process(labels)
-        # processed_data = processed_data.update('labels', labels)
-
         processed_data = \
             data\
                 .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['labels_background_to_color'].process)\
                 .update_map({}, [
-                        self.workers['image_resizer'].process,
-                        self.workers['image_normalizer'].process,
-                        self.workers['image_bwhc_to_bcwh'].process
+                        self.workers['necessary_functional_aug'].process,
                     ])\
-                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['label_one_hot_decoder'].process)
-
-        data = processed_data.data
-        data = self.workers['to_torch_tensor'].process(data, dtype=torch.float)
-        processed_data = processed_data.update('data', data)
-
-        processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
+                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['label_one_hot_decoder'].process)\
+                .update({}, {'$map':
+                        {'data': self.workers['pytorch_transforms'].process,
+                         'labels': lambda x: self.workers['to_torch_tensor'].process(x, dtype=torch.long)}}
+                    )\
+                .update_map({}, self.workers['to_torch_gpu'].process)
 
         return processed_data
 
     def on_val_batch_begin(self, info: Dict = None):
         """On beginning of val epoch, process the loaded val image data."""
 
-        data = info['data']
-
-        labels = data.labels
-        labels = self.workers['labels_background_to_color'].process(labels)
-        processed_data = data.update('labels', labels)
-
-        # processed_data = self.workers['image_resizer'].resize(data)
-        processed_data = processed_data.map(self.workers['image_resizer'].process)
-        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
-        processed_data = processed_data.map(self.workers['image_normalizer'].process)
-        processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
-
-        labels = processed_data.labels
-        labels = self.workers['label_one_hot_decoder'].process(labels)
-        labels = self.workers['to_torch_tensor'].process(labels, dtype=torch.long)
-        processed_data = processed_data.update('labels', labels)
-
-        data = processed_data.data
-        data = self.workers['to_torch_tensor'].process(data, dtype=torch.float)
-        processed_data = processed_data.update('data', data)
-
-        processed_data = processed_data.map(self.workers['to_torch_tensor'].process)
-        processed_data = processed_data.map(self.workers['to_torch_gpu'].process)
+        # Validation and train preprocessings are the same
+        processed_data = self.on_batch_begin(info)
 
         return processed_data
