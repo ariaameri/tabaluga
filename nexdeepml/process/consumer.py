@@ -1,11 +1,11 @@
-from .process import ProcessManager
+from .process import ProcessManager, Process
 from .preprocess.consumer import SampleImagePreprocessManager
 from ..util.config import ConfigParser
 from typing import Dict
 
 
-class SampleImageProcessManager(ProcessManager):
-    """Simple ProcessManager class that manages pre- and post-process managers."""
+class SampleProcessManager(ProcessManager):
+    """Simple ProcessManager class that manages processes and pre- and post-process managers."""
 
     def __init__(self, config: ConfigParser):
         """Initializes the instance.
@@ -34,7 +34,7 @@ class SampleImageProcessManager(ProcessManager):
         self.workers['preprocess'] = SampleImagePreprocessManager(self._config.get('preprocess'))
 
     def on_batch_begin(self, info: Dict = None):
-        """On beginning of (train) epoch, process the loaded train data."""
+        """On beginning of (train) batch, process the loaded train data."""
 
         data = info['data']
         processed_data = self.workers['preprocess'].on_batch_begin({'data': data})

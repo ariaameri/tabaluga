@@ -5,7 +5,7 @@ from ..logger.consumer import SampleLoggerManager, SampleTheProgressBarLoggerMan
 from ..util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
-from ..process.consumer import SampleImageProcessManager
+from ..process.consumer import SampleProcessManager
 from tqdm import tqdm
 
 
@@ -93,7 +93,7 @@ class SampleDataManagerCallback(ManagerCallback):
             )
 
 
-class SampleDataProcessCallback(ManagerCallback):
+class SampleProcessCallback(ManagerCallback):
     """Simple class to create and initialize data process callback and ProcessManager instance."""
 
     def __init__(self, config: ConfigParser, trainer=None):
@@ -120,7 +120,7 @@ class SampleDataProcessCallback(ManagerCallback):
     def create_workers(self):
         """Create the ProcessManager instance"""
 
-        self.workers['data_process'] = SampleImageProcessManager(self._config)
+        self.workers['data_process'] = SampleProcessManager(self._config)
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train data."""
@@ -239,7 +239,7 @@ class SampleCallbackManager(CallbackManager):
                 self.trainer
             )
         self.workers['process'] = \
-            SampleDataProcessCallback(
+            SampleProcessCallback(
                 self._config.get_or_else('process', None),
                 self.trainer
             )
