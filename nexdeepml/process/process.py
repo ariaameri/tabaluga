@@ -19,3 +19,19 @@ class ProcessManager(base.BaseEventManager, ABC):
         """
 
         super().__init__(config)
+
+
+class Process(base.BaseWorker, ABC):
+    """Abstract class for Process instances."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this instance.
+
+        """
+
+        super().__init__(config)
