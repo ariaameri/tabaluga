@@ -1,7 +1,5 @@
 from abc import ABC
 from ..base import base
-from .preprocess import preprocess
-from .postprocess import postprocess
 from ..util.config import ConfigParser
 
 
@@ -15,6 +13,22 @@ class ProcessManager(base.BaseEventManager, ABC):
         ----------
         config : ConfigParser
             The configuration needed for this instance and its workers.
+
+        """
+
+        super().__init__(config)
+
+
+class Process(base.BaseWorker, ABC):
+    """Abstract class for Process instances."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this instance.
 
         """
 

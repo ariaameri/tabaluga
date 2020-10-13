@@ -2322,8 +2322,10 @@ class Modification:
                 key : str
                     Name of the Option value
                 x : Option
-                    An Option value to 'map' `func` to, the value within has to be a leaf containing an iterable
-                        If the value inside is not a leaf, will ignore
+                    An Option value to 'map' `func` to, the value within has to be either
+                        - a leaf containing an iterable
+                        - an iterable
+                        If the value inside is neither, will ignore
 
                 Returns
                 -------
@@ -2353,11 +2355,22 @@ class Modification:
 
                     return list(result)
 
-                # Check if the item is a leaf and get its internal value
-                result = x.filter(lambda a: a.is_leaf())
+                # If the internal value for Option is a leaf
+                if x.is_defined():
+                    if issubclass(type(x.get), PanaceaLeaf):
 
-                # Pose this problem as a map problem on the leaf
-                return self._map(extra_help)(key, result)
+                        # Check if the item is a leaf and get its internal value
+                        # result = x.filter(lambda a: a.is_leaf())
+
+                        # Pose this problem as a map problem on the leaf
+                        return self._map(extra_help)(key, x)
+
+                    # If the internal value is not a node but an iterable
+                    else:
+
+                        return Some((key, extra_help(x.get())))
+
+                return x
 
             # Make sure the `funcs` is a list
             funcs = [funcs] if not isinstance(funcs, list) else funcs
@@ -2472,8 +2485,10 @@ class Modification:
                 key : str
                     Name of the Option value
                 x : Option
-                    An Option value to 'map' `func` to, the value within has to be a leaf containing an iterable
-                        If the value inside is not a leaf, will ignore
+                    An Option value to 'map' `func` to, the value within has to be either
+                        - a leaf containing an iterable
+                        - an iterable
+                        If the value inside is neither, will ignore
 
                 Returns
                 -------
@@ -2504,11 +2519,22 @@ class Modification:
 
                     return list(result)
 
-                # Check if the item is a leaf and get its internal value
-                result = x.filter(lambda a: a.is_leaf())
+                # If the internal value for Option is a leaf
+                if x.is_defined():
+                    if issubclass(type(x.get), PanaceaLeaf):
 
-                # Pose this problem as a map problem on the leaf
-                return self._map(extra_help)(key, result)
+                        # Check if the item is a leaf and get its internal value
+                        # result = x.filter(lambda a: a.is_leaf())
+
+                        # Pose this problem as a map problem on the leaf
+                        return self._map(extra_help)(key, x)
+
+                    # If the internal value is not a node but an iterable
+                    else:
+
+                        return Some((key, extra_help(x.get())))
+
+                return x
 
             # Make sure the `funcs` is a list
             funcs = [funcs] if not isinstance(funcs, list) else funcs
@@ -2875,15 +2901,20 @@ class Modification:
         """
 
         # Replace the key/value pairs whose value is not a dictionary with '$set' operator
-        update_dict = {
+        modified_update_dict = {
             # Elements that are already in dictionary form that Update class accept assuming operators are fine
-            **{key: value for key, value in update_dict.items() if isinstance(value, dict)},
-            # Elements that are not in dictionary form are set to '$set' operator for the Update class
-            **{'$set': {key: value} for key, value in update_dict.items() if not isinstance(value, dict)}
+            **{key: value for key, value in update_dict.items() if isinstance(value, dict)}
         }
+        # Elements that are not in dictionary form are set to '$set' operator for the Update class
+        set_dict = {
+            key: value for key, value in update_dict.items() if not isinstance(value, dict)
+        }
+        # If the '$set' operator already exists, extend it, otherwise, put it there
+        modified_update_dict['$set'] = {**(modified_update_dict.get('$set') or {}), **set_dict}
 
         # Process the update_dict and get a modified update dictionary
-        processed_update_dict: Dict = self.Update(update_dict, condition_dict=self.condition_dict).get_modified_query()
+        processed_update_dict: Dict = \
+            self.Update(modified_update_dict, condition_dict=self.condition_dict).get_modified_query()
 
         # Split the dictionary into two keys: `field` and `_special`
         # The `field` key contains all the selectors corresponding to the name of the fields

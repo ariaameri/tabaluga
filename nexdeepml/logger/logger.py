@@ -756,8 +756,26 @@ class TheProgressBarLogger(Logger):
         # The number of total epochs
         self._n_epochs: int = epochs
 
-    def reset(self, total: int) -> TheProgressBarLogger:
+    def _custom_reset(self, total: int, return_to_line_number: int = 0) -> TheProgressBarLogger:
         """Set the total number of iterations and resets the the_progress_bar.
+
+        Parameters
+        ----------
+        total : int
+            the total number of items expected.
+        return_to_line_number: int, optional
+            The number of the line to return to the beginning of, after the progress bar
+
+        """
+
+        self._the_progress_bar.reset(return_to_line_number=return_to_line_number)
+        self._the_progress_bar.set_number_items(total)
+        self._total = total
+
+        return self
+
+    def reset(self, total: int) -> TheProgressBarLogger:
+        """Set the total number of iterations and prints and resets the the_progress_bar.
 
         Parameters
         ----------
@@ -766,11 +784,31 @@ class TheProgressBarLogger(Logger):
 
         """
 
-        self._the_progress_bar.reset()
-        self._the_progress_bar.set_number_items(total)
-        self._total = total
+        return self._custom_reset(total=total, return_to_line_number=-1)
 
-        return self
+    def reset_bar_only(self, total: int) -> TheProgressBarLogger:
+        """Set the total number of iterations and resets only the bar of the the_progress_bar.
+
+        Parameters
+        ----------
+        total : int
+            the total number of items expected.
+
+        """
+
+        return self._custom_reset(total=total, return_to_line_number=0)
+
+    def reset_to_next_line(self, total: int) -> TheProgressBarLogger:
+        """Set the total number of iterations and resets only the bar of the the_progress_bar.
+
+        Parameters
+        ----------
+        total : int
+            the total number of items expected.
+
+        """
+
+        return self._custom_reset(total=total, return_to_line_number=1)
 
     def close(self) -> None:
         """Finishes and closes the TheProgressBar instance."""

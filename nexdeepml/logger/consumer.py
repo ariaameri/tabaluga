@@ -36,6 +36,19 @@ class SampleLoggerManager(LoggerManager):
         batch_size = info.pop('batch_size')
         self.workers['train_tpb'].update(batch_size, info)
 
+    def on_val_epoch_begin(self, info: Dict = None):
+
+        # info should contain number_of_iterations, the epoch and train loss
+        number_of_iterations = info.pop('number_of_iterations')
+
+        self.workers['train_tpb'].reset_to_next_line(number_of_iterations)
+        self.workers['train_tpb'].update(0, info)
+
+    def on_val_batch_end(self, info: Dict = None):
+
+        batch_size = info.pop('batch_size')
+        self.workers['train_tpb'].update(batch_size, info)
+
     def on_end(self, info: Dict = None):
         self.workers['train_tpb'].close()
 

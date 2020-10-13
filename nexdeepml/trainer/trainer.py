@@ -28,8 +28,7 @@ class Trainer(base.BaseEventManager, ABC):
         self.batch: int = 0
 
         # Set placeholders for the train and validation data
-        self.train_data: DataMuncher = DataMuncher()
-        self.val_data: DataMuncher = DataMuncher()
+        self.data: DataMuncher = DataMuncher()
 
         # Set placeholder for callbacks
         self.callback: CallbackManager = self.create_callback()
