@@ -205,7 +205,7 @@ class TheProgressBar:
             self._deactivate_external_stdout_handler()
 
         # Print the progress bar and leave it
-        self._print_progress_bar(return_to_beginning=False)
+        self._print_progress_bar(return_to_line_number=-1)
 
     def pause(self) -> TheProgressBar:
         """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
@@ -364,8 +364,13 @@ class TheProgressBar:
 
         return self
 
-    def reset(self) -> TheProgressBar:
+    def reset(self, return_to_line_number: int = -1) -> TheProgressBar:
         """Resets the progress bar and returns its instance.
+
+        Parameters
+        ----------
+        return_to_line_number: int, optional
+            The line number to return to
 
         Returns
         -------
@@ -375,7 +380,7 @@ class TheProgressBar:
 
         # Print the progress bar and leave it if we have done any progress
         if self.state_info.get('item.current_item_index') != 0:
-            self._print_progress_bar(return_to_beginning=False)
+            self._print_progress_bar(return_to_line_number=return_to_line_number)
 
         # Set the initial time
         current_time = time.time()
@@ -387,7 +392,10 @@ class TheProgressBar:
                 )
 
         # Reset the current item counter
-        self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}}, {'current_item_index': 0})
+        self.state_info = self.state_info.update(
+            {'_bc': {'$regex': 'item$'}},
+            {'$set': {'current_item_index': 0, 'total_items_count': -1}}
+        )
 
         # Reset the description
         self.set_description('')
@@ -540,15 +548,15 @@ class TheProgressBar:
 
         return description
 
-    def get_progress_bar_string(self, terminal_size: (int, int) = None, return_to_beginning: bool = False) -> str:
+    def get_progress_bar_string(self, terminal_size: (int, int) = None, return_to_line_number: int = 0) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
 
         Parameters
         -------
         terminal_size: (int, int), optional
             User-defined terminal size so that the method behaves according to this size, mainly used in non-master mode
-        return_to_beginning: bool, optional
-            Whether to return the cursor to the beginning of the progress bar
+        return_to_line_number: int, optional
+            The number of the line to return to the beginning of, after the progress bar
 
         Returns
         -------
@@ -560,21 +568,21 @@ class TheProgressBar:
         result = \
             self._get_progress_bar_with_spaces(
                 terminal_size=terminal_size,
-                return_to_beginning=return_to_beginning
+                return_to_line_number=return_to_line_number
         )
-        result = result[:-1] if return_to_beginning is False else result
+        result = result[:-1] if return_to_line_number == -1 else result
 
         return result
 
-    def _get_progress_bar_with_spaces(self, terminal_size: (int, int) = None, return_to_beginning: bool = True) -> str:
+    def _get_progress_bar_with_spaces(self, terminal_size: (int, int) = None, return_to_line_number: int = 0) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
 
         Returns
         -------
         terminal_size: (int, int), optional
             User-defined terminal size so that the method behaves according to this size, mainly used in non-master mode
-        return_to_beginning: bool, optional
-            Whether to return the cursor to the beginning of the progress bar
+        return_to_line_number: int, optional
+            The number of the line to return to the beginning of, after the progress bar
 
         """
 
@@ -586,36 +594,46 @@ class TheProgressBar:
         progress_bar_with_space: str = self.cursor_modifier.get('clear_until_end')
         progress_bar_with_space += f'{progress_bar}'
 
-        if return_to_beginning:
-            # Get the progress bar without special characters
-            progress_bar_with_space_without_special_chars = self._remove_non_printing_chars(progress_bar_with_space)
-            # Get the terminal size
-            console_columns, _ = self._get_terminal_size()
-            # Figure how many lines will be wrapped to the next
-            number_of_lines = \
-                sum(
-                    (len(item.expandtabs())-1) // console_columns
-                    for item
-                    in progress_bar_with_space_without_special_chars.split('\n')
-                    if item != ''
-                )
-            # Figure how many lines we have
-            number_of_lines += progress_bar.count(f'\n')
-            # Compensate for the lines to be printed and go back to the beginning of all of them
-            progress_bar_with_space += self.cursor_modifier.get('up', number_of_lines) if number_of_lines != 0 else ''
-            progress_bar_with_space += f'\r'
-        else:
-            progress_bar_with_space += f'\n'
+        # Get the number of lines
+
+        # Get the progress bar without special characters
+        progress_bar_with_space_without_special_chars = self._remove_non_printing_chars(progress_bar_with_space)
+        # Get the terminal size
+        console_columns, _ = self._get_terminal_size()
+        # Figure how many lines will be wrapped to the next
+        number_of_lines = \
+            sum(
+                (len(item.expandtabs()) - 1) // console_columns
+                for item
+                in progress_bar_with_space_without_special_chars.split('\n')
+                if item != ''
+            )
+        # Figure how many lines we have
+        number_of_lines += progress_bar.count(f'\n')
+
+        # Recalculate the return_to_line_number in case of negative numbers
+        return_to_line_number = \
+            return_to_line_number \
+                if return_to_line_number >= 0 \
+                else number_of_lines + 1 + 1 + return_to_line_number
+
+        # The total number of lines we need to go up or return
+        return_line_count = number_of_lines - return_to_line_number
+
+        # Compensate for the lines to be printed and go back to the beginning of all of them
+        progress_bar_with_space += self.cursor_modifier.get('up', return_line_count) if return_line_count > 0 else ''
+        progress_bar_with_space += f'\r'
+        progress_bar_with_space += f'\n' if return_line_count == -1 else ''
 
         return progress_bar_with_space
 
-    def _print_progress_bar(self, return_to_beginning: bool = True) -> None:
+    def _print_progress_bar(self, return_to_line_number: int = 0) -> None:
         """Clears the line and prints the progress bar
 
         Returns
         -------
-        return_to_beginning: bool, optional
-            Whether to return the cursor to the beginning of the progress bar
+        return_to_line_number: int, optional
+            The number of the line to return to the beginning of, after the progress bar
 
         """
 
@@ -624,7 +642,7 @@ class TheProgressBar:
             return
 
         # Get the progress bar with spaces
-        progress_bar = self._get_progress_bar_with_spaces(return_to_beginning=return_to_beginning)
+        progress_bar = self._get_progress_bar_with_spaces(return_to_line_number=return_to_line_number)
 
         # Print the progress bar
         self._direct_write(progress_bar)
