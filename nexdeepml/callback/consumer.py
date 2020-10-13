@@ -194,10 +194,30 @@ class SampleLoggerCallback(ManagerCallback):
         info = {
             'epoch': self.trainer.epoch,
             'train_loss': 1e-3,
-            'val_loss': 1e-3
         }
 
         self.workers['logger'].on_batch_end({
+            'batch_size': 1,
+            **info
+        })
+
+    def on_val_epoch_begin(self, info: Dict = None):
+
+        self.workers['logger'].on_val_epoch_begin({
+            'number_of_iterations': self.trainer.number_of_iterations,
+            'epoch': self.trainer.epoch,
+            **{'train_loss': 1e-3},
+        })
+
+    def on_val_batch_end(self, info: Dict = None):
+
+        info = {
+            'epoch': self.trainer.epoch,
+            **{'train_loss': 1e-3},  # Will stay the same
+            **{'val_loss': 2e-3}
+        }
+
+        self.workers['logger'].on_val_batch_end({
             'batch_size': 1,
             **info
         })
