@@ -2,7 +2,8 @@ from .preprocess import PreprocessManager, Preprocess
 from .image import BWHCToBCWH, OneHotDecoder, ImageAugmentationAlbumentations
 from .image import ImageTransformationPyTorch
 import albumentations as A
-from .pyTorch import ToTorchTensor, ToTorchGPU
+from .pyTorch import ToTorchTensor
+from ..pyTorch import ToTorchGPU
 from ...util.config import ConfigParser
 from typing import Dict
 import numpy as np
