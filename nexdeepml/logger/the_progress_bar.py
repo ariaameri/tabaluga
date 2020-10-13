@@ -141,7 +141,7 @@ class TheProgressBar:
             self.statistics_info\
                 .update(
                     {'_bc': '.time'},
-                    {'time.initial_run_time': current_time, 'initial_progress_bar_time': current_time}
+                    {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
                 )
 
         # If not in master mode, no need to print, thus return now
