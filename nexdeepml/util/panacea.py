@@ -2901,15 +2901,20 @@ class Modification:
         """
 
         # Replace the key/value pairs whose value is not a dictionary with '$set' operator
-        update_dict = {
+        modified_update_dict = {
             # Elements that are already in dictionary form that Update class accept assuming operators are fine
-            **{key: value for key, value in update_dict.items() if isinstance(value, dict)},
-            # Elements that are not in dictionary form are set to '$set' operator for the Update class
-            **{'$set': {key: value} for key, value in update_dict.items() if not isinstance(value, dict)}
+            **{key: value for key, value in update_dict.items() if isinstance(value, dict)}
         }
+        # Elements that are not in dictionary form are set to '$set' operator for the Update class
+        set_dict = {
+            key: value for key, value in update_dict.items() if not isinstance(value, dict)
+        }
+        # If the '$set' operator already exists, extend it, otherwise, put it there
+        modified_update_dict['$set'] = {**(modified_update_dict.get('$set') or {}), **set_dict}
 
         # Process the update_dict and get a modified update dictionary
-        processed_update_dict: Dict = self.Update(update_dict, condition_dict=self.condition_dict).get_modified_query()
+        processed_update_dict: Dict = \
+            self.Update(modified_update_dict, condition_dict=self.condition_dict).get_modified_query()
 
         # Split the dictionary into two keys: `field` and `_special`
         # The `field` key contains all the selectors corresponding to the name of the fields
