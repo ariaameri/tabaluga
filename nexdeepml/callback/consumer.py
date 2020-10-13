@@ -122,6 +122,16 @@ class SampleDataProcessCallback(ManagerCallback):
 
         self.workers['data_process'] = SampleImageProcessManager(self._config)
 
+    def on_train_begin(self, info: Dict = None):
+        """On beginning of train epoch, process the model."""
+
+        self.trainer.model = \
+            self.workers['data_process'].on_train_begin(
+                {
+                    'model': self.trainer.model
+                }
+            )
+
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train data."""
 
