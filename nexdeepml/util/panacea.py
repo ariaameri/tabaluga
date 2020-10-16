@@ -293,7 +293,7 @@ class PanaceaBase(ABC):
         updated: Option[(str, PanaceaBase)] = modifier.update(panacea=self)
 
         # Return
-        return updated.get()[1]
+        return updated.get_or_else(('', self))[1]
 
 
 class Panacea(PanaceaBase):
