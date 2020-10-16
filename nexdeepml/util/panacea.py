@@ -2635,6 +2635,8 @@ class Modification:
                     if item.is_defined()
                 }
 
+            # TODO: Check if the dictionary has not changed, do not produce a new instance
+
             # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
             if new_dict:
                 return Some((key, panacea.__class__(new_dict)))
