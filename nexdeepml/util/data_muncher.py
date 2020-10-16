@@ -79,10 +79,10 @@ class DataMuncherLeaf(PanaceaLeaf):
     """A leaf node class to contain all data in order."""
 
     # Set static variables
-    item_begin_symbol = f'\u273f'
-    item_color = f'\033[33m'
+    item_begin_symbol = f'\u1b75'
+    item_color = f'\x1b[38;5;32m'
     begin_list_symbol = f'-'
-    begin_list_color = f'\033[38;5;70m'
+    begin_list_color = f'\x1b[38;5;81m'
     begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
 
     def __init__(self, value: Any):
