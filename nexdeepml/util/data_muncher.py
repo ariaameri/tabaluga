@@ -10,13 +10,15 @@ class DataMuncher(Panacea):
     item_begin_symbol = f'\u2058'
     item_color = f'\033[38;5;112m'
 
-    def __init__(self, data_dict: Dict = None):
+    def __init__(self, data_dict: Dict = None, leaf_class: PanaceaLeaf = None):
         """Initializes the class based on the input data dictionary.
 
         Parameters
         ----------
         data_dict : Dict
             A dictionary containing all the data
+        leaf_class : PanaceaLeaf
+            The pointer to the class that should be used as the leaf
         """
 
         # Check if no input was given
@@ -25,7 +27,7 @@ class DataMuncher(Panacea):
         elif type(data_dict) is not dict:
             data_dict = {'data': data_dict}
 
-        super().__init__(config_dict=data_dict, leaf_class=DataMuncherLeaf)
+        super().__init__(config_dict=data_dict, leaf_class=leaf_class or DataMuncherLeaf)
 
     def update_map(self,
                    filter_dict: Dict = None,
