@@ -1,6 +1,7 @@
 from ..util.data_muncher import DataMuncher, DataMuncherLeaf
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
+import re
 
 
 class LogHug(DataMuncher):
@@ -49,6 +50,58 @@ class LogHug(DataMuncher):
         # Remove the first line and replace it
         index_of_end_first_line = out_string.index(f'\n')
         out_string = title + out_string[index_of_end_first_line:]
+
+        return out_string
+
+    def str_representation(self, name: str, depth: int = -1) -> str:
+        """Helper function to create a string representation of the instance.
+
+        Parameters
+        ----------
+        name : str
+            The name of the current instance
+        depth : int, optional
+            The depth until which the string representation should go down the configuration
+
+        Returns
+        -------
+        String containing the representation of the configuration given
+
+        """
+
+        # Check if we have reach the root of the recursion, i.e. depth is zero
+        if depth == 0:
+            return ''
+
+        # Create the resulting string
+        out_string = ''
+        out_string += self._identity_str_representation(name)
+        out_string += self.after_item_symbol if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
+        out_string += f'\n'
+
+        # Create the string from all the children
+        # First process the leaves and then the branches
+        out_substring = \
+            ''.join(
+                item.str_representation(name=key, depth=depth-1)
+                for key, item
+                in sorted(self._parameters.items())
+                if item.is_leaf()
+            ) \
+            + \
+            ''.join(
+                item.str_representation(name=key, depth=depth-1)
+                for key, item
+                in sorted(self._parameters.items())
+                if item.is_branch()
+            )
+
+        # Indent the children result and add to the result
+        out_string += re.sub(
+            r'(^|\n)(?!$)',
+            r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
+            out_substring
+        )
 
         return out_string
 
