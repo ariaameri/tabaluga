@@ -8,6 +8,7 @@ import datetime
 import os
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.data_muncher import DataMuncher
+from ..util.calculation import Calculation
 import re
 
 
@@ -422,7 +423,7 @@ class TheProgressBar:
                 self.statistics_info.update(
                     {'_bc': {'$regex': 'average$'}},
                     {'average_item_per_update':
-                         self._exp_average(
+                         Calculation.exp_average(
                              self.statistics_info.get('average.average_item_per_update'),
                              count
                          )
@@ -1028,7 +1029,7 @@ class TheProgressBar:
             self.statistics_info.update(
                 {'_bc': {'$regex': 'average$'}},
                 {'average_time_per_update':
-                     self._exp_average(
+                     Calculation.exp_average(
                          self.statistics_info.get('average.average_time_per_update'),
                          delta_time
                      )
