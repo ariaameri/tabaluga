@@ -293,7 +293,7 @@ class PanaceaBase(ABC):
         updated: Option[(str, PanaceaBase)] = modifier.update(panacea=self)
 
         # Return
-        return updated.get()[1]
+        return updated.get_or_else(('', self))[1]
 
 
 class Panacea(PanaceaBase):
@@ -306,6 +306,7 @@ class Panacea(PanaceaBase):
     # Set static variables
     item_begin_symbol = f'\u2022'
     item_color = f'\033[38;5;209m'
+    after_item_symbol = f':'
 
     vertical_bar_symbol = f'\u22EE'
     # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
@@ -534,7 +535,7 @@ class Panacea(PanaceaBase):
         # Create the resulting string
         out_string = ''
         out_string += self._identity_str_representation(name)
-        out_string += f':' if depth != 1 and name != '' else ''  # Only add ':' if we want to print anything in front
+        out_string += self.after_item_symbol if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
         out_string += f'\n'
 
         # Create the string from all the children
@@ -900,6 +901,7 @@ class PanaceaLeaf(PanaceaBase):
     # Set static variables
     item_begin_symbol = f'\u273f'
     item_color = f'\033[33m'
+    after_item_symbol = f':'
     begin_list_symbol = f'-'
     begin_list_color = f'\033[38;5;70m'
     begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
@@ -1141,7 +1143,7 @@ class PanaceaLeaf(PanaceaBase):
         if depth == 1:
             return out_string + f'\n'
 
-        out_string += f': '
+        out_string += f'{self.after_item_symbol} '
 
         if isinstance(self._value, list):
             out_string += self._list_str_representation()
@@ -2632,6 +2634,8 @@ class Modification:
                     ]
                     if item.is_defined()
                 }
+
+            # TODO: Check if the dictionary has not changed, do not produce a new instance
 
             # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
             if new_dict:

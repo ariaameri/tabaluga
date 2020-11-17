@@ -1,4 +1,4 @@
-from .config import ConfigParser
+from .panacea import Panacea, PanaceaLeaf
 from typing import Dict, Any
 import re
 
@@ -358,12 +358,18 @@ def console_color_modifier(console_colors_dict: Dict) -> Dict:
     return out_dict
 
 
-class ColorParser(ConfigParser):
+class ColorParser(Panacea):
 
-    def _identity_str_representation(self, value):
-        """Method to add custom message to config string representation."""
+    def __init__(self, config_dict):
 
-        return f'{value}This is some sample text{self.reset.all}'
+        super().__init__(config_dict=config_dict, leaf_class=ColorParserLeaf)
+
+
+class ColorParserLeaf(PanaceaLeaf):
+
+    def _item_str_representation(self) -> str:
+
+        return f'{self._value}This is some sample text\x1b[0m\n'
 
 
 CONSOLE_COLORS_CONFIG = ColorParser(console_color_modifier(console_colors)).enable_debug_mode()

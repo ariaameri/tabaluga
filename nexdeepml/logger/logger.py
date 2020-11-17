@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
+from .log_hug import LogHug
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
@@ -856,81 +857,51 @@ class TheProgressBarLogger(Logger):
                 val_loss: float, optional
         """
 
-        def _generate_message_set(msg_set_dict: Dict) -> str:
-            """Function to help generate the set of messages for training, validation, ... .
-
-            Parameters
-            ----------
-            msg_set_dict : dict
-                The dictionary containing the information needed. Some are
-                    _title: containing the title of the set
-
-            Returns
-            -------
-            The generated string of the information set
-            """
-
-            message = ''
-
-            if len(msg_set_dict) > 1:
-                message += f'\t' * 2
-                title = str(msg_set_dict.pop('_title'))
-                message += f'{CCC.foreground.set_88_256.deepskyblue5}{SUC.right_facing_armenian_eternity_sign} '
-                message += f'{CCC.foreground.set_88_256.deepskyblue3}{title}'
-                message += f'{CCC.reset.all}'
-                message += f'\n'
-                for key, value in sorted(msg_set_dict.items()):
-                    message += f'\t' * 3
-                    message += f'{SUC.horizontal_bar} '
-                    message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
-                               f'{CCC.reset.all}: ' \
-                               f'{CCC.foreground.set_88_256.orange1}'
-                    message += f'{value: .5e}' if issubclass(type(value), Number) else f'{value}'
-                    message += f'{CCC.reset.all}' \
-                               f'\n'
-
-            return message
-
         # Make a copy of the dictionary to modify it
         msg_dict_copy = {**msg_dict}
 
-        message = ''
+        title = ''
 
         if msg_dict is None:
-            return message
+            return title
 
         # Find the length of the total epochs
         # get and remove the 'epoch' item from the dictionary
         # and reformat the string accordingly
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
         epoch = msg_dict_copy.pop('epoch')
-        message += f'\n'
-        message += f'\t' * 1
-        message += f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
-        message += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
-                   f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
-                   f'{CCC.foreground.set_88_256.grey27}/' \
-                   f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
-                   f'{CCC.reset.all}'
-        message += f'\n'
+        title = f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
+        title += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
+                 f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
+                 f'{CCC.foreground.set_88_256.grey27}/' \
+                 f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
+                 f'{CCC.reset.all}'
+
+        message_dict = {}
 
         # Check if we have training values for logging, starting with 'train_'
         # get the item from the dictionary and delete it
         # Generate the message set and add it to the total message
         train_items = {key[len('train_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
                        if key.startswith('train_')}
-
-        message += _generate_message_set({"_title": "Training", **train_items})
+        if train_items:
+            message_dict = {**message_dict, 'Train': train_items}
 
         # Check if we have validation values for logging, starting with 'train_'
         # get the item from the dictionary and delete it
         # Generate the message set and add it to the total message
         val_items = {key[len('val_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
                      if key.startswith('val_')}
+        if val_items:
+            message_dict = {**message_dict, 'Validation': val_items}
 
-        message += _generate_message_set({"_title": "Validation", **val_items})
+        if msg_dict_copy:
+            message_dict = {**message_dict, 'Others': msg_dict_copy}
 
-        # Print the rest of the message set
-        message += _generate_message_set({"_title": "Others", **msg_dict_copy})
+        # Generate the message
+        message = LogHug(message_dict).str_representation_with_title(title=title)
+
+        # Indent the message
+        message = '\n\t' + '\n\t'.join(message.split(f'\n'))
 
         return message

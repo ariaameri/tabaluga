@@ -86,7 +86,7 @@ class TheProgressBar:
             'paused': False,  # Whether we are on pause mode
             'master': False,  # Whether we are in master mode, meaning we are responsible for printing the progress bar
             # Whether we should write to some external stdout handler or take care of it ourselves
-            'external_stdout_handler': True if stdout_handler is None else False,
+            'external_stdout_handler': True if stdout_handler is not None else False,
             'item': {
                 'total_items_count': -1,  # Count of total number of batches expected
                 'current_item_index': 0  # Current batch item/index/number
