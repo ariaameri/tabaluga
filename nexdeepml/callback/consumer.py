@@ -1,4 +1,4 @@
-from .callback import CallbackManager, ManagerCallback
+from .callback import CallbackManager, ManagerCallback, TrainStatExpAverage
 from ..base.base import BaseWorker
 from ..dataloader.consumer import SampleDataManager
 from ..logger.consumer import SampleLoggerManager
@@ -265,5 +265,10 @@ class SampleCallbackManager(CallbackManager):
         self.workers['logger'] = \
             SampleLoggerCallback(
                 self._config.get_or_else('logger', None),
+                self.trainer
+            )
+        self.workers['train_stat_exp_average'] = \
+            TrainStatExpAverage(
+                self._config.get_or_else('train_stat_exp_average', None),
                 self.trainer
             )
