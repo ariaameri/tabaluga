@@ -424,8 +424,8 @@ class TheProgressBar:
                     {'_bc': {'$regex': 'average$'}},
                     {'average_item_per_update':
                          Calculation.exp_average(
-                             self.statistics_info.get('average.average_item_per_update'),
-                             count
+                             item=self.statistics_info.get('average.average_item_per_update'),
+                             d_item=count
                          )
                     }
                 )
@@ -1030,8 +1030,8 @@ class TheProgressBar:
                 {'_bc': {'$regex': 'average$'}},
                 {'average_time_per_update':
                      Calculation.exp_average(
-                         self.statistics_info.get('average.average_time_per_update'),
-                         delta_time
+                         item=self.statistics_info.get('average.average_time_per_update'),
+                         d_item=delta_time
                      )
                  }
             )

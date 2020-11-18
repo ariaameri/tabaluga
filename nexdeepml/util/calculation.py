@@ -2,17 +2,17 @@ class Calculation:
     """Class to hold common calculation functions."""
 
     @staticmethod
-    def exp_average(item: float, d_item: float, beta: float = .9) -> float:
+    def exp_average(d_item: float, item: float = None, beta: float = .9) -> float:
         """Calculates the new exponential moving average for the inputs.
 
         Returns d_item if item is -np.inf
 
         Parameters
         ----------
-        item : float
-            Current value of the average
         d_item : float
             The value of the recent element
+        item : float, optional
+            Current value of the average. If not given, `d_item` will be returned
         beta : float
             Exponential moving average beta
 
@@ -25,6 +25,6 @@ class Calculation:
         import numpy as np
 
         # Do the exponential averaging
-        average = beta * item + (1 - beta) * d_item if item != -np.inf else d_item
+        average = beta * item + (1 - beta) * d_item if item != -np.inf and item is not None else d_item
 
         return average
