@@ -215,6 +215,23 @@ class TrainStatExpAverage(Callback):
                 {'Train': self.get_exp_average(train_stat)}
             )
 
+    def on_val_batch_end(self, info: Dict = None):
+
+        # Get the train statistics
+        train_stat = self.trainer.train_statistics.find_one({'_bc': {'$regex': 'Validation$'}})
+
+        if train_stat.is_empty():
+            return
+
+        train_stat = train_stat.get()
+
+        # Update the train statistics
+        self.trainer.train_statistics = \
+            self.trainer.train_statistics.update(
+                {'Validation': {'$exists': 1}},
+                {'Validation': self.get_exp_average(train_stat)}
+            )
+
     def get_exp_average(self, stat):
         """Goes over the leaves (in depth) in `stat` and makes/updates 'Exp Average' node within that is the exponential
         average of eac leaf.
