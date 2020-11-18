@@ -17,6 +17,7 @@ from numbers import Number
 from collections import OrderedDict
 import threading
 import signal
+import re
 
 
 class Logger(BaseWorker):
@@ -840,7 +841,8 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.update(update_count)
 
-        message = self._generate_message(msg_dict)
+        # message = self._generate_message(msg_dict)
+        message = self._generate_message_from_loghug(msg_dict)
         self._the_progress_bar.set_description(message)
 
     def _generate_message(self, msg_dict: Dict) -> str:
@@ -903,5 +905,43 @@ class TheProgressBarLogger(Logger):
 
         # Indent the message
         message = '\n\t' + '\n\t'.join(message.split(f'\n'))
+
+        return message
+
+    def _generate_message_from_loghug(self, msg_dict: Dict) -> str:
+        """Generates a string based on the input to be used as tqdm bar description.
+
+        If msg is None, empty string will be returned.
+
+        Parameters
+        ---------
+        msg_dict : Dict
+            Dictionary containing the information to be used. Contains:
+                epoch: int
+                loss: float
+                val_loss: float, optional
+        """
+
+        # Find the length of the total epochs
+        # get and remove the 'epoch' item from the dictionary
+        # and reformat the string accordingly
+        ep_len = int(np.ceil(np.log10(self._n_epochs)))
+        epoch = msg_dict.get('epoch')
+        title = f'\n' \
+                f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
+        title += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
+                 f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
+                 f'{CCC.foreground.set_88_256.grey27}/' \
+                 f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
+                 f'{CCC.reset.all}'
+
+        # If there is a stat entry, use it
+        if msg_dict.get('stat') is not None:
+            message = msg_dict.get('stat').str_representation_with_title(title=title)
+        else:
+            message = title
+
+        # Indent the messages once
+        message = re.sub(r'(^|\n)', r'\1\t', message)
 
         return message

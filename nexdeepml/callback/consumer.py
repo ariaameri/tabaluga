@@ -1,7 +1,7 @@
 from .callback import CallbackManager, ManagerCallback
 from ..base.base import BaseWorker
 from ..dataloader.consumer import SampleDataManager
-from ..logger.consumer import SampleLoggerManager, SampleTheProgressBarLoggerManager
+from ..logger.consumer import SampleLoggerManager
 from ..util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
@@ -193,7 +193,7 @@ class SampleLoggerCallback(ManagerCallback):
 
         info = {
             'epoch': self.trainer.epoch,
-            'train_loss': 1e-3,
+            'stat': self.trainer.train_statistics,
         }
 
         self.workers['logger'].on_batch_end({
@@ -206,15 +206,14 @@ class SampleLoggerCallback(ManagerCallback):
         self.workers['logger'].on_val_epoch_begin({
             'number_of_iterations': self.trainer.number_of_iterations,
             'epoch': self.trainer.epoch,
-            **{'train_loss': 1e-3},
+            'stat': self.trainer.train_statistics,
         })
 
     def on_val_batch_end(self, info: Dict = None):
 
         info = {
             'epoch': self.trainer.epoch,
-            **{'train_loss': 1e-3},  # Will stay the same
-            **{'val_loss': 2e-3}
+            'stat': self.trainer.train_statistics
         }
 
         self.workers['logger'].on_val_batch_end({
