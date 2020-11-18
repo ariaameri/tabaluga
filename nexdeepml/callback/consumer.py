@@ -1,7 +1,7 @@
-from .callback import CallbackManager, ManagerCallback
+from .callback import CallbackManager, ManagerCallback, TrainStatExpAverage
 from ..base.base import BaseWorker
 from ..dataloader.consumer import SampleDataManager
-from ..logger.consumer import SampleLoggerManager, SampleTheProgressBarLoggerManager
+from ..logger.consumer import SampleLoggerManager
 from ..util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
@@ -203,8 +203,7 @@ class SampleLoggerCallback(ManagerCallback):
 
         info = {
             'epoch': self.trainer.epoch,
-            **self.trainer.train_info_dict,
-            # **self.trainer.val_info_dict  # No need for validation here!
+            'stat': self.trainer.train_statistics,
         }
 
         self.workers['logger'].on_batch_end({
@@ -217,15 +216,14 @@ class SampleLoggerCallback(ManagerCallback):
         self.workers['logger'].on_val_epoch_begin({
             'number_of_iterations': self.trainer.number_of_iterations,
             'epoch': self.trainer.epoch,
-            **self.trainer.train_info_dict,
+            'stat': self.trainer.train_statistics,
         })
 
     def on_val_batch_end(self, info: Dict = None):
 
         info = {
             'epoch': self.trainer.epoch,
-            **self.trainer.train_info_dict,  # Will stay the same
-            **self.trainer.val_info_dict
+            'stat': self.trainer.train_statistics
         }
 
         self.workers['logger'].on_val_batch_end({
@@ -277,5 +275,10 @@ class SampleCallbackManager(CallbackManager):
         self.workers['logger'] = \
             SampleLoggerCallback(
                 self._config.get_or_else('logger', None),
+                self.trainer
+            )
+        self.workers['train_stat_exp_average'] = \
+            TrainStatExpAverage(
+                self._config.get_or_else('train_stat_exp_average', None),
                 self.trainer
             )

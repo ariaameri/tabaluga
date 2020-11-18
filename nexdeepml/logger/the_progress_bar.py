@@ -424,8 +424,8 @@ class TheProgressBar:
                     {'_bc': {'$regex': 'average$'}},
                     {'average_item_per_update':
                          Calculation.exp_average(
-                             self.statistics_info.get('average.average_item_per_update'),
-                             count
+                             item=self.statistics_info.get('average.average_item_per_update'),
+                             d_item=count
                          )
                     }
                 )
@@ -624,7 +624,7 @@ class TheProgressBar:
         # Compensate for the lines to be printed and go back to the beginning of all of them
         progress_bar_with_space += self.cursor_modifier.get('up', return_line_count) if return_line_count > 0 else ''
         progress_bar_with_space += f'\r'
-        progress_bar_with_space += f'\n' if return_line_count == -1 else ''
+        progress_bar_with_space += f'\n\b' if return_line_count == -1 else ''
 
         return progress_bar_with_space
 
@@ -1030,8 +1030,8 @@ class TheProgressBar:
                 {'_bc': {'$regex': 'average$'}},
                 {'average_time_per_update':
                      Calculation.exp_average(
-                         self.statistics_info.get('average.average_time_per_update'),
-                         delta_time
+                         item=self.statistics_info.get('average.average_time_per_update'),
+                         d_item=delta_time
                      )
                  }
             )
@@ -1094,12 +1094,14 @@ class TheProgressBar:
 
         # Calling 'print' will call this function twice.
         # First with the message and second with the new line character
-        if msg == '\n' or msg.endswith('\n'):
+        # If the msg ends with \n\b, then do not print the progress bar itself
+        if msg == '\n' or msg.endswith('\n') or msg.endswith('\n\b'):
 
             with self.print_lock:
 
                 # Add the progress bar at the end
-                self.buffer.append(self._get_progress_bar_with_spaces())
+                if not msg.endswith('\n\b'):
+                    self.buffer.append(self._get_progress_bar_with_spaces())
 
                 # Create the message from the buffer and print it with extra new line character
                 msg = ''.join(self.buffer)

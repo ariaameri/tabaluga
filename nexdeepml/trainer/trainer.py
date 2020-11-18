@@ -5,6 +5,7 @@ import numpy as np
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
 from ..logger.logger import Logger
+from ..logger.log_hug import LogHug
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal
@@ -41,6 +42,7 @@ class Trainer(base.BaseEventManager, ABC):
         # Make dummy variables
         self.train_info_dict = {}
         self.val_info_dict = {}
+        self.train_statistics = LogHug()
 
         # Set the universal logger
         self._universal_logger = self._create_universal_logger()
@@ -110,9 +112,8 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
-        # Reset the train and validation info dictionaries
-        self.train_info_dict = {}
-        self.val_info_dict = {}
+        # Empty out the train statistics
+        self.train_statistics = LogHug()
 
         # Training
         if self.epoch == 0:
@@ -153,12 +154,17 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
+        # Make Train entry
+        self.train_statistics = self.train_statistics.update({}, {'$set': {'Train': {}}})
+
         for self.batch in range(self.number_of_iterations):
 
             self.on_batch_begin()
             self.on_train_batch_begin()
 
             self.train_info_dict = self.train_one_batch()
+            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Train'}},
+                                                                 {'$set': self.train_info_dict})
 
             self.on_train_batch_end()
             self.on_batch_end()
@@ -174,11 +180,15 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
+        # Make Validation entry
+        self.train_statistics = self.train_statistics.update({}, {'$set': {'Validation': {}}})
+
         for self.batch in range(self.number_of_iterations):
 
             self.on_val_batch_begin()
 
             self.val_info_dict = self.val_one_batch()
+            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Validation'}}, self.val_info_dict)
 
             self.on_val_batch_end()
 
