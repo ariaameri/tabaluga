@@ -176,6 +176,17 @@ class PanaceaBase(ABC):
 
         return True if issubclass(type(self), PanaceaLeaf) else False
 
+    def is_empty(self) -> bool:
+        """A checker method that tells whether this instance of config is empty or not
+
+        Returns
+        -------
+        bool
+            False, as Leaf is not empty, this will be overriden in branch class
+        """
+
+        return False
+
     # Debugging mode
 
     def enable_debug_mode(self) -> PanaceaBase:
