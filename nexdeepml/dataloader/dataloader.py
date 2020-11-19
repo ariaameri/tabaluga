@@ -24,6 +24,8 @@ class DataManager(base.BaseEventManager, ABC):
 
         super().__init__(config)
 
+        self._config = self._re_config(self._config)
+
         # Folders containing the data
         self._folders: List[str] = []
 
@@ -57,6 +59,27 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Create workers
         self.create_workers()
+
+    def _re_config(self, config: ConfigParser) -> ConfigParser:
+        """Reconfigures the config file for this class.
+
+        Returns
+        -------
+        Reconfigured config file as a ConfigParser instance
+
+        """
+
+        # Spread multithreading one level down
+        # Didn't choose only one level down because 'train' and 'val' entries might not exist
+        if config.get_option('multithreading').is_defined():
+            config = config.update(
+                {},
+                {'$set_on_insert': {
+                    'train.multithreading': config.get('multithreading'),
+                    'val.multithreading': config.get('multithreading'),
+                }})
+
+        return config
 
     def create_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
