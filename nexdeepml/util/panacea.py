@@ -2942,22 +2942,24 @@ class Modification:
 
         return processed_update_dict
 
-    def update_self(self, panacea: PanaceaBase) -> PanaceaBase:
+    def update_self(self, panacea: PanaceaBase, update_dict: Dict = None) -> PanaceaBase:
         """Method to update the `panacea` instance based on the update rules and returns the result.
 
         Parameters
         ----------
         panacea : PanaceaBase
             PanaceaBase instance to update
+        update_dict : Dict, optional
+            Optional update dictionary to process, if not given, the one set in constructor will be used
 
         Returns
         -------
-        A new copy of the `panacea` instanec with updated properties
+        A new copy of the `panacea` instance with updated properties
 
         """
 
         # Load the update dictionary
-        update_dict = self.update_dict
+        update_dict = self.update_dict if update_dict is None else update_dict
 
         # Dummy variable
         new_panacea = panacea
@@ -2976,8 +2978,26 @@ class Modification:
                     update(key, panacea.get_option(key))
                     for key, update
                     in update_dict.get('field').items()  # items that should select specific fields
+                    if '.' not in key
                 ]
                 if item.is_defined()
+            }
+
+            # Get the updates on \w*(\.\w+)+ update rules
+            modified_panacea_deep_dictionary = {
+                key: value
+                for key, value
+                in
+                {
+                    key.split('.')[0]: self.update_self(
+                        panacea.get_option(key.split('.')[0]).get_or_else(panacea.__class__()),
+                        {'field': {key[(key.index('.') + 1):]: update}, '_special': {}}
+                    )
+                    for key, update
+                    in update_dict.get('field').items()
+                    if '.' in key
+                }.items()
+                if not value.is_empty()
             }
 
             # Create a new dictionary in order to make a new instance
@@ -2987,7 +3007,8 @@ class Modification:
                 **{key: value for key, value in panacea.get_parameters().items() if
                    key not in update_dict.get('field').keys()},
                 # Items modified by the update rules
-                **modified_panacea_dictionary
+                **modified_panacea_dictionary,
+                **modified_panacea_deep_dictionary
             }
 
             # Generate a new class from the modified parameters
