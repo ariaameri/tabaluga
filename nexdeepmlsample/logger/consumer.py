@@ -1,4 +1,4 @@
-from nexdeepml.logger.logger import LoggerManager, Logger, TQDMLogger, TheProgressBarLogger
+from nexdeepml.logger.logger import LoggerManager, Logger, TheProgressBarLogger
 from nexdeepml.util.config import ConfigParser
 from typing import Dict
 import sys

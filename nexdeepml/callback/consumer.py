@@ -6,7 +6,7 @@ from ..util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
 from ..process.consumer import SampleProcessManager
-from tqdm import tqdm
+# from tqdm import tqdm
 
 
 class SampleDataManagerCallback(ManagerCallback):

@@ -1,4 +1,4 @@
-from .logger import LoggerManager, Logger, TQDMLogger, TheProgressBarLogger
+from .logger import LoggerManager, Logger, TheProgressBarLogger
 from ..util.config import ConfigParser
 from typing import Dict
 import sys
