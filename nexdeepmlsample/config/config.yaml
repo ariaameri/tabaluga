@@ -28,13 +28,11 @@ trainer:
         .4
       shuffle:
         False
-      multithreading:
-        True
 
     process:
       preprocess:
         resize:
-          destination_image_size: !!python/tuple [512, 512]
+          destination_image_size: !!python/tuple [384, 512]
 
     test:
       - the_first
