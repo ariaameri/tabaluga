@@ -1,13 +1,13 @@
-from . import preprocess
-from ...util.config import ConfigParser
+from .process import Process, ProcessManager
+from nexdeepml.util.config import ConfigParser
 from typing import List, Union, Dict
 import numpy as np
 import cv2
 import albumentations as A
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 
-class ImageNormalizer(preprocess.Preprocess):
+class ImageNormalizer(Process):
     """Normalizes images.
 
     It takes input images of dtype uint8 ranging from 0 to 255 and divides them by 255 with dtype of float.
@@ -52,7 +52,7 @@ class ImageNormalizer(preprocess.Preprocess):
         return output
 
 
-class ImageResizer(preprocess.Preprocess):
+class ImageResizer(Process):
     """Resizes images."""
 
     def __init__(self, config: ConfigParser):
@@ -117,7 +117,7 @@ class ImageResizer(preprocess.Preprocess):
         return output
 
 
-class ImageAugmentationAlbumentations(preprocess.Preprocess):
+class ImageAugmentationAlbumentations(Process, ABC):
     """Abstract class for image augmentation using the albumentations package."""
 
     def __init__(self, config: ConfigParser):
@@ -242,7 +242,7 @@ class ImageResizerWithKeypoints(ImageAugmentationAlbumentations):
 # TODO: Move some of these classes to preprocess.py?
 
 
-class BWHCToBCWH(preprocess.Preprocess):
+class BWHCToBCWH(Process):
     """Converts image data of form (B, W, H, [...,] C) to (B, C, W, H[, ...])."""
 
     def __init__(self):
@@ -270,7 +270,7 @@ class BWHCToBCWH(preprocess.Preprocess):
         return output
 
 
-class OneHotDecoder(preprocess.Preprocess):
+class OneHotDecoder(Process):
     """Converts one-hot-encoded data to index data. Also, makes index values from the biggest number in an axis"""
 
     def __init__(self, config: ConfigParser):
@@ -316,3 +316,158 @@ class OneHotDecoder(preprocess.Preprocess):
         output = np.argmax(data, axis=axis)
 
         return output
+
+
+class BackgroundToColor(Process):
+    """Converts image channels of the form [0, ..., 0] to 255 in one of the channels.
+    In other words, turns background pixels to a color
+
+    """
+
+    def __init__(self, config: ConfigParser):
+        """Initializes the class instance.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            Contains the config needed including:
+                axis : int, optional
+                    The axis showing the channels. If not given will be the default value of -1
+                new_channel : int, optional
+                    The number of the new channel to have value. If not given, -1 will be assumed
+
+        """
+
+        super().__init__(config)
+
+        # Set the axis
+        self.axis = config.get_or_else('axis', -1)
+
+        # Set the new channel to be filled
+        self.new_channel = config.get_or_else('new_channel', -1)
+
+    def process(self, data: np.ndarray) -> np.ndarray:
+        """"Converts background pixels containing all zeros to 255 in some channel
+
+        In other words:
+        - look for all black pixels along axis of `self.axis`
+        - in the same axis, choose channel `self.channel` and set all its value to 255
+        For example, if we have a `data` of shape (100, 200, 3) and `axis` and `new_channel` are -1 and -2, then we look
+        at the pixels that are all 0 along each of the 3 channels, along the last axis, there are 100 * 200 of such set
+        of pixels.
+        Then, we take (:, :, -2) and set them all equal to 255
+
+        Parameters
+        ----------
+        data : np.ndarray
+            A numpy array containing the data with some background, all-zero pixels
+
+        Returns
+        -------
+        Numpy array of the data with the new_channel filled for the background
+
+        """
+
+        # Find the background pixels
+        background = np.all(data == 0, axis=self.axis)
+
+        # Fill the background with 255
+        output = data.copy()
+        dim_count = len(output.shape)
+        prefix_count = self.axis if self.axis >= 0 else (dim_count + self.axis)
+        suffix_count = dim_count - 1 - prefix_count
+        output[(slice(None),) * prefix_count + (self.new_channel,) + (slice(None),) * suffix_count] \
+            = background * 255
+
+        return output
+
+
+class SampleImagePreprocessManager(ProcessManager):
+    """A simple class to manage Preprocess instances."""
+
+    def __init__(self, config: ConfigParser):
+        """Initializer.
+
+        Parameters
+        ----------
+        config : ConfigParser
+            The configuration needed for this instance and its workers.
+
+        """
+
+        super().__init__(config)
+
+        self.create_workers()
+
+    # def __str__(self):
+    #     """Short explanation of the instance."""
+    #
+    #     string = f'Image preprocess manager'
+    #
+    #     return string
+
+    def create_workers(self):
+        """Creates Preprocess instances."""
+
+        self.workers['labels_background_to_color'] = BackgroundToColor(ConfigParser())
+
+        self.workers['image_resizer'] = ImageResizer(self._config.get('resize'))
+
+        self.workers['image_normalizer'] = ImageNormalizer()
+
+        self.workers['image_bwhc_to_bcwh'] = BWHCToBCWH()
+
+        self.workers['label_one_hot_decoder'] = OneHotDecoder(ConfigParser({"axis": 1}))
+
+    def on_batch_begin(self, info: Dict = None):
+        """On beginning of (train) epoch, process the loaded train image data."""
+
+        # data = info['data']['data']
+        data = info['data']
+
+        # labels = data.get('labels')
+        # labels = self.workers['labels_background_to_color'].process(labels)
+        # processed_data = data.update('labels', labels)
+        #
+        # # processed_data = self.workers['image_resizer'].resize(data)
+        # processed_data = processed_data.map(self.workers['image_resizer'].process)
+        # # processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        # processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        # processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
+        #
+        # labels = processed_data.get('labels')
+        # labels = self.workers['label_one_hot_decoder'].process(labels)
+        # processed_data = processed_data.update('labels', labels)
+
+        processed_data = \
+            data \
+                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['labels_background_to_color'].process) \
+                .update_map({}, [
+                self.workers['image_resizer'].process,
+                self.workers['image_normalizer'].process,
+                self.workers['image_bwhc_to_bcwh'].process
+            ]) \
+                .update_map({'_bc': {'$regex': 'labels$'}}, self.workers['label_one_hot_decoder'].process)
+
+        return processed_data
+
+    def on_val_batch_begin(self, info: Dict = None):
+        """On beginning of val epoch, process the loaded val image data."""
+
+        data = info['data']
+
+        labels = data.labels
+        labels = self.workers['labels_background_to_color'].process(labels)
+        processed_data = data.update('labels', labels)
+
+        # processed_data = self.workers['image_resizer'].resize(data)
+        processed_data = processed_data.map(self.workers['image_resizer'].process)
+        # processed_data = self.workers['image_normalizer'].normalize(processed_data)
+        processed_data = processed_data.map(self.workers['image_normalizer'].process)
+        processed_data = processed_data.map(self.workers['image_bwhc_to_bcwh'].process)
+
+        labels = processed_data.labels
+        labels = self.workers['label_one_hot_decoder'].process(labels)
+        processed_data = processed_data.update('labels', labels)
+
+        return processed_data

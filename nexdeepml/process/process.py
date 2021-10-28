@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from ..base import base
 from ..util.config import ConfigParser
 
@@ -33,3 +33,20 @@ class Process(base.BaseWorker, ABC):
         """
 
         super().__init__(config)
+
+    @abstractmethod
+    def process(self, data):
+        """Does the act of processing.
+
+        Parameters
+        ----------
+        data
+            Input data
+
+        Returns
+        -------
+        Processed data
+
+        """
+
+        pass

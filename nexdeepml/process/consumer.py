@@ -1,5 +1,5 @@
 from .process import ProcessManager, Process
-from .preprocess.consumer import SampleImagePreprocessManager
+from .image import SampleImagePreprocessManager
 from ..util.config import ConfigParser
 from typing import Dict
 
