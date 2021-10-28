@@ -63,7 +63,7 @@ class ImageLoader(dataloader.DataLoader):
 
         """
 
-        return np.array(data)
+        return np.stack(data)
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
