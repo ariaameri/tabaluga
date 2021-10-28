@@ -1808,6 +1808,8 @@ class Modification:
                     function = self._unset
                 elif single_operator == '$set':
                     function = self._set
+                elif single_operator == '$set_recursive':
+                    function = self._set_recursive
                 elif single_operator == '$set_only':
                     function = self._set_only
                 elif single_operator == '$set_on_insert':
@@ -1947,6 +1949,60 @@ class Modification:
                 # If x Option exists, update it, otherwise, set it
                 if x.is_defined():
                     result: Some = self._update_only(value)(key, x)
+                else:
+                    result: Some = self._set_only(value)(key, x)
+
+                return result
+
+            return helper
+
+        def _set_recursive(self, value: Any) -> Callable[[str, Option], Some]:
+            """Wrapper function for recursively setting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, update it recursively
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Some:
+                """Function to be called on an Option value to set a value. The function then recursively calls
+                sub nodes to be set as well.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to set the value
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the set value
+
+                """
+
+                # If x Option exists, update it recursively, otherwise, set it
+                if x.is_defined():
+                    if not isinstance(value, dict):
+                        final_value = value
+                    elif isinstance(value, dict):
+                        pan: PanaceaBase = x.get()
+                        final_value = pan.get_parameters()
+                        for k, v in value.items():
+                            if not isinstance(v, dict):
+                                final_value[k] = v
+                            elif isinstance(v, dict):
+                                final_value[k] = pan.update({}, {'$set_recursive': {k: v}}).get(k)
+
+                    result: Some = Some((key, final_value))
                 else:
                     result: Some = self._set_only(value)(key, x)
 
