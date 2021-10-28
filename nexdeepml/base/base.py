@@ -970,7 +970,7 @@ class Workers:
             self._current_iteration_count = 0
             raise StopIteration
 
-    def __getitem__(self, item) -> Union[BaseWorker, None]:
+    def __getitem__(self, item) -> Union[BaseWorker, BaseEventWorker, None]:
         """Get a worker.
 
         item can be string, return worker by name, or int, return worker by rank.
