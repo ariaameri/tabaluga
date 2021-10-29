@@ -1,6 +1,6 @@
 from nexdeepml.process.preprocess.preprocess import PreprocessManager, Preprocess
-from nexdeepml.process.preprocess.image import BWHCToBCWH, OneHotDecoder, ImageAugmentationAlbumentations
-from nexdeepml.process.preprocess.image import ImageTransformationPyTorch
+from nexdeepml.process.image import OneHotDecoder, ImageAugmentationAlbumentations
+from nexdeepml.process.image import ImageTransformationPyTorch
 import albumentations as A
 from nexdeepml.process.preprocess.pyTorch import ToTorchTensor
 from nexdeepml.process.pyTorch import ToTorchGPU

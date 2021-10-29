@@ -1,12 +1,10 @@
-from nexdeepml.util.config import ConfigParser
-from nexdeepml.trainer.consumer import SampleTrainer
-# from nexdeepml.trainer.consumer import SamplePyTorchTrainer
-# import signal
 
+def do():
 
-if __name__ == '__main__':
+    from nexdeepml.util.config import ConfigParser
+    from nexdeepmlsample.trainer.consumer import SampleTrainer
 
-    with open('nexdeepml/config/config.yaml') as f:
+    with open('nexdeepmlsample/config/config.yaml') as f:
         import yaml
 
         the_json = yaml.full_load(f)
@@ -28,3 +26,10 @@ if __name__ == '__main__':
     # signal.signal(signal.SIGCONT, s.signal_catcher)
 
     s.train()
+
+
+
+
+if __name__ == '__main__':
+
+    do()

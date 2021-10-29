@@ -1,12 +1,12 @@
-from .callback import CallbackManager, ManagerCallback, TrainStatExpAverage
-from ..base.base import BaseWorker
+from nexdeepml.callback.callback import CallbackManager, ManagerCallback, TrainStatExpAverage
+from nexdeepml.base.base import BaseWorker
 from ..dataloader.consumer import SampleDataManager
-from ..logger.consumer import SampleLoggerManager
-from ..util.config import ConfigParser
+from ..logger.consumer import SampleLoggerManager, SampleTheProgressBarLoggerManager
+from nexdeepml.util.config import ConfigParser
 from typing import Dict, List
 from collections import OrderedDict
 from ..process.consumer import SampleProcessManager
-# from tqdm import tqdm
+from tqdm import tqdm
 
 
 class SampleDataManagerCallback(ManagerCallback):
@@ -122,6 +122,16 @@ class SampleProcessCallback(ManagerCallback):
 
         self.workers['data_process'] = SampleProcessManager(self._config)
 
+    def on_train_begin(self, info: Dict = None):
+        """On beginning of train epoch, process the model."""
+
+        self.trainer.model = \
+            self.workers['data_process'].on_train_begin(
+                {
+                    'model': self.trainer.model
+                }
+            )
+
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) epoch, process the loaded train data."""
 
@@ -193,7 +203,8 @@ class SampleLoggerCallback(ManagerCallback):
 
         info = {
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics,
+            **self.trainer.train_info_dict,
+            # **self.trainer.val_info_dict  # No need for validation here!
         }
 
         self.workers['logger'].on_batch_end({
@@ -206,14 +217,15 @@ class SampleLoggerCallback(ManagerCallback):
         self.workers['logger'].on_val_epoch_begin({
             'number_of_iterations': self.trainer.number_of_iterations,
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics,
+            **self.trainer.train_info_dict,
         })
 
     def on_val_batch_end(self, info: Dict = None):
 
         info = {
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics
+            **self.trainer.train_info_dict,  # Will stay the same
+            **self.trainer.val_info_dict
         }
 
         self.workers['logger'].on_val_batch_end({
@@ -265,10 +277,5 @@ class SampleCallbackManager(CallbackManager):
         self.workers['logger'] = \
             SampleLoggerCallback(
                 self._config.get_or_else('logger', None),
-                self.trainer
-            )
-        self.workers['train_stat_exp_average'] = \
-            TrainStatExpAverage(
-                self._config.get_or_else('train_stat_exp_average', None),
                 self.trainer
             )

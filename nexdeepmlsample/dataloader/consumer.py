@@ -2,7 +2,6 @@ from nexdeepml.dataloader.dataloader import DataLoaderManager, DataManager
 from nexdeepml.dataloader.image import ImageLoader
 from nexdeepml.util.config import ConfigParser
 from nexdeepml.util.data_muncher import DataMuncher
-import numpy as np
 from typing import Dict, OrderedDict
 
 

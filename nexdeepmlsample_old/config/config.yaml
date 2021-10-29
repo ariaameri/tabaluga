@@ -20,21 +20,19 @@ trainer:
       input_type:
         folder_path
       folders:
-        - /home/aria/Pictures/samplePictures/img
-        - /home/aria/Pictures/samplePictures/labels
+        - /Users/aria/Downloads/Nexus_Week23_Part2_A_2020_Completed/img
+        - /Users/aria/Downloads/Nexus_Week23_Part2_A_2020_Completed/labels
       test_ratio:
         0
       val_ratio:
         .4
       shuffle:
         False
-      multithreading:
-        True
 
     process:
       preprocess:
         resize:
-          destination_image_size: !!python/tuple [512, 512]
+          destination_image_size: !!python/tuple [384, 512]
 
     test:
       - the_first
@@ -45,11 +43,11 @@ trainer:
       - the_fourth
 
     logger:
-#      tqdm:
-#        chert:
-#          5
-#        kolooche:
-#          6
+      tqdm:
+        chert:
+          5
+        kolooche:
+          6
       TheProgressBar:
         chert:
           5

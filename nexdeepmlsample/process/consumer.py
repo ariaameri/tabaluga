@@ -1,7 +1,6 @@
 from nexdeepml.process.process import ProcessManager, Process
-from .preprocess.consumer import SampleImagePreprocessManager
+from nexdeepml.process.image import SampleImagePreprocessManager
 from nexdeepml.util.config import ConfigParser
-from nexdeepml.process.pyTorch import ToTorchGPU
 from typing import Dict
 
 
@@ -33,17 +32,6 @@ class SampleProcessManager(ProcessManager):
         """Creates the pre- and post-processing managers as workers."""
 
         self.workers['preprocess'] = SampleImagePreprocessManager(self._config.get('preprocess'))
-        self.workers['model_process'] = ToTorchGPU(ConfigParser())
-
-    def on_train_begin(self, info: Dict = None):
-        """On beginning of train epoch, process the model."""
-
-        model = info['model']
-
-        # Put the model to GPU
-        model = self.workers['model_process'].process(model)
-
-        return model
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) batch, process the loaded train data."""
