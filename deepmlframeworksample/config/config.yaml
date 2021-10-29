@@ -45,11 +45,6 @@ trainer:
       - the_fourth
 
     logger:
-#      tqdm:
-#        chert:
-#          5
-#        kolooche:
-#          6
       TheProgressBar:
         chert:
           5
