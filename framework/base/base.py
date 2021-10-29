@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 class BaseWorker:
     """Class to serve as the base of all workers."""
 
+    _universal_logger_shared = []
+
     def __init__(self, config: ConfigParser = None):
         """Initializer of the instance.
 
@@ -26,10 +28,6 @@ class BaseWorker:
 
         # Set the configuration
         self._config = config if config is not None else ConfigParser({})
-
-        # Set the logger handler
-        if config is not None:
-            self._universal_logger: Logger = config.get_or_else('universal_logger', None)
 
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
@@ -57,14 +55,16 @@ class BaseWorker:
         # Modify the message
         message = self._modify_log_message(msg, level)
 
+        universal_logger = self._universal_logger_shared[0]
+
         # Momentarily change the name of the logger
-        self._universal_logger.set_name(f'{str(self.__class__.__name__)} via Universal Logger')
+        universal_logger.set_name(f'{str(self.__class__.__name__)} via Universal Logger')
 
         # Log
-        self._universal_logger.log(message, level)
+        universal_logger.log(message, level)
 
         # Change the name back
-        self._universal_logger.set_name(f'Universal Logger')
+        universal_logger.set_name(f'Universal Logger')
 
     def _modify_log_message(self, msg: str, level: str = 'debug') -> str:
         """Modifies the log message according to the level and returns it.
@@ -94,7 +94,7 @@ class BaseWorker:
 
         """
 
-        self._universal_logger = logger
+        self._universal_logger_shared.append(logger)
 
 
 class BaseManager(BaseWorker, ABC):
@@ -147,22 +147,6 @@ class BaseManager(BaseWorker, ABC):
         """Creates and initializes workers."""
 
         raise NotImplementedError
-
-    def set_universal_logger(self, logger: Logger) -> None:
-        """Set the instance of the general logger for this worker.
-
-        Parameters
-        ----------
-        logger : Logger
-            An instance of the Logger class of general logging
-
-        """
-
-        super().set_universal_logger(logger)
-
-        # Set logger for the workers
-        for worker in self.workers:
-            worker.set_universal_logger(logger=self._universal_logger)
 
 
 class BaseEventWorker(BaseWorker):
