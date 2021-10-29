@@ -1,5 +1,5 @@
 from . import dataloader
-from framework.util.config import ConfigParser
+from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List

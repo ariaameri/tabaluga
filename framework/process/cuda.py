@@ -1,5 +1,5 @@
 from .process import Process
-from framework.util.config import ConfigParser
+from ..util.config import ConfigParser
 import pynvml
 
 

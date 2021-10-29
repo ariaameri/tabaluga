@@ -6,9 +6,9 @@ import numpy as np
 import time
 import datetime
 import os
-from framework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from framework.util.data_muncher import DataMuncher
-from framework.util.calculation import Calculation
+from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from ..util.data_muncher import DataMuncher
+from ..util.calculation import Calculation
 import re
 
 

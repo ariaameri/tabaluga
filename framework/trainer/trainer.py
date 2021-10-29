@@ -1,10 +1,10 @@
-from framework.base import base
-from framework.util.config import ConfigParser
-from framework.util.data_muncher import DataMuncher
-from framework.callback.callback import CallbackManager, Callback
-from framework.model.model import ModelManager, Model
-from framework.logger.logger import Logger
-from framework.logger.log_hug import LogHug
+from ..base import base
+from ..util.config import ConfigParser
+from ..util.data_muncher import DataMuncher
+from ..callback.callback import CallbackManager, Callback
+from ..model.model import ModelManager, Model
+from ..logger.logger import Logger
+from ..logger.log_hug import LogHug
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal

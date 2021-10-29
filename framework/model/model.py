@@ -1,6 +1,6 @@
 from abc import ABC
-from framework.util.config import ConfigParser
-from framework.base import base
+from ..util.config import ConfigParser
+from ..base import base
 
 
 class ModelManager(base.BaseEventManager, ABC):

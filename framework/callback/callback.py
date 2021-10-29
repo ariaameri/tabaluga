@@ -17,8 +17,8 @@ together.
 
 """
 
-from framework.base import base
-from framework.util.config import ConfigParser
+from ..base import base
+from ..util.config import ConfigParser
 from typing import Dict, List
 from abc import ABC
 from ..util.calculation import Calculation

@@ -1,5 +1,5 @@
 from .process import Process, ProcessManager
-from framework.util.config import ConfigParser
+from ..util.config import ConfigParser
 from typing import List, Union, Dict
 import numpy as np
 import cv2

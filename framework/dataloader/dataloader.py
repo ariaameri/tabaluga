@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from framework.base import base
-from framework.util.config import ConfigParser
+from ..base import base
+from ..util.config import ConfigParser
 from typing import List
 import pandas as pd
 import numpy as np

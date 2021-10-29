@@ -1,9 +1,9 @@
 from __future__ import annotations
-from framework.util.config import ConfigParser
+from ..util.config import ConfigParser
 from .log_hug import LogHug
-from framework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from framework.util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
-from framework.base.base import BaseWorker, BaseEventManager
+from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
+from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
 from typing import Dict, List, Union, Any
