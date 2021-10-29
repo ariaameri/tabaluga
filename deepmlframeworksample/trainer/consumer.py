@@ -24,5 +24,6 @@ class SampleTrainer(Trainer):
         return {'loss': np.random.rand(), 'doss': np.random.rand(), 'qoss': {'loss': np.random.rand()}}
 
     def val_one_batch(self) -> Dict:
+        import numpy as np
+        return {'loss': np.random.rand(), 'doss': np.random.rand(), 'qoss': {'loss': np.random.rand()}}
 
-        return {}
