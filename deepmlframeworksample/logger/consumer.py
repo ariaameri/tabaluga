@@ -1,5 +1,5 @@
-from nexdeepml.logger.logger import LoggerManager, Logger, TheProgressBarLogger
-from nexdeepml.util.config import ConfigParser
+from deepmlframework.logger.logger import LoggerManager, Logger, TheProgressBarLogger
+from deepmlframework.util.config import ConfigParser
 from typing import Dict
 import signal
 

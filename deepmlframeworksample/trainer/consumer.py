@@ -1,6 +1,6 @@
-from nexdeepml.trainer.trainer import Trainer
-from nexdeepml.util.config import ConfigParser
-from nexdeepml.callback.consumer import SampleCallbackManager
+from deepmlframework.trainer.trainer import Trainer
+from deepmlframework.util.config import ConfigParser
+from deepmlframeworksample.callback.consumer import SampleCallbackManager
 from typing import Dict
 
 

@@ -1,5 +1,5 @@
 from .process import Process, ProcessManager
-from nexdeepml.util.config import ConfigParser
+from deepmlframework.util.config import ConfigParser
 from typing import List, Union, Dict
 import numpy as np
 import cv2

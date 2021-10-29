@@ -1,6 +1,6 @@
-from ..util.data_muncher import DataMuncher, DataMuncherLeaf
-from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
+from deepmlframework.util.data_muncher import DataMuncher, DataMuncherLeaf
+from deepmlframework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from deepmlframework.util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import re
 
 

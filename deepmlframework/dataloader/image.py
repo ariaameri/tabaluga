@@ -1,5 +1,5 @@
 from . import dataloader
-from ..util.config import ConfigParser
+from deepmlframework.util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List

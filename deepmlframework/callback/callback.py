@@ -17,14 +17,10 @@ together.
 
 """
 
-from ..base import base
-from ..util.config import ConfigParser
+from deepmlframework.base import base
+from deepmlframework.util.config import ConfigParser
 from typing import Dict, List
-# from ..logger.logger import TQDMLogger
 from abc import ABC
-from ..dataloader import dataloader
-# from ..trainer import trainer
-from collections import OrderedDict
 from ..util.calculation import Calculation
 
 

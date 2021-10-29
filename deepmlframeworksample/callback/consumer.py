@@ -1,9 +1,9 @@
-from nexdeepml.callback.callback import CallbackManager, ManagerCallback, TrainStatExpAverage
-from ..dataloader.consumer import SampleDataManager
-from ..logger.consumer import SampleLoggerManager
-from nexdeepml.util.config import ConfigParser
+from deepmlframework.callback.callback import CallbackManager, ManagerCallback, TrainStatExpAverage
+from deepmlframeworksample.dataloader.consumer import SampleDataManager
+from deepmlframeworksample.logger.consumer import SampleLoggerManager
+from deepmlframework.util.config import ConfigParser
 from typing import Dict, List
-from ..process.consumer import SampleProcessManager
+from deepmlframeworksample.process.consumer import SampleProcessManager
 
 
 class SampleDataManagerCallback(ManagerCallback):

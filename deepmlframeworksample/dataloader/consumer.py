@@ -1,7 +1,7 @@
-from nexdeepml.dataloader.dataloader import DataLoaderManager, DataManager
-from nexdeepml.dataloader.image import ImageLoader
-from nexdeepml.util.config import ConfigParser
-from nexdeepml.util.data_muncher import DataMuncher
+from deepmlframework.dataloader.dataloader import DataLoaderManager, DataManager
+from deepmlframework.dataloader.image import ImageLoader
+from deepmlframework.util.config import ConfigParser
+from deepmlframework.util.data_muncher import DataMuncher
 from typing import Dict, OrderedDict
 
 

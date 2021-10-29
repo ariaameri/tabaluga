@@ -1,19 +1,17 @@
 from __future__ import annotations
-from ..util.config import ConfigParser
+from deepmlframework.util.config import ConfigParser
 from .log_hug import LogHug
-from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
-from ..base.base import BaseWorker, BaseEventManager
+from deepmlframework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from deepmlframework.util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
+from deepmlframework.base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
 from typing import Dict, List, Union, Any
 import logging
 import sys
-# from tqdm import tqdm
 import numpy as np
 import io
 from datetime import datetime
-from numbers import Number
 from collections import OrderedDict
 import threading
 import signal

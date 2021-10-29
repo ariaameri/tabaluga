@@ -1,10 +1,10 @@
 
 def do():
 
-    from nexdeepml.util.config import ConfigParser
-    from nexdeepmlsample.trainer.consumer import SampleTrainer
+    from deepmlframework.util.config import ConfigParser
+    from deepmlframeworksample.trainer.consumer import SampleTrainer
 
-    with open('nexdeepmlsample/config/config.yaml') as f:
+    with open('deepmlframeworksample/config/config.yaml') as f:
         import yaml
 
         the_json = yaml.full_load(f)
