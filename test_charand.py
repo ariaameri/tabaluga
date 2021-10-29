@@ -1,10 +1,10 @@
 
 def do():
 
-    from deepmlframework.util.config import ConfigParser
-    from deepmlframeworksample.trainer.consumer import SampleTrainer
+    from framework.util.config import ConfigParser
+    from sample.trainer.consumer import SampleTrainer
 
-    with open('deepmlframeworksample/config/config.yaml') as f:
+    with open('sample/config/config.yaml') as f:
         import yaml
 
         the_json = yaml.full_load(f)

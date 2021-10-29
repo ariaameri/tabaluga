@@ -1,10 +1,10 @@
-from deepmlframework.base import base
-from deepmlframework.util.config import ConfigParser
-from deepmlframework.util.data_muncher import DataMuncher
-from deepmlframework.callback.callback import CallbackManager, Callback
-from deepmlframework.model.model import ModelManager, Model
-from deepmlframework.logger.logger import Logger
-from deepmlframework.logger.log_hug import LogHug
+from framework.base import base
+from framework.util.config import ConfigParser
+from framework.util.data_muncher import DataMuncher
+from framework.callback.callback import CallbackManager, Callback
+from framework.model.model import ModelManager, Model
+from framework.logger.logger import Logger
+from framework.logger.log_hug import LogHug
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal

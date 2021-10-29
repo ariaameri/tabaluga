@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from deepmlframework.base import base
-from deepmlframework.util.config import ConfigParser
+from framework.base import base
+from framework.util.config import ConfigParser
 from typing import List
 import pandas as pd
 import numpy as np

@@ -1,6 +1,6 @@
-from deepmlframework.trainer.trainer import Trainer
-from deepmlframework.util.config import ConfigParser
-from deepmlframeworksample.callback.consumer import SampleCallbackManager
+from framework.trainer.trainer import Trainer
+from framework.util.config import ConfigParser
+from sample.callback.consumer import SampleCallbackManager
 from typing import Dict
 
 

@@ -1,6 +1,6 @@
 from abc import ABC
-from deepmlframework.util.config import ConfigParser
-from deepmlframework.base import base
+from framework.util.config import ConfigParser
+from framework.base import base
 
 
 class ModelManager(base.BaseEventManager, ABC):

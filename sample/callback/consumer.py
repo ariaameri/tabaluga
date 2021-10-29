@@ -1,9 +1,9 @@
-from deepmlframework.callback.callback import CallbackManager, ManagerCallback, TrainStatExpAverage
-from deepmlframeworksample.dataloader.consumer import SampleDataManager
-from deepmlframeworksample.logger.consumer import SampleLoggerManager
-from deepmlframework.util.config import ConfigParser
+from framework.callback.callback import CallbackManager, ManagerCallback, TrainStatExpAverage
+from sample.dataloader.consumer import SampleDataManager
+from sample.logger.consumer import SampleLoggerManager
+from framework.util.config import ConfigParser
 from typing import Dict, List
-from deepmlframeworksample.process.consumer import SampleProcessManager
+from sample.process.consumer import SampleProcessManager
 
 
 class SampleDataManagerCallback(ManagerCallback):

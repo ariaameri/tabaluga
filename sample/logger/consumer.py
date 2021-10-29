@@ -1,5 +1,5 @@
-from deepmlframework.logger.logger import LoggerManager, Logger, TheProgressBarLogger
-from deepmlframework.util.config import ConfigParser
+from framework.logger.logger import LoggerManager, Logger, TheProgressBarLogger
+from framework.util.config import ConfigParser
 from typing import Dict
 import signal
 

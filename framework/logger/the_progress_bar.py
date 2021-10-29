@@ -6,9 +6,9 @@ import numpy as np
 import time
 import datetime
 import os
-from deepmlframework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from deepmlframework.util.data_muncher import DataMuncher
-from deepmlframework.util.calculation import Calculation
+from framework.util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+from framework.util.data_muncher import DataMuncher
+from framework.util.calculation import Calculation
 import re
 
 

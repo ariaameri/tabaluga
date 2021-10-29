@@ -1,7 +1,7 @@
-from deepmlframework.dataloader.dataloader import DataLoaderManager, DataManager
-from deepmlframework.dataloader.image import ImageLoader
-from deepmlframework.util.config import ConfigParser
-from deepmlframework.util.data_muncher import DataMuncher
+from framework.dataloader.dataloader import DataLoaderManager, DataManager
+from framework.dataloader.image import ImageLoader
+from framework.util.config import ConfigParser
+from framework.util.data_muncher import DataMuncher
 from typing import Dict, OrderedDict
 
 

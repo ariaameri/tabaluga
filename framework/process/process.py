@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from deepmlframework.base import base
-from deepmlframework.util.config import ConfigParser
+from framework.base import base
+from framework.util.config import ConfigParser
 
 
 class ProcessManager(base.BaseEventManager, ABC):

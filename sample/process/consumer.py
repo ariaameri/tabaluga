@@ -1,6 +1,6 @@
-from deepmlframework.process.process import ProcessManager, Process
-from deepmlframework.process.image import SampleImagePreprocessManager
-from deepmlframework.util.config import ConfigParser
+from framework.process.process import ProcessManager, Process
+from framework.process.image import SampleImagePreprocessManager
+from framework.util.config import ConfigParser
 from typing import Dict
 
 
