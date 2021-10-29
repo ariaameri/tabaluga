@@ -187,7 +187,8 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_batch_begin()
 
             self.val_info_dict = self.val_one_batch()
-            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Validation'}}, self.val_info_dict)
+            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Validation'}},
+                                                                 {'$set_recursive': self.val_info_dict})
 
             self.on_val_batch_end()
 
