@@ -16,6 +16,8 @@ class CUDAInformation(Process):
     def process(self, data=None):
         """Retrieves information and prints them.
 
+        This function can only be run once as it shuts down the pynvml at the end.
+
         Parameters
         ----------
         data
@@ -63,4 +65,7 @@ class CUDAInformation(Process):
               f"\t\t {device_info}\n"
 
         self._universal_log(msg, level='info')
+
+        # shutdown the pynvml so it does not use resources
+        pynvml.nvmlShutdown()
 

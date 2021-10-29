@@ -1,4 +1,5 @@
 from framework.process.process import ProcessManager, Process
+from framework.process.cuda import CUDAInformation
 from framework.process.image import BackgroundToColor, ImageResizer, ImageNormalizer, BWHCToBCWH, OneHotDecoder
 from framework.util.config import ConfigParser
 from typing import Dict
@@ -31,7 +32,13 @@ class SampleProcessManager(ProcessManager):
     def create_workers(self):
         """Creates the pre- and post-processing managers as workers."""
 
+        self.workers['cuda'] = CUDAInformation(self._config.get_or_else('cuda_information', ConfigParser()))
         self.workers['preprocess'] = SampleImagePreprocessManager(self._config.get('preprocess'))
+
+    def on_begin(self, info: Dict = None):
+        """at the beginning of everything"""
+
+        self.workers['cuda'].process()
 
     def on_batch_begin(self, info: Dict = None):
         """On beginning of (train) batch, process the loaded train data."""
