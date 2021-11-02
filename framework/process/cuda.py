@@ -6,7 +6,7 @@ import pynvml
 class CUDAInformation(Process):
     """Class to get and print cuda information."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
 
         super().__init__(config)
 
