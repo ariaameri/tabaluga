@@ -120,7 +120,7 @@ class ImageResizer(Process):
 class ImageAugmentationAlbumentations(Process, ABC):
     """Abstract class for image augmentation using the albumentations package."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializes the pre-process instance.
 
         Parameters
