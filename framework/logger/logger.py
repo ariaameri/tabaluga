@@ -159,7 +159,9 @@ class Logger(BaseWorker):
         """
 
         # Adds colored 'report: ' to the beginning of the message
-        report_message = f'{CCC.foreground.set_88_256.green4}'\
+        # first, clear the whole screen until the end
+        report_message = '\033[0J' + \
+                         f'{CCC.foreground.set_88_256.green4}'\
                          f'report: '\
                          f'{CCC.reset.all}'
         report_message += msg
@@ -177,7 +179,9 @@ class Logger(BaseWorker):
         """
 
         # Adds colored 'info: ' to the beginning of the message
-        info_message = f'{CCC.foreground.set_88_256.green3}' \
+        # first, clear the whole screen until the end
+        info_message = '\033[0J' + \
+                       f'{CCC.foreground.set_88_256.green3}' \
                        f'info: ' \
                        f'{CCC.reset.all}'
         info_message += msg
@@ -195,7 +199,9 @@ class Logger(BaseWorker):
         """
 
         # Adds colored 'warning: ' to the beginning of the message
-        warning_message = f'{CCC.foreground.set_88_256.red1}'\
+        # first, clear the whole screen until the end
+        warning_message = '\033[0J' +\
+                          f'{CCC.foreground.set_88_256.red1}'\
                           f'warning: '\
                           f'{CCC.reset.all}'
         warning_message += msg
@@ -213,7 +219,9 @@ class Logger(BaseWorker):
         """
 
         # Adds colored 'ERROR: ' to the beginning of the message and color the message as well
-        error_message = f'{CCC.background.set_8_16.red}{CCC.foreground.set_8_16.white}'\
+        # first, clear the whole screen until the end
+        error_message = '\033[0J' + \
+                        f'{CCC.background.set_8_16.red}{CCC.foreground.set_8_16.white}'\
                         f'ERROR: '
         error_message += msg
         error_message += f'{CCC.reset.all}'
@@ -231,7 +239,9 @@ class Logger(BaseWorker):
         """
 
         # Adds colored 'debug: ' to the beginning of the message
-        debug_message = f'{CCC.foreground.set_88_256.indianred2}'\
+        # first, clear the whole screen until the end
+        debug_message = '\033[0J' + \
+                        f'{CCC.foreground.set_88_256.indianred2}'\
                         f'debug: '\
                         f'{CCC.reset.all}'
         debug_message += msg
