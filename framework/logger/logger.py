@@ -766,6 +766,19 @@ class TheProgressBarLogger(Logger):
         # The number of total epochs
         self._n_epochs: int = epochs
 
+    def set_number_items(self, items: int) -> None:
+        """Sets the total number of items in this progress.
+
+        Parameters
+        ----------
+        items : int
+            Number of items
+
+        """
+
+        # set it!
+        self._the_progress_bar.set_number_items(items)
+
     def _custom_reset(self, total: int, return_to_line_number: int = 0) -> TheProgressBarLogger:
         """Set the total number of iterations and resets the the_progress_bar.
 
