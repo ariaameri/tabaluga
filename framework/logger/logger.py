@@ -1,7 +1,6 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
 from .log_hug import LogHug
-from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
@@ -16,6 +15,7 @@ from collections import OrderedDict
 import threading
 import signal
 import re
+import colored
 
 
 class Logger(BaseWorker):
@@ -118,13 +118,13 @@ class Logger(BaseWorker):
         format = ''
 
         if self.console is False:
-            format += f'{CCC.foreground.set_88_256.grey50}' + '%(asctime)s '
-            format += f'{CCC.foreground.set_88_256.grey42}' + '- '
+            format += f'{colored.fg("grey_50")}' + '%(asctime)s '
+            format += f'{colored.fg("grey_50")}' + '- '
         else:
-            format += f'{CCC.foreground.set_88_256.dodgerblue3}' + f'{SUC.rightwards_arrow_to_bar} '
-        format += f'{CCC.foreground.set_88_256.gold1}' + '%(name)s'
-        format += f'{CCC.foreground.set_88_256.grey42}' + ' '
-        format += f'{CCC.reset.all}' + '%(message)s'
+            format += f'{colored.fg("dodger_blue_3")}' + f'{SUC.rightwards_arrow_to_bar} '
+        format += f'{colored.fg("gold_3b")}' + '%(name)s'
+        format += f'{colored.fg("grey_50")}' + ' '
+        format += f'{colored.attr("reset")}' + '%(message)s'
 
         return format
 
@@ -161,9 +161,9 @@ class Logger(BaseWorker):
         # Adds colored 'report: ' to the beginning of the message
         # first, clear the whole screen until the end
         report_message = '\033[0J' + \
-                         f'{CCC.foreground.set_88_256.green4}'\
+                         f'{colored.fg("green_4")}'\
                          f'report: '\
-                         f'{CCC.reset.all}'
+                         f'{colored.attr("reset")}'
         report_message += msg
 
         self._logger.info(report_message)
@@ -181,9 +181,9 @@ class Logger(BaseWorker):
         # Adds colored 'info: ' to the beginning of the message
         # first, clear the whole screen until the end
         info_message = '\033[0J' + \
-                       f'{CCC.foreground.set_88_256.green3}' \
+                       f'{colored.fg("green_3a")}' \
                        f'info: ' \
-                       f'{CCC.reset.all}'
+                       f'{colored.attr("reset")}'
         info_message += msg
 
         self._logger.info(info_message)
@@ -201,9 +201,9 @@ class Logger(BaseWorker):
         # Adds colored 'warning: ' to the beginning of the message
         # first, clear the whole screen until the end
         warning_message = '\033[0J' +\
-                          f'{CCC.foreground.set_88_256.red1}'\
+                          f'{colored.fg("red_1")}'\
                           f'warning: '\
-                          f'{CCC.reset.all}'
+                          f'{colored.attr("reset")}'
         warning_message += msg
 
         self._logger.warning(warning_message)
@@ -221,10 +221,10 @@ class Logger(BaseWorker):
         # Adds colored 'ERROR: ' to the beginning of the message and color the message as well
         # first, clear the whole screen until the end
         error_message = '\033[0J' + \
-                        f'{CCC.background.set_8_16.red}{CCC.foreground.set_8_16.white}'\
+                        f'{colored.bg("red")}{colored.fg("white")}'\
                         f'ERROR: '
         error_message += msg
-        error_message += f'{CCC.reset.all}'
+        error_message += f'{colored.attr("reset")}'
 
         self._logger.error(error_message)
 
@@ -241,9 +241,9 @@ class Logger(BaseWorker):
         # Adds colored 'debug: ' to the beginning of the message
         # first, clear the whole screen until the end
         debug_message = '\033[0J' + \
-                        f'{CCC.foreground.set_88_256.indianred2}'\
+                        f'{colored.fg("indian_red_1b")}'\
                         f'debug: '\
-                        f'{CCC.reset.all}'
+                        f'{colored.attr("reset")}'
         debug_message += msg
 
         self._logger.debug(debug_message)
@@ -496,211 +496,6 @@ class LoggerManager(BaseEventManager, ABC):
             self.console_file.deactivate()
 
 
-# class TQDMLogger(Logger, io.StringIO):
-#
-#     # TODO: Write the doc for the config argument
-#
-#     def __init__(self, config: ConfigParser):
-#         """Initialize the tqdm logger instance.
-#
-#         Parameters
-#         ----------
-#         config : ConfigParser
-#             The configuration needed for this callback instance and the data manager class.
-#
-#         """
-#
-#         # Making sure the logger is going to write to the console
-#         # Make sure it does not write any prefix
-#         config = config.update('console', True).update('format', '')
-#
-#         self._config = config
-#
-#         Logger.__init__(self, config)
-#         io.StringIO.__init__(self)
-#
-#         self._tqdm = tqdm(
-#             position=self._counter[0],
-#             bar_format=''
-#                        f'{CCC.foreground.set_88_256.grey74}'
-#                        '{percentage:3.0f}% '
-#                        f'{CCC.foreground.set_88_256.cornflowerblue}'
-#                        '|'
-#                        f'{CCC.foreground.set_88_256.steelblue4}'
-#                        '{bar}'
-#                        f'{CCC.foreground.set_88_256.cornflowerblue}'
-#                        '| '
-#                        f'{CCC.foreground.set_88_256.gold1}'
-#                        '{n_fmt}'
-#                        f'{CCC.foreground.set_88_256.grey}'
-#                        '/'
-#                        f'{CCC.foreground.set_88_256.orange2}'
-#                        '{total_fmt} '
-#                        f'{CCC.foreground.set_88_256.grey50}'
-#                        '[{elapsed}<{remaining}, ' '{rate_fmt}{postfix}] '
-#                        f'{CCC.reset.all}'
-#                        '{desc}',
-#             file=self  # Write to this log handler instead of stderr
-#         )
-#         # Bookkeeping for tqdm
-#         self.buf: str = ''
-#
-#         # The number of total iterations
-#         self._total: int = -1
-#
-#         self._n_epochs: int = -1
-#
-#     def set_number_epochs(self, epochs: int):
-#         """Sets the total number of epochs.
-#
-#         Parameters
-#         ----------
-#         epochs : int
-#             Number of epochs
-#
-#         """
-#
-#         # The number of total epochs
-#         self._n_epochs: int = epochs
-#
-#     def reset(self, total: int) -> None:
-#         """Set the total number of iterations and resets the tqdm.
-#
-#         Parameters
-#         ----------
-#         total : int
-#             the total number of iterations expected."""
-#
-#         self._tqdm.reset(total=total)
-#         self._total = total
-#
-#     def close(self) -> None:
-#         """Finishes and closes the tqdm instance."""
-#
-#         self._tqdm.close()
-#
-#     def update(self, update_count: int, msg_dict: Dict = None) -> None:
-#         """Update the tqdm progress bar with description set to message.
-#
-#         Parameters
-#         ----------
-#         update_count : int
-#             The amount that should be added to the tqdm instance.
-#         msg_dict : Dict, optional
-#             Contains the dictionary message to be set as the progress bar description.
-#             Will be passed to the _generate_message method, read there for more info.
-#         """
-#
-#         self._tqdm.update(update_count)
-#
-#         message = self._generate_message(msg_dict)
-#         self._tqdm.set_description_str(message)
-#
-#     def _generate_message(self, msg_dict: Dict) -> str:
-#         """Generates a string based on the input to be used as tqdm bar description.
-#
-#         If msg is None, empty string will be returned.
-#
-#         Parameters
-#         ---------
-#         msg_dict : Dict
-#             Dictionary containing the information to be used. Contains:
-#                 epoch: int
-#                 loss: float
-#                 val_loss: float, optional
-#         """
-#
-#         def _generate_message_set(msg_set_dict: Dict) -> str:
-#             """Function to help generate the set of messages for training, validation, ... .
-#
-#             Parameters
-#             ----------
-#             msg_set_dict : dict
-#                 The dictionary containing the information needed. Some are
-#                     _title: containing the title of the set
-#
-#             Returns
-#             -------
-#             The generated string of the information set
-#             """
-#
-#             message = ''
-#
-#             if len(msg_set_dict) > 1:
-#                 message += f'\t' * 2
-#                 title = str(msg_set_dict.pop('_title'))
-#                 message += f'{CCC.foreground.set_88_256.deepskyblue5}{SUC.right_facing_armenian_eternity_sign} '
-#                 message += f'{CCC.foreground.set_88_256.deepskyblue3}{title}'
-#                 message += f'{CCC.reset.all}'
-#                 message += f'\n'
-#                 for key, value in sorted(msg_set_dict.items()):
-#                     message += f'\t' * 3
-#                     message += f'{SUC.horizontal_bar} '
-#                     message += f'{CCC.foreground.set_88_256.lightsalmon1}{key}' \
-#                                f'{CCC.reset.all}: ' \
-#                                f'{CCC.foreground.set_88_256.orange1}{value: .5e}' \
-#                                f'{CCC.reset.all}' \
-#                                f'\n'
-#
-#             return message
-#
-#         # Make a copy of the dictionary to modify it
-#         msg_dict_copy = {**msg_dict}
-#
-#         message = ''
-#
-#         if msg_dict is None:
-#             return message
-#
-#         # Find the length of the total epochs
-#         # get and remove the 'epoch' item from the dictionary
-#         # and reformat the string accordingly
-#         ep_len = int(np.ceil(np.log10(self._n_epochs)))
-#         epoch = msg_dict_copy.pop('epoch')
-#         message += f'\n'
-#         message += f'\t' * 1
-#         message += f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
-#         message += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
-#                    f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
-#                    f'{CCC.foreground.set_88_256.grey}/' \
-#                    f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
-#                    f'{CCC.reset.all}'
-#         message += f'\n'
-#
-#         # Check if we have training values for logging, starting with 'train_'
-#         # get the item from the dictionary and delete it
-#         # Generate the message set and add it to the total message
-#         train_items = {key[len('train_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
-#                        if key.startswith('train_')}
-#
-#         message += _generate_message_set({"_title": "Training", **train_items})
-#
-#         # Check if we have validation values for logging, starting with 'train_'
-#         # get the item from the dictionary and delete it
-#         # Generate the message set and add it to the total message
-#         val_items = {key[len('val_'):]: msg_dict_copy.pop(key) for key, value in msg_dict.items()
-#                      if key.startswith('val_')}
-#
-#         message += _generate_message_set({"_title": "Validation", **val_items})
-#
-#         # Print the rest of the message set
-#         message += _generate_message_set({"_title": "Others", **msg_dict_copy})
-#
-#         return message
-#
-#     def write(self, buf: str) -> None:
-#         """For tqdm to write to the buffer."""
-#
-#         self.buf = buf.strip('\r\n\t ')
-#
-#     def flush(self) -> None:
-#         """For tqdm.
-#
-#         Will write tqdm messages as infos."""
-#
-#         self._logger.info(self.buf)
-
-
 class TheProgressBarLogger(Logger):
     """A logger for the progress bar that takes the control of stdout.
 
@@ -893,12 +688,12 @@ class TheProgressBarLogger(Logger):
         # and reformat the string accordingly
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
         epoch = msg_dict_copy.pop('epoch')
-        title = f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
-        title += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
-                 f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
-                 f'{CCC.foreground.set_88_256.grey27}/' \
-                 f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
-                 f'{CCC.reset.all}'
+        title = f'{colored.fg("green_4")}{SUC.heavy_teardrop_spoked_asterisk} '
+        title += f'{colored.fg("chartreuse_3a")}Epoch ' \
+                 f'{colored.fg("green_3a")}{epoch:{ep_len}d}' \
+                 f'{colored.fg("grey_27")}/' \
+                 f'{colored.fg("dark_green")}{self._n_epochs}' \
+                 f'{colored.attr("reset")}'
 
         message_dict = {}
 
@@ -949,12 +744,12 @@ class TheProgressBarLogger(Logger):
         ep_len = int(np.ceil(np.log10(self._n_epochs)))
         epoch = msg_dict.get('epoch')
         title = f'\n' \
-                f'{CCC.foreground.set_88_256.green4}{SUC.heavy_teardrop_spoked_asterisk} '
-        title += f'{CCC.foreground.set_88_256.chartreuse4}Epoch ' \
-                 f'{CCC.foreground.set_88_256.green3}{epoch:{ep_len}d}' \
-                 f'{CCC.foreground.set_88_256.grey27}/' \
-                 f'{CCC.foreground.set_88_256.darkgreen}{self._n_epochs}' \
-                 f'{CCC.reset.all}'
+                f'{colored.fg("green_4")}{SUC.heavy_teardrop_spoked_asterisk} '
+        title += f'{colored.fg("chartreuse_3a")}Epoch ' \
+                 f'{colored.fg("green_3a")}{epoch:{ep_len}d}' \
+                 f'{colored.fg("grey_27")}/' \
+                 f'{colored.fg("dark_green")}{self._n_epochs}' \
+                 f'{colored.attr("reset")}'
 
         # If there is a stat entry, use it
         if msg_dict.get('stat') is not None:
