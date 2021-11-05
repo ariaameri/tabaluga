@@ -6,7 +6,7 @@ import numpy as np
 import time
 import datetime
 import os
-from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
+import colored
 from ..util.data_muncher import DataMuncher
 from ..util.calculation import Calculation
 import re
@@ -1139,9 +1139,9 @@ class TheProgressBarColored(TheProgressBar):
         # Get the original one
         bar_prefix = super()._make_and_get_bar_prefix()
 
-        bar_prefix = f'{CCC.foreground.set_88_256.grey74}' \
+        bar_prefix = f'{colored.fg("grey_74")}' \
                      f'{bar_prefix}' \
-                     f'{CCC.reset.all}'
+                     f'{colored.attr("reset")}'
 
         return bar_prefix
 
@@ -1156,9 +1156,9 @@ class TheProgressBarColored(TheProgressBar):
 
         bar_suffix: str = self._get_fractional_progress()  # Fractional progress e.g. 12/20
         bar_suffix += f' '
-        bar_suffix += f'{CCC.foreground.set_88_256.grey27}' \
+        bar_suffix += f'{colored.fg("grey_74")}' \
                       f'[{self._get_item_per_second():.2f} it/s]'
-        bar_suffix += f'{CCC.reset.all}'
+        bar_suffix += f'{colored.attr("reset")}'
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
@@ -1189,9 +1189,9 @@ class TheProgressBarColored(TheProgressBar):
                                          f'{seconds:02d}'
 
         # Add the elapsed time to the bar_suffix
-        bar_suffix += f' {CCC.foreground.set_88_256.grey39}{delta_time_str_last_update}' \
-                      f'{CCC.foreground.set_88_256.grey27} - ' \
-                      f'{delta_time_str_since_beginning}{CCC.reset.all}'
+        bar_suffix += f' {colored.fg("grey_39")}{delta_time_str_last_update}' \
+                      f'{colored.fg("grey_74")} - ' \
+                      f'{delta_time_str_since_beginning}{colored.attr("reset")}'
 
         return bar_suffix
 
@@ -1208,13 +1208,13 @@ class TheProgressBarColored(TheProgressBar):
         length_items = int(np.ceil(np.log10(self.state_info.get('item.total_items_count')))) if self.state_info.get('item.total_items_count') > 0 else 5
 
         # Create the string
-        fractional_progress: str = f'{CCC.foreground.set_88_256.gold1}' \
+        fractional_progress: str = f'{colored.fg("gold_3b")}' \
                                    f'{self.state_info.get("item.current_item_index"): {length_items}d}'
-        fractional_progress += f'{CCC.foreground.set_88_256.grey46}' \
+        fractional_progress += f'{colored.fg("grey_46")}' \
                                f'/'
-        fractional_progress += f'{CCC.foreground.set_88_256.orange2}' + \
+        fractional_progress += f'{colored.fg("orange_4b")}' + \
                                f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
-        fractional_progress += f'{CCC.reset.all}'
+        fractional_progress += f'{colored.attr("reset")}'
 
         return fractional_progress
 
@@ -1236,6 +1236,6 @@ class TheProgressBarColored(TheProgressBar):
         progress_bar = super()._make_and_get_progress_bar(terminal_size=terminal_size)
 
         # Always reset the color back to normal
-        progress_bar += f'{CCC.reset.all}'
+        progress_bar += f'{colored.attr("reset")}'
 
         return progress_bar
