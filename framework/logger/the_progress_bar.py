@@ -10,6 +10,9 @@ import colored
 from ..util.data_muncher import DataMuncher
 from ..util.calculation import Calculation
 import re
+import fcntl
+import termios
+import struct
 
 
 class TheProgressBar:
@@ -729,7 +732,6 @@ class TheProgressBar:
 
         def ioctl_GWINSZ(fd):
             try:
-                import fcntl, termios, struct, os
                 cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
             except:
                 return
