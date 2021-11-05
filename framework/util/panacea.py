@@ -315,14 +315,11 @@ class Panacea(PanaceaBase):
     """
 
     # Set static variables
-    item_begin_symbol = f'\u2022'
-    item_color = f'\033[38;5;209m'
-    after_item_symbol = f':'
+    item_begin_symbol = lambda _: f'\u2022'
+    item_color = lambda _: f'\033[38;5;209m'
+    after_item_symbol = lambda _: f':'
 
-    vertical_bar_symbol = f'\u22EE'
-    # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
-    vertical_bar_color = f'\033[37m'
-    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar_symbol}\033[0m'
+    vertical_bar_with_color = lambda _: f'\033[37m\u22EE\033[0m'
 
     def __init__(self, config_dict: Dict = None, leaf_class: PanaceaLeaf = None):
         """Initializes the class based on the input config dictionary.
@@ -546,7 +543,7 @@ class Panacea(PanaceaBase):
         # Create the resulting string
         out_string = ''
         out_string += self._identity_str_representation(name)
-        out_string += self.after_item_symbol if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
+        out_string += self.after_item_symbol() if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
         out_string += f'\n'
 
         # Create the string from all the children
@@ -568,7 +565,7 @@ class Panacea(PanaceaBase):
 
     def _identity_str_representation(self, name) -> str:
 
-        return f'{self.item_begin_symbol} {self.item_color}{name}\033[0m'
+        return f'{self.item_begin_symbol()} {self.item_color()}{name}\033[0m'
 
     # Getters
 
@@ -910,12 +907,10 @@ class PanaceaLeaf(PanaceaBase):
     """
 
     # Set static variables
-    item_begin_symbol = f'\u273f'
-    item_color = f'\033[33m'
-    after_item_symbol = f':'
-    begin_list_symbol = f'-'
-    begin_list_color = f'\033[38;5;70m'
-    begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
+    item_begin_symbol = lambda _: f'\u273f'
+    item_color = lambda _: f'\033[33m'
+    after_item_symbol = lambda _: f':'
+    begin_list_symbol = lambda _: f'\033[38;5;70m-\033[0m'
 
     def __init__(self, value: Any):
         """Initializes the class based on the input value.
@@ -1154,7 +1149,7 @@ class PanaceaLeaf(PanaceaBase):
         if depth == 1:
             return out_string + f'\n'
 
-        out_string += f'{self.after_item_symbol} '
+        out_string += f'{self.after_item_symbol()} '
 
         if isinstance(self._value, list):
             out_string += self._list_str_representation()
@@ -1165,7 +1160,7 @@ class PanaceaLeaf(PanaceaBase):
 
     def _identity_str_representation(self, name) -> str:
 
-        return f'{self.item_begin_symbol}{self.item_color} {name}\033[0m'
+        return f'{self.item_begin_symbol()}{self.item_color()} {name}\033[0m'
 
     def _item_str_representation(self) -> str:
 
@@ -1173,7 +1168,7 @@ class PanaceaLeaf(PanaceaBase):
 
     def _list_str_representation(self) -> str:
 
-        out_string = ''.join(f'\t{self.begin_list_symbol} {value}\n' for value in self._value)
+        out_string = ''.join(f'\t{self.begin_list_symbol()} {value}\n' for value in self._value)
 
         out_string = f'\n{out_string}'
 

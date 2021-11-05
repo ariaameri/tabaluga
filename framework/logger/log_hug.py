@@ -1,21 +1,18 @@
 from ..util.data_muncher import DataMuncher, DataMuncherLeaf
-from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import re
+import colored
 
 
 class LogHug(DataMuncher):
 
     # Set static variables
-    item_begin_symbol = \
-        f'{CCC.foreground.set_88_256.deepskyblue5}{SUC.right_facing_armenian_eternity_sign}{CCC.reset.all}'
-    item_color = CCC.foreground.set_88_256.deepskyblue3
-    after_item_symbol = ''
+    item_begin_symbol = lambda _: \
+        f'{colored.fg("deep_sky_blue_4c")}{SUC.right_facing_armenian_eternity_sign}{colored.attr("reset")}'
+    item_color = lambda _: colored.fg("deep_sky_blue_3b")
+    after_item_symbol = lambda _: ''
 
-    vertical_bar_symbol = f''
-    # vertical_bar_color = f'{CCC.foreground.set_8_16.light_gray}'
-    vertical_bar_color = f''
-    vertical_bar_with_color = f'{vertical_bar_color}{vertical_bar_symbol}'
+    vertical_bar_with_color = lambda _: f''
 
     def __init__(self, log_dict: dict = None):
         """Initializes the class based on the input data dictionary.
@@ -76,7 +73,7 @@ class LogHug(DataMuncher):
         # Create the resulting string
         out_string = ''
         out_string += self._identity_str_representation(name)
-        out_string += self.after_item_symbol if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
+        out_string += self.after_item_symbol() if depth != 1 and name != '' else ''  # Only add after_item_symbol if we want to print anything in front
         out_string += f'\n'
 
         # Create the string from all the children
@@ -99,7 +96,7 @@ class LogHug(DataMuncher):
         # Indent the children result and add to the result
         out_string += re.sub(
             r'(^|\n)(?!$)',
-            r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
+            r'\1' + f'{self.vertical_bar_with_color()}' + r'\t',
             out_substring
         )
 
@@ -109,13 +106,11 @@ class LogHug(DataMuncher):
 class LogHugLeaf(DataMuncherLeaf):
 
     # Set static variables
-    item_begin_symbol = SUC.horizontal_bar
-    item_color = CCC.foreground.set_88_256.lightsalmon1
-    item_value_color = CCC.foreground.set_88_256.orange1
-    begin_list_symbol = f'-'
-    begin_list_color = f'\x1b[38;5;81m'
-    begin_list_symbol = f'{begin_list_color}{begin_list_symbol}\033[0m'
+    item_begin_symbol = lambda _: SUC.horizontal_bar
+    item_color = lambda _: colored.fg("light_salmon_3b")
+    item_value_color = lambda _: colored.fg("orange_3")
+    begin_list_symbol = lambda _: f'\x1b[38;5;81m-\033[0m'
 
     def _item_str_representation(self) -> str:
 
-        return f'{self.item_value_color}{self._value}{CCC.reset.all}\n'
+        return f'{self.item_value_color()}{self._value}{colored.attr("reset")}\n'
