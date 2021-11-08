@@ -659,7 +659,7 @@ class TheProgressBarLogger(Logger):
 
         # message = self._generate_message(msg_dict)
         message = self._generate_message_from_loghug(msg_dict)
-        self._the_progress_bar.set_description(message)
+        self._the_progress_bar.set_description_after(message)
 
     def _generate_message(self, msg_dict: Dict) -> str:
         """Generates a string based on the input to be used as tqdm bar description.

@@ -59,7 +59,16 @@ class TheProgressBar:
                 'prefix': '',
                 'bar': '',  # The bar itself
                 'suffix': '',
-                'description': '',
+                'description': {
+                    'full': {
+                        'before': '',
+                        'after': '',
+                    },
+                    'short': {
+                        'before': '',
+                        'after': '',
+                    },
+                },
                 'progress_bar': '',  # The whole progress bar, consisting of the previous fields
             },
             'console': {  # Information regarding the console
@@ -402,7 +411,7 @@ class TheProgressBar:
         )
 
         # Reset the description
-        self.set_description('')
+        self.set_description_after('')
 
         return self
 
@@ -508,35 +517,63 @@ class TheProgressBar:
 
         return average
 
-    def set_description(self, description: str) -> None:
-        """Sets the description of the progress bar.
+    def set_description_after(self, description: str) -> None:
+        """Sets the description that comes after the progress bar.
 
         Parameters
         ----------
         description : str
-            String to update the description for the progress bar
+            String to update the description that comes after the progress bar
 
         """
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'progress_bar$'}},
-            {'description': self._modify_description(description)}
+            {'_bc': {'$regex': 'description.full$'}},
+            {'after': self._modify_description_after(description)}
         )
 
-    def _get_bar_description(self) -> str:
-        """Returns the description of the progress bar.
+    def set_description_before(self, description: str) -> None:
+        """Sets the description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes before the progress bar
+
+        """
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.full$'}},
+            {'before': self._modify_description_after(description)}
+        )
+
+    def _get_bar_description_after(self) -> str:
+        """Returns the description that comes after the progress bar.
 
         Returns
         ----------
-        The description string of the bar
+        The description string that comes after the bar
 
         """
 
         # Retrieve and return the progress bar description
-        return self.progress_bar_info.get('progress_bar.description')
+        return self.progress_bar_info.get('progress_bar.description.full.after')
 
-    def _modify_description(self, description: str) -> str:
+    def _get_bar_description_before(self) -> str:
+        """Returns the description that comes before the progress bar.
+
+        Returns
+        ----------
+        The description string that comes before the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.full.before')
+
+    def _modify_description_after(self, description: str) -> str:
         """Modifies the description of the progress bar.
 
         Parameters
@@ -673,30 +710,30 @@ class TheProgressBar:
         # Update and get the elements of the progress bar
         self._update_bar_prefix()
         self._update_bar_suffix()
+        description_before = self._get_bar_description_before()
         bar_prefix = self._get_bar_prefix()
         bar_suffix = self._get_bar_suffix()
-        description = self._get_bar_description()
-        # bar_prefix = self._make_and_get_bar_prefix()
-        # bar_suffix = self._make_and_get_bar_suffix()
+        description_after = self._get_bar_description_after()
 
         # Calculate the written char length of the prefix, suffix, and the first line of description without the
         # special unicode or console non-printing characters
+        len_bar_desc_before = len(self._remove_non_printing_chars(description_before.split('\n')[-1]).expandtabs())
         len_bar_prefix = len(self._remove_non_printing_chars(bar_prefix).expandtabs())
         len_bar_suffix = len(self._remove_non_printing_chars(bar_suffix).expandtabs())
-        len_bar_desc = len(self._remove_non_printing_chars(description.split('\n')[0]).expandtabs())
+        len_bar_desc_after = len(self._remove_non_printing_chars(description_after.split('\n')[0]).expandtabs())
 
         remaining_columns = \
             int(np.clip(
-                columns - len_bar_prefix - len_bar_suffix - 3 - len_bar_desc,
+                columns - len_bar_prefix - len_bar_suffix - 4 - len_bar_desc_before - len_bar_desc_after,
                 5,
                 50
-            ))  # -3 for the spaces between the fields
+            ))  # -4 for the spaces between the fields
 
         # Update the bar and get it
         self._update_bar(remaining_columns)
         bar = self._get_bar()
 
-        progress_bar = f'{bar_prefix} {bar} {bar_suffix} {description}'
+        progress_bar = f'{description_before} {bar_prefix} {bar} {bar_suffix} {description_after}'
 
         # Trim the progress bar to the number of columns of the console
         # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
