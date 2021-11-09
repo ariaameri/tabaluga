@@ -196,6 +196,9 @@ class TheProgressBar:
         # Set the printing event on to start with the printing of the progress bar
         self.event_print.set()
 
+        # finally, reset so that everything is set
+        self.reset()
+
         return self
 
     def _activate_external_stdout_handler(self):
