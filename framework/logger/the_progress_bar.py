@@ -1,4 +1,6 @@
 from __future__ import annotations
+import multiprocessing
+import select
 import threading
 import sys
 from typing import List
@@ -52,6 +54,24 @@ class TheProgressBar:
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
+
+        # keep info regarding the sleep times
+        r, w = multiprocessing.Pipe(duplex=False)  # create a channel to talk to the sleeper
+        initial_sleep_timer_info = {
+            # channel to talk to the timer
+            'pipe': {
+                'read': r,
+                'write': w,
+            },
+            # the amount of update we should see before we do an update
+            'update_interval': -1,
+            # the number of times we should do an update in an iteration
+            'update_number_per_iteration': 4,
+            'stat': {
+                'last_item_index': 0,
+            }
+        }
+        self.sleep_timer_info = DataMuncher(initial_sleep_timer_info)
 
         # Book keeping for the information regarding the progress bar
         initial_progress_bar_info = {
@@ -330,7 +350,44 @@ class TheProgressBar:
                 self.pause()
                 self._look_to_resume()  # Constantly check if we can resume
 
-            time.sleep(1 / self._get_update_frequency())
+            self._sleep()
+
+    def _sleep(self):
+        """Sleep! used for sleeping between each update of the bar."""
+
+        timeout = 1 / self._get_update_frequency()
+
+        rs, ws, xs = select.select([self.sleep_timer_info.get('pipe.read')], [], [], timeout)
+
+        for r in rs:
+            r.recv()
+
+    def _notify_sleep(self):
+        """Figure out if it is a good time to wake the sleeping time up!"""
+
+        if self.sleep_timer_info.get('update_interval') > 0:
+            interval = self.sleep_timer_info.get('update_interval')
+        elif self.sleep_timer_info.get('update_number_per_iteration') > 0:
+            interval = \
+                self.state_info.get('item.total_items_count') \
+                // self.sleep_timer_info.get('update_number_per_iteration')
+        else:
+            return
+
+        # if we should print
+        if \
+                self.state_info.get('item.current_item_index') \
+                >=\
+                self.sleep_timer_info.get('stat.last_item_index') + interval:
+
+            # first update the stats
+            self.sleep_timer_info = \
+                self.sleep_timer_info.update({}, {
+                    'stat.last_item_index': self.state_info.get('item.current_item_index'),
+                })
+
+            # let the time go off
+            self.sleep_timer_info.get('pipe.write').send('timestup!')
 
     def _run_check_for_resume(self) -> None:
         """Checks to see if we are in focus to resume the printing."""
@@ -448,10 +505,8 @@ class TheProgressBar:
             # Update the time
             self._update_time_counter()
 
-            # Update the progress bar
-            # self._update_bar_prefix()
-            # self._update_bar_suffix()
-            # self._update_progress_bar()
+            # notify the sleeping timer
+            self._notify_sleep()
 
     class CursorModifier:
 
