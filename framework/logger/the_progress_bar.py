@@ -421,7 +421,7 @@ class TheProgressBar:
 
             # Print the progress bar only if it is focused on
             # If we are not focused, pause
-            if self._check_if_focused():
+            if self._check_if_should_print():
                 self._print_progress_bar()
             else:
                 self.pause()
@@ -480,6 +480,25 @@ class TheProgressBar:
         # If we are in focus, resume
         self.resume()
 
+    def _check_if_should_print(self) -> bool:
+        """
+        Checks whether we should print.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        mode = self.state_info.get('mode')
+
+        if mode == self.Modes.NORMAL and self._check_if_foreground():
+            return True
+        elif mode == self.Modes.NOTTY:
+            return True
+
+        return False
+
     def _check_if_focused(self) -> bool:
         """Checks whether the terminal is focused on the progress bar so that it should be printed.
 
@@ -491,10 +510,34 @@ class TheProgressBar:
 
         # Check if we are connected to a terminal
         # Check if we are a foreground process
-        check = self.isatty() \
-            and (os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno()))
+        check = self._check_if_atty() \
+            and self._check_if_foreground()
 
         return check
+
+    def _check_if_atty(self) -> bool:
+        """
+        Checks whether the terminal has a tty.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        return self.isatty()
+
+    def _check_if_foreground(self) -> bool:
+        """
+        Checks if we are running in foreground
+
+        Returns
+        -------
+        bool
+
+        """
+
+        return os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
 
     def set_number_items(self, number_of_items: int) -> TheProgressBar:
         """Set the total number of the items.
@@ -629,6 +672,9 @@ class TheProgressBar:
             ANSI escape sequence corresponding to the modifier demanded
 
             """
+
+            if not sys.stdout.isatty():
+                return ''
 
             esc_sequence = self.cursor_dict.get(item, '')
 
@@ -1331,7 +1377,6 @@ class TheProgressBar:
             self.statistics_info.get('average.average_item_per_update') \
             / \
             self.statistics_info.get('average.average_time_per_update')
-
 
         return average_item_per_second
 
