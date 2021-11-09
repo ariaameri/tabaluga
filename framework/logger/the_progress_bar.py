@@ -410,8 +410,11 @@ class TheProgressBar:
             {'$set': {'current_item_index': 0, 'total_items_count': -1}}
         )
 
-        # Reset the description
+        # Reset the descriptions
         self.set_description_after('')
+        self.set_description_before('')
+        self.set_description_short_after('')
+        self.set_description_short_before('')
 
         return self
 
@@ -572,6 +575,70 @@ class TheProgressBar:
 
         # Retrieve and return the progress bar description
         return self.progress_bar_info.get('progress_bar.description.full.before')
+
+    def set_description_short_after(self, description: str) -> None:
+        """Sets the short description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes after the progress bar
+
+        """
+
+        # make sure the short description is single line
+        if len(description.split('\n')) != 1:
+            raise ValueError("short description can only have a single line")
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.short'}},
+            {'after': self._modify_description_after(description)}
+        )
+
+    def set_description_short_before(self, description: str) -> None:
+        """Sets the short description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes before the progress bar
+
+        """
+
+        # make sure the short description is single line
+        if len(description.split('\n')) != 1:
+            raise ValueError("short description can only have a single line")
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.short'}},
+            {'before': self._modify_description_after(description)}
+        )
+
+    def _get_bar_description_short_after(self) -> str:
+        """Returns the short description that comes after the progress bar.
+
+        Returns
+        ----------
+        The short description string that comes after the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.short.after')
+
+    def _get_bar_description_short_before(self) -> str:
+        """Returns the short description that comes before the progress bar.
+
+        Returns
+        ----------
+        The short description string that comes before the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.short.before')
 
     def _modify_description_after(self, description: str) -> str:
         """Modifies the description of the progress bar.
