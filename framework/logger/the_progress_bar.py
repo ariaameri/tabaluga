@@ -387,7 +387,10 @@ class TheProgressBar:
                 })
 
             # let the time go off
-            self.sleep_timer_info.get('pipe.write').send('timestup!')
+            # we will print the bar ourselves because we do not want to have a race condition: while we are telling
+            # the other thread to type, this thread can go and reset the bar that would lead to undefined results
+            # self.sleep_timer_info.get('pipe.write').send('timestup!')
+            self._print_progress_bar()
 
     def _run_check_for_resume(self) -> None:
         """Checks to see if we are in focus to resume the printing."""
@@ -465,6 +468,12 @@ class TheProgressBar:
         self.state_info = self.state_info.update(
             {'_bc': {'$regex': 'item$'}},
             {'$set': {'current_item_index': 0, 'total_items_count': -1}}
+        )
+
+        # Reset the sleep info
+        self.sleep_timer_info = self.sleep_timer_info.update(
+            {},
+            {'$set': {'stat.last_item_index': 0}},
         )
 
         # Reset the descriptions
