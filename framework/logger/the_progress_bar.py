@@ -15,6 +15,7 @@ import re
 import fcntl
 import termios
 import struct
+from enum import Enum
 
 
 class TheProgressBar:
@@ -24,6 +25,19 @@ class TheProgressBar:
     """
 
     # TODO: Refactor the class to keep the state of the progress bar and other info as a DataMuncher
+
+    class Modes(Enum):
+        """Enum for modes of operation"""
+
+        NORMAL = 1
+        NOTTY = 2
+
+    class Roles(Enum):
+        """Enum for type of roles"""
+
+        SINGLE = 1
+        MANAGER = 2  # Whether we are in master mode, meaning we are responsible for printing the progress bar
+        WORKER = 3
 
     def __init__(self, stdout_handler=None):
         """Initializes the instance."""
@@ -54,6 +68,12 @@ class TheProgressBar:
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
+
+        # keep the actions that we should take based on the configurations
+        initial_actions = {
+            'get_bar': self._get_progress_bar_with_spaces,
+        }
+        self.actions = DataMuncher(initial_actions)
 
         # keep info regarding the sleep times
         r, w = multiprocessing.Pipe(duplex=False)  # create a channel to talk to the sleeper
@@ -117,7 +137,8 @@ class TheProgressBar:
         initial_state_info = {
             'activated': False,  # Whether the instance has been activated---it can be activated only once
             'paused': False,  # Whether we are on pause mode
-            'master': False,  # Whether we are in master mode, meaning we are responsible for printing the progress bar
+            'mode': self.Modes.NORMAL,
+            'role': self.Roles.SINGLE,
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is not None else False,
             'item': {
@@ -168,6 +189,12 @@ class TheProgressBar:
         # Update the state to know we are activated
         self.state_info = self.state_info.update({}, {'activated': True})
 
+        # set the mode
+        self._configure_mode()
+
+        # set the actions
+        self._set_actions()
+
         # Set the initial time
         current_time = time.time()
         self.statistics_info = \
@@ -200,6 +227,53 @@ class TheProgressBar:
         self.reset()
 
         return self
+
+    def _configure_mode(self):
+        """Method to find out and set the mode of operation."""
+
+        # if we do not have a tty, operate in NOTTY mode
+        if not self._check_if_atty():
+            self.state_info = self.state_info.update({}, {'mode': self.Modes.NOTTY})
+
+    def _set_actions(self):
+        """Sets the proper actions based on the conditions."""
+
+        if self.state_info.get('mode') == self.Modes.NORMAL:
+            def get_bar_curry(return_to_line_number: int = 0):
+                out = self._get_progress_bar_with_spaces(
+                    return_to_line_number=return_to_line_number,
+                    include_desc_before=True,
+                    include_desc_short_before=False,
+                    include_prefix=True,
+                    include_bar=True,
+                    include_suffix=True,
+                    include_desc_after=True,
+                    include_desc_short_after=False,
+                )
+                return out
+
+            self.actions = self.actions.update({}, {
+                'get_bar': get_bar_curry,
+            })
+
+        elif self.state_info.get('mode') == self.Modes.NOTTY:
+            def get_bar_curry(return_to_line_number: int = 0):
+                out = self._get_progress_bar_with_spaces(
+                    terminal_size=(-1, -1),  # this is to avoid reading the terminal size and update the text
+                    return_to_line_number=return_to_line_number,
+                    include_desc_before=False,
+                    include_desc_short_before=True,
+                    include_prefix=True,
+                    include_bar=False,
+                    include_suffix=True,
+                    include_desc_after=False,
+                    include_desc_short_after=True,
+                )
+                return out
+
+            self.actions = self.actions.update({}, {
+                'get_bar': get_bar_curry,
+            })
 
     def _activate_external_stdout_handler(self):
         """Method to activate the external stdout handler in case one is passed in the constructor."""
@@ -842,7 +916,7 @@ class TheProgressBar:
             return
 
         # Get the progress bar with spaces
-        progress_bar = self._get_progress_bar_with_spaces(return_to_line_number=return_to_line_number)
+        progress_bar = self.actions.get('get_bar')(return_to_line_number=return_to_line_number)
 
         # Print the progress bar
         self._direct_write(progress_bar)
@@ -1303,6 +1377,8 @@ class TheProgressBar:
         # Also, if we are on pause, update with frequency 1
         if self.state_info.get('paused') is True:
             freq = 1.0
+        elif self.state_info.get('mode') == self.Modes.NOTTY:
+            freq = 1 / 60  # if we do not have a tty, print every minute
         else:
             freq = float(np.clip(2 * average_freq, 2, 60))
 
@@ -1343,8 +1419,8 @@ class TheProgressBar:
             with self.print_lock:
 
                 # Add the progress bar at the end
-                if not msg.endswith('\n\b'):
-                    self.buffer.append(self._get_progress_bar_with_spaces())
+                if not msg.endswith('\n\b') and self.state_info.get('mode') == self.Modes.NORMAL:
+                    self.buffer.append(self.actions.get('get_bar')())
 
                 # Create the message from the buffer and print it with extra new line character
                 msg = ''.join(self.buffer)
