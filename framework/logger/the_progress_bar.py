@@ -682,7 +682,18 @@ class TheProgressBar:
 
         return result
 
-    def _get_progress_bar_with_spaces(self, terminal_size: (int, int) = None, return_to_line_number: int = 0) -> str:
+    def _get_progress_bar_with_spaces(
+            self,
+            terminal_size: (int, int) = None,
+            return_to_line_number: int = 0,
+            include_desc_before: bool = True,
+            include_desc_short_before: bool = False,
+            include_prefix: bool = True,
+            include_bar: bool = True,
+            include_suffix: bool = True,
+            include_desc_after: bool = True,
+            include_desc_short_after: bool = False,
+    ) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
 
         Returns
@@ -695,7 +706,21 @@ class TheProgressBar:
         """
 
         # Get the progress bar
-        progress_bar = self._make_and_get_progress_bar(terminal_size=terminal_size)
+        progress_bar = \
+            self._make_and_get_progress_bar(
+                terminal_size=terminal_size,
+                include_desc_before=include_desc_before,
+                include_desc_short_before=include_desc_short_before,
+                include_prefix=include_prefix,
+                include_bar=include_bar,
+                include_suffix=include_suffix,
+                include_desc_after=include_desc_after,
+                include_desc_short_after=include_desc_short_after,
+            )
+
+        # if terminal size given is negative, just return the progress_bar
+        if terminal_size is not None and (terminal_size[0] < 0 or terminal_size[1] < 0):
+            return progress_bar + '\n'
 
         # Clear the line and write it
         # progress_bar_with_space: str = self.cursor_modifier.get('clear_line')
@@ -746,7 +771,7 @@ class TheProgressBar:
         """
 
         # If we are in paused mode or non-master mode, do not do anything
-        if self.state_info.get('paused') is True or self.state_info.get('master') is False:
+        if self.state_info.get('paused') is True:
             return
 
         # Get the progress bar with spaces
@@ -755,7 +780,17 @@ class TheProgressBar:
         # Print the progress bar
         self._direct_write(progress_bar)
 
-    def _make_and_get_progress_bar(self, terminal_size: (int, int) = None) -> str:
+    def _make_and_get_progress_bar(
+            self,
+            terminal_size: (int, int) = None,
+            include_desc_before: bool = True,
+            include_desc_short_before: bool = False,
+            include_prefix: bool = True,
+            include_bar: bool = True,
+            include_suffix: bool = True,
+            include_desc_after: bool = True,
+            include_desc_short_after: bool = False,
+    ) -> str:
         """Returns a string containing the progress bar.
 
         Parameters
@@ -769,38 +804,70 @@ class TheProgressBar:
 
         """
 
-        # Get console's width and height
-        self._update_terminal_size(terminal_size=terminal_size)
-        columns, rows = self._get_terminal_size()
-        # columns, rows = self._get_terminal_size()
-
         # Update and get the elements of the progress bar
-        self._update_bar_prefix()
-        self._update_bar_suffix()
-        description_before = self._get_bar_description_before()
-        bar_prefix = self._get_bar_prefix()
-        bar_suffix = self._get_bar_suffix()
-        description_after = self._get_bar_description_after()
+        if include_prefix is True:
+            self._update_bar_prefix()
+        bar_prefix = self._get_bar_prefix() if include_prefix is True else ''
 
-        # Calculate the written char length of the prefix, suffix, and the first line of description without the
-        # special unicode or console non-printing characters
-        len_bar_desc_before = len(self._remove_non_printing_chars(description_before.split('\n')[-1]).expandtabs())
-        len_bar_prefix = len(self._remove_non_printing_chars(bar_prefix).expandtabs())
-        len_bar_suffix = len(self._remove_non_printing_chars(bar_suffix).expandtabs())
-        len_bar_desc_after = len(self._remove_non_printing_chars(description_after.split('\n')[0]).expandtabs())
+        if include_suffix is True:
+            self._update_bar_suffix()
+        bar_suffix = self._get_bar_suffix() if include_suffix is True else ''
 
-        remaining_columns = \
-            int(np.clip(
-                columns - len_bar_prefix - len_bar_suffix - 4 - len_bar_desc_before - len_bar_desc_after,
-                5,
-                50
-            ))  # -4 for the spaces between the fields
+        # only one of long or short description can be set. long one is preferred
+        description_before = self._get_bar_description_before() if include_desc_before is True else ''
+        description_short_before = \
+            self._get_bar_description_short_before() \
+            if include_desc_short_before is True and include_desc_before is False \
+            else ''
 
-        # Update the bar and get it
-        self._update_bar(remaining_columns)
-        bar = self._get_bar()
+        # only one of long or short description can be set. long one is preferred
+        description_after = self._get_bar_description_after() if include_desc_after is True else ''
+        description_short_after = \
+            self._get_bar_description_short_after() \
+            if include_desc_short_after is True and include_desc_after is False \
+            else ''
 
-        progress_bar = f'{description_before} {bar_prefix} {bar} {bar_suffix} {description_after}'
+        if include_bar is True:
+
+            # have a default of this many columns for the bar
+            remaining_columns = 20
+
+            if terminal_size is None or (terminal_size[0] > 0 and terminal_size[1] > 0):
+                # Get console's width and height
+                self._update_terminal_size(terminal_size=terminal_size)
+                columns, rows = self._get_terminal_size()
+                # Calculate the written char length of the prefix, suffix, and the first line of description without the
+                # special unicode or console non-printing characters
+                len_bar_desc_before = \
+                    len(self._remove_non_printing_chars(description_before.split('\n')[-1]).expandtabs())
+                len_bar_desc_short_before = \
+                    len(self._remove_non_printing_chars(description_short_before.split('\n')[-1]).expandtabs())
+                len_bar_prefix = \
+                    len(self._remove_non_printing_chars(bar_prefix).expandtabs())
+                len_bar_suffix = \
+                    len(self._remove_non_printing_chars(bar_suffix).expandtabs())
+                len_bar_desc_after = \
+                    len(self._remove_non_printing_chars(description_after.split('\n')[0]).expandtabs())
+                len_bar_desc_short_after = \
+                    len(self._remove_non_printing_chars(description_short_after.split('\n')[0]).expandtabs())
+
+                remaining_columns = \
+                    int(np.clip(
+                        columns - len_bar_prefix - len_bar_suffix - 4 -
+                            len_bar_desc_before - len_bar_desc_after - len_bar_desc_short_before - len_bar_desc_short_after,
+                        5,
+                        50
+                    ))  # -4 for the spaces between the fields
+
+            # Update the bar and get it
+            self._update_bar(remaining_columns)
+
+        bar = self._get_bar() if include_bar is True else ''
+
+        progress_bar = \
+            f'{description_before or description_short_before}' \
+            f' {bar_prefix} {bar} {bar_suffix} ' \
+            f'{description_after or description_short_after}'
 
         # Trim the progress bar to the number of columns of the console
         # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
@@ -900,6 +967,9 @@ class TheProgressBar:
         A string containing the bar
 
         """
+
+        if not length > 2:
+            return ''
 
         # The percentage of the progress
         percent: float = self._get_percentage()
@@ -1324,7 +1394,17 @@ class TheProgressBarColored(TheProgressBar):
 
         return fractional_progress
 
-    def _make_and_get_progress_bar(self, terminal_size: (int, int) = None) -> str:
+    def _make_and_get_progress_bar(
+            self,
+            terminal_size: (int, int) = None,
+            include_desc_before: bool = True,
+            include_desc_short_before: bool = False,
+            include_prefix: bool = True,
+            include_bar: bool = True,
+            include_suffix: bool = True,
+            include_desc_after: bool = True,
+            include_desc_short_after: bool = False,
+    ) -> str:
         """Returns a string containing the progress bar.
 
         Parameters
@@ -1339,7 +1419,16 @@ class TheProgressBarColored(TheProgressBar):
         """
 
         # Get the original progress bar
-        progress_bar = super()._make_and_get_progress_bar(terminal_size=terminal_size)
+        progress_bar = super()._make_and_get_progress_bar(
+            terminal_size=terminal_size,
+            include_desc_before=include_desc_before,
+            include_desc_short_before=include_desc_short_before,
+            include_prefix=include_prefix,
+            include_bar=include_bar,
+            include_suffix=include_suffix,
+            include_desc_after=include_desc_after,
+            include_desc_short_after=include_desc_short_after,
+        )
 
         # Always reset the color back to normal
         progress_bar += f'{colored.attr("reset")}'
