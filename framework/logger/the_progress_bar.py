@@ -241,6 +241,7 @@ class TheProgressBar:
         if self.state_info.get('mode') == self.Modes.NORMAL:
             def get_bar_curry(return_to_line_number: int = 0):
                 out = self._get_progress_bar_with_spaces(
+                    data=DataMuncher(),
                     return_to_line_number=return_to_line_number,
                     include_desc_before=True,
                     include_desc_short_before=False,
@@ -707,142 +708,6 @@ class TheProgressBar:
 
         return average
 
-    def set_description_after(self, description: str) -> None:
-        """Sets the description that comes after the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the description that comes after the progress bar
-
-        """
-
-        # Update the progress bar info
-        self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.full$'}},
-            {'after': self._modify_description_after(description)}
-        )
-
-    def set_description_before(self, description: str) -> None:
-        """Sets the description that comes before the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the description that comes before the progress bar
-
-        """
-
-        # Update the progress bar info
-        self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.full$'}},
-            {'before': self._modify_description_after(description)}
-        )
-
-    def _get_bar_description_after(self) -> str:
-        """Returns the description that comes after the progress bar.
-
-        Returns
-        ----------
-        The description string that comes after the bar
-
-        """
-
-        # Retrieve and return the progress bar description
-        return self.progress_bar_info.get('progress_bar.description.full.after')
-
-    def _get_bar_description_before(self) -> str:
-        """Returns the description that comes before the progress bar.
-
-        Returns
-        ----------
-        The description string that comes before the bar
-
-        """
-
-        # Retrieve and return the progress bar description
-        return self.progress_bar_info.get('progress_bar.description.full.before')
-
-    def set_description_short_after(self, description: str) -> None:
-        """Sets the short description that comes after the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the short description that comes after the progress bar
-
-        """
-
-        # make sure the short description is single line
-        if len(description.split('\n')) != 1:
-            raise ValueError("short description can only have a single line")
-
-        # Update the progress bar info
-        self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.short'}},
-            {'after': self._modify_description_after(description)}
-        )
-
-    def set_description_short_before(self, description: str) -> None:
-        """Sets the short description that comes before the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the short description that comes before the progress bar
-
-        """
-
-        # make sure the short description is single line
-        if len(description.split('\n')) != 1:
-            raise ValueError("short description can only have a single line")
-
-        # Update the progress bar info
-        self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.short'}},
-            {'before': self._modify_description_after(description)}
-        )
-
-    def _get_bar_description_short_after(self) -> str:
-        """Returns the short description that comes after the progress bar.
-
-        Returns
-        ----------
-        The short description string that comes after the bar
-
-        """
-
-        # Retrieve and return the progress bar description
-        return self.progress_bar_info.get('progress_bar.description.short.after')
-
-    def _get_bar_description_short_before(self) -> str:
-        """Returns the short description that comes before the progress bar.
-
-        Returns
-        ----------
-        The short description string that comes before the bar
-
-        """
-
-        # Retrieve and return the progress bar description
-        return self.progress_bar_info.get('progress_bar.description.short.before')
-
-    def _modify_description_after(self, description: str) -> str:
-        """Modifies the description of the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            Description string for the progress bar
-
-        Returns
-        -------
-        Modified description string
-
-        """
-
-        return description
-
     def get_progress_bar_string(self, terminal_size: (int, int) = None, return_to_line_number: int = 0) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
 
@@ -871,6 +736,7 @@ class TheProgressBar:
 
     def _get_progress_bar_with_spaces(
             self,
+            data: DataMuncher = DataMuncher(),
             terminal_size: (int, int) = None,
             return_to_line_number: int = 0,
             include_desc_before: bool = True,
@@ -895,6 +761,7 @@ class TheProgressBar:
         # Get the progress bar
         progress_bar = \
             self._make_and_get_progress_bar(
+                data=data,
                 terminal_size=terminal_size,
                 include_desc_before=include_desc_before,
                 include_desc_short_before=include_desc_short_before,
@@ -969,6 +836,7 @@ class TheProgressBar:
 
     def _make_and_get_progress_bar(
             self,
+            data: DataMuncher = DataMuncher(),
             terminal_size: (int, int) = None,
             include_desc_before: bool = True,
             include_desc_short_before: bool = False,
@@ -991,33 +859,40 @@ class TheProgressBar:
 
         """
 
-        # Update and get the elements of the progress bar
-        if include_prefix is True:
-            self._update_bar_prefix()
-        bar_prefix = self._get_bar_prefix() if include_prefix is True else ''
-
-        if include_suffix is True:
-            self._update_bar_suffix()
-        bar_suffix = self._get_bar_suffix() if include_suffix is True else ''
+        # get the elements of the progress bar
+        bar_prefix, bar_prefix_data = \
+            self._make_and_get_bar_prefix(data.get_or_else('prefix', None)) \
+            if include_prefix is True \
+            else ('', DataMuncher())
+        bar_suffix, bar_suffix_data = \
+            self._make_and_get_bar_suffix(data.get_or_else('suffix', None)) \
+            if include_suffix is True \
+            else ('', DataMuncher())
 
         # only one of long or short description can be set. long one is preferred
-        description_before = self._get_bar_description_before() if include_desc_before is True else ''
-        description_short_before = \
-            self._get_bar_description_short_before() \
+        description_before, description_before_data = \
+            self._make_and_get_description_before(data.get_or_else('description.full', None)) \
+            if include_desc_before is True \
+            else ('', DataMuncher())
+        description_short_before, description_short_before_data = \
+            self._make_and_get_description_short_before(data.get_or_else('description.short', None)) \
             if include_desc_short_before is True and include_desc_before is False \
-            else ''
+            else ('', DataMuncher())
 
         # only one of long or short description can be set. long one is preferred
-        description_after = self._get_bar_description_after() if include_desc_after is True else ''
-        description_short_after = \
-            self._get_bar_description_short_after() \
+        description_after, description_after_data = \
+            self._make_and_get_description_after(data.get_or_else('description.full', None)) \
+            if include_desc_after is True \
+            else ('', DataMuncher())
+        description_short_after, description_short_after_data = \
+            self._make_and_get_description_short_after(data.get_or_else('description.short', None)) \
             if include_desc_short_after is True and include_desc_after is False \
-            else ''
+            else ('', DataMuncher())
 
+        # have a default of this many columns for the bar
+        # update it if necessary
+        remaining_columns = 20
         if include_bar is True:
-
-            # have a default of this many columns for the bar
-            remaining_columns = 20
 
             if terminal_size is None or (terminal_size[0] > 0 and terminal_size[1] > 0):
                 # Get console's width and height
@@ -1041,23 +916,34 @@ class TheProgressBar:
                 remaining_columns = \
                     int(np.clip(
                         columns - len_bar_prefix - len_bar_suffix - 4 -
-                            len_bar_desc_before - len_bar_desc_after - len_bar_desc_short_before - len_bar_desc_short_after,
+                        len_bar_desc_before - len_bar_desc_after -
+                        len_bar_desc_short_before - len_bar_desc_short_after,
                         5,
                         50
                     ))  # -4 for the spaces between the fields
 
-            # Update the bar and get it
-            self._update_bar(remaining_columns)
+                # we need the information from the prefix, so if we have not found it yet, find it!
+                # well, not the best design, fix it!!
+                if include_prefix is False:
+                    _, bar_prefix_data = self._make_and_get_bar_prefix(data.get_or_else('prefix', None))
 
-        bar = self._get_bar() if include_bar is True else ''
+        # get the bar itself
+        bar, bar_data = \
+            self._make_and_get_bar(
+                length=remaining_columns,
+                data=data
+                    .get_option('bar')
+                    # update the percentage
+                    .map(lambda x: x.update({}, {"percentage": bar_prefix_data.get("percentage")}))
+                    .get_or_else(None)
+            ) \
+            if include_bar is True \
+            else ('', DataMuncher())
 
         progress_bar = \
             f'{description_before or description_short_before}' \
             f' {bar_prefix} {bar} {bar_suffix} ' \
             f'{description_after or description_short_after}'
-
-        # Trim the progress bar to the number of columns of the console
-        # progress_bar = '\n'.join(item[:columns] for item in progress_bar.split('\n'))
 
         return progress_bar
 
@@ -1141,43 +1027,149 @@ class TheProgressBar:
                 {'rows': rows, 'columns': columns}
             )
 
-    def _make_and_get_bar(self, length: int) -> str:
+    # bar prefix methods
+
+    def _make_and_get_bar_prefix(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the string that comes before the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher, optional
+            the data to create the bar prefix of the form:
+                {
+                    "state": {
+                        "item":
+                            {
+                                "current_item_index": ,
+                                "total_items_count": ,
+                            }
+                    }
+                }
+            if not provided, will create it
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string that comes before the bar
+            Data that the string contains
+
+        """
+
+        # get the prefix data
+        data = self._get_bar_prefix_data() if data is None else data
+
+        # The percentage of the progress
+        percent: float = self._get_percentage(data.get('state')) * 100
+
+        bar_prefix = f'{percent:6.2f}%'
+
+        # construct the data that has to be outputted
+        output_data = DataMuncher({"percentage": percent / 100})
+
+        return bar_prefix, output_data
+
+    def _get_bar_prefix(self) -> str:
+        """Returns the stored string that comes before the bar.
+
+        Returns
+        -------
+        A string that comes before the bar
+
+        """
+
+        # Retrieve and return
+        return self.progress_bar_info.get('progress_bar.prefix')
+
+    def _get_bar_prefix_data(self) -> DataMuncher:
+        """
+        Makes and return the data needed to create the bar prefix.
+
+        Returns
+        -------
+        DataMuncher
+            resulting data
+        """
+
+        data = \
+            DataMuncher({
+                "state": {
+                    "item":
+                        {
+                            "current_item_index": self.state_info.get('item.current_item_index'),
+                            "total_items_count": self.state_info.get('item.total_items_count'),
+                        }
+                }
+            })
+
+        return data
+
+    def _update_bar_prefix(self) -> None:
+        """Updates the stored string that comes before the bar."""
+
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'progress_bar$'}},
+                {'prefix': self._make_and_get_bar_prefix()}
+            )
+
+    # bar methods
+
+    def _make_and_get_bar(self, length: int, data: DataMuncher = None) -> (str, DataMuncher):
         """Returns a string containing the bar itself.
 
         Parameters
         ----------
         length : int
             The length of the bar
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    "percentage": ,
+                    "bar_chars": ,
+                }
 
         Returns
         -------
-        A string containing the bar
+        (str, DataMuncher)
+            A string containing the bar
+            Data that the string contains
 
         """
 
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher()
+
         if not length > 2:
-            return ''
+            return '', output_data
+
+        # get the prefix data
+        data = self._get_bar_data() if data is None else data
 
         # The percentage of the progress
-        percent: float = self._get_percentage()
+        percent: float = data.get("percentage")
 
         # Get the length of the bar without the borders
         bar_length = length - 2
 
+        # get bar chars
+        bar_chars = data.get("bar_chars")
+
         # Figure how many 'complete' bar characters (of index -1) we need
         # Figure what other character of bar characters is needed
-        virtual_length = bar_length * len(self.bar_chars)
-        whole_char_count, remainder_char_idx = divmod(int(virtual_length * percent), len(self.bar_chars))
+        virtual_length = bar_length * len(bar_chars)
+        whole_char_count, remainder_char_idx = divmod(int(virtual_length * percent), len(bar_chars))
 
         # Make the bar string
-        bar: str = self.bar_chars[-1] * whole_char_count  # Completed parts
-        bar += self.bar_chars[remainder_char_idx - 1] if remainder_char_idx != 0 else ''  # Half-completed parts
+        bar: str = bar_chars[-1] * whole_char_count  # Completed parts
+        bar += bar_chars[remainder_char_idx - 1] if remainder_char_idx != 0 else ''  # Half-completed parts
         bar += ' ' * (bar_length - len(bar))  # Not completed parts
 
         # Add the borders
         bar = f'|{bar}|'
 
-        return bar
+        return bar, output_data
 
     def _get_bar(self) -> str:
         """Returns the stored string containing the bar itself.
@@ -1190,6 +1182,27 @@ class TheProgressBar:
 
         # Retrieve and return
         return self.progress_bar_info.get('progress_bar.bar')
+
+    def _get_bar_data(self) -> DataMuncher:
+        """
+        Makes and return the data needed to create the bar.
+
+        Returns
+        -------
+        DataMuncher
+            resulting data
+        """
+
+        # get bar prefix data to extract info
+        _, data_prefix = self._make_and_get_bar_prefix()
+
+        data = \
+            DataMuncher({
+                "percentage": data_prefix.get("percentage"),
+                "bar_chars": self.bar_chars,
+            })
+
+        return data
 
     def _update_bar(self, length: int) -> None:
         """Updates the stored containing the bar.
@@ -1208,75 +1221,68 @@ class TheProgressBar:
                 {'bar': self._make_and_get_bar(length)}
             )
 
-    def _make_and_get_bar_prefix(self) -> str:
-        """Returns the string that comes before the bar.
+    # bar suffix methods
 
-        Returns
-        -------
-        A string that comes before the bar
-
-        """
-
-        # The percentage of the progress
-        percent: float = self._get_percentage() * 100
-
-        bar_prefix = f'{percent:6.2f}%'
-
-        return bar_prefix
-
-    def _get_bar_prefix(self) -> str:
-        """Returns the stored string that comes before the bar.
-
-        Returns
-        -------
-        A string that comes before the bar
-
-        """
-
-        # Retrieve and return
-        return self.progress_bar_info.get('progress_bar.prefix')
-
-    def _update_bar_prefix(self) -> None:
-        """Updates the stored string that comes before the bar."""
-
-        # Retrieve and store
-        self.progress_bar_info = \
-            self.progress_bar_info.update(
-                {'_bc': {'$regex': 'progress_bar$'}},
-                {'prefix': self._make_and_get_bar_prefix()}
-            )
-
-    def _get_percentage(self) -> float:
-        """Returns the percentage of the process.
-
-        Returns
-        -------
-        A float that is the percentage of the process
-
-        """
-
-        # The percentage of the progress
-        percent: float = self.state_info.get('item.current_item_index') / self.state_info.get('item.total_items_count')
-        percent = float(np.clip(percent, 0., 1.))
-
-        return percent
-
-    def _make_and_get_bar_suffix(self) -> str:
+    def _make_and_get_bar_suffix(self, data: DataMuncher = None) -> (str, DataMuncher):
         """Returns the string that comes after the bar.
 
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    "state": {
+                        "item": {
+                            "current_item_index": ,
+                            "total_items_count": ,
+                        },
+                    },
+                    "statistics": {
+                        "average": {
+                            "average_item_per_update": ,
+                            "average_time_per_update": ,
+                        },
+                        "time": {
+                            "last_update_time": ,
+                            "initial_progress_bar_time": ,
+                        }
+                    }
+                }
+
         Returns
         -------
-        A string that comes after the bar
+        (str, DataMuncher)
+            A string that comes after the bar
+            data built
 
         """
 
-        bar_suffix: str = self._get_fractional_progress()  # Fractional progress e.g. 12/20
+        # get the prefix data
+        data = self._get_bar_data_suffix() if data is None else data
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "fraction": {},
+                "item_per_sec": {},
+                "time_since_last_update": {},
+                "time_since_beginning_iteration": {},
+            })
+
+        bar_suffix, fractional_data = self._get_fractional_progress(data.get("state"))  # Fractional progress e.g. 12/20
         bar_suffix += f' '
-        bar_suffix += f'[{self._get_item_per_second():.2f} it/s]'
+        item_per_second: float = self._get_item_per_second(data.get("statistics"))
+        bar_suffix += f'[{item_per_second:.2f} it/s]'
+
+        # update the output
+        output_data = output_data.update({}, {
+            "fraction": fractional_data,
+            "item_per_sec": item_per_second,
+        })
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time.last_update_time'))
+        last_update_time = datetime.datetime.fromtimestamp(data.get('statistics.time.last_update_time'))
         delta_time = now - last_update_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1291,21 +1297,40 @@ class TheProgressBar:
                                      f'.' \
                                      f'{microseconds:04d}'
 
-        # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time.initial_progress_bar_time'))
+        # update the output
+        output_data = output_data.update({}, {
+            "time_since_last_update": {
+                "hours": hours,
+                "minutes": minutes,
+                "seconds": seconds,
+                "microseconds": microseconds,
+            }
+        })
+
+        # Time elapsed since the beginning of the iteration
+        init_time = datetime.datetime.fromtimestamp(data.get('statistics.time.initial_progress_bar_time'))
         delta_time = now - init_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
-        delta_time_str_since_beginning = f'{hours:02d}' \
+        delta_time_str_since_iteration_beginning = f'{hours:02d}' \
                                          f':' \
                                          f'{minutes:02d}' \
                                          f':' \
                                          f'{seconds:02d}'
 
-        # Add the elapsed time to the bar_suffix
-        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_beginning}'
+        # update the output
+        output_data = output_data.update({}, {
+            "time_since_beginning_iteration": {
+                "hours": hours,
+                "minutes": minutes,
+                "seconds": seconds,
+            }
+        })
 
-        return bar_suffix
+        # Add the elapsed time to the bar_suffix
+        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_iteration_beginning}'
+
+        return bar_suffix, output_data
 
     def _get_bar_suffix(self) -> str:
         """Returns the stored string that comes after the bar.
@@ -1319,6 +1344,38 @@ class TheProgressBar:
         # Retrieve and return
         return self.progress_bar_info.get('progress_bar.suffix')
 
+    def _get_bar_data_suffix(self) -> DataMuncher:
+        """
+        Makes and return the data needed to create the bar suffix.
+
+        Returns
+        -------
+        DataMuncher
+            resulting data
+        """
+
+        data = \
+            DataMuncher({
+                "state": {
+                    "item": {
+                        "current_item_index": self.state_info.get('item.current_item_index'),
+                        "total_items_count": self.state_info.get('item.total_items_count'),
+                    },
+                },
+                "statistics": {
+                    "average": {
+                        "average_item_per_update": self.statistics_info.get("average.average_item_per_update"),
+                        "average_time_per_update": self.statistics_info.get("average.average_time_per_update"),
+                    },
+                    "time": {
+                        "last_update_time": self.statistics_info.get("time.last_update_time"),
+                        "initial_progress_bar_time": self.statistics_info.get("time.initial_progress_bar_time"),
+                    }
+                }
+            })
+
+        return data
+
     def _update_bar_suffix(self) -> None:
         """Updates the stored string that comes after the bar."""
 
@@ -1329,24 +1386,379 @@ class TheProgressBar:
                 {'suffix': self._make_and_get_bar_suffix()}
             )
 
-    def _get_fractional_progress(self) -> str:
-        """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
+    # description methods
+
+    def set_description_after(self, description: str) -> None:
+        """Sets the description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes after the progress bar
+
+        """
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.full$'}},
+            {'after': self._modify_description_after(description)}
+        )
+
+    def set_description_before(self, description: str) -> None:
+        """Sets the description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes before the progress bar
+
+        """
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.full$'}},
+            {'before': self._modify_description_after(description)}
+        )
+
+    def set_description_short_after(self, description: str) -> None:
+        """Sets the short description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes after the progress bar
+
+        """
+
+        # make sure the short description is single line
+        if len(description.split('\n')) != 1:
+            raise ValueError("short description can only have a single line")
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.short'}},
+            {'after': self._modify_description_after(description)}
+        )
+
+    def set_description_short_before(self, description: str) -> None:
+        """Sets the short description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes before the progress bar
+
+        """
+
+        # make sure the short description is single line
+        if len(description.split('\n')) != 1:
+            raise ValueError("short description can only have a single line")
+
+        # Update the progress bar info
+        self.progress_bar_info = self.progress_bar_info.update(
+            {'_bc': {'$regex': 'description.short'}},
+            {'before': self._modify_description_after(description)}
+        )
+
+    def _make_and_get_description_before(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the full description that comes before the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'before': '',
+                }
 
         Returns
         -------
-        A string containing the fractional progress
+        (str, DataMuncher)
+            A string containing full description before
+            data built
+
+        """
+
+        # get the description
+        description = self._get_bar_description_before() if data is None else data.get('before')
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
+    def _make_and_get_description_after(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the full description that comes after the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'after': '',
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing full description after
+            data built
+
+        """
+
+        # get the description
+        description = self._get_bar_description_after() if data is None else data.get('after')
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
+    def _make_and_get_description_short_before(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the short description that comes before the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'before': '',
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing short description before
+            data built
+
+        """
+
+        # get the description
+        description = self._get_bar_description_short_before() if data is None else data.get('before')
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
+    def _make_and_get_description_short_after(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the short description that comes after the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'after': '',
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing short description after
+            data built
+
+        """
+
+        # get the description
+        description = self._get_bar_description_short_after() if data is None else data.get('after')
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
+    def _get_bar_description_before(self) -> str:
+        """Returns the description that comes before the progress bar.
+
+        Returns
+        ----------
+        The description string that comes before the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.full.before')
+
+    def _get_bar_description_after(self) -> str:
+        """Returns the description that comes after the progress bar.
+
+        Returns
+        ----------
+        The description string that comes after the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.full.after')
+
+    def _get_bar_description_short_before(self) -> str:
+        """Returns the short description that comes before the progress bar.
+
+        Returns
+        ----------
+        The short description string that comes before the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.short.before')
+
+    def _get_bar_description_short_after(self) -> str:
+        """Returns the short description that comes after the progress bar.
+
+        Returns
+        ----------
+        The short description string that comes after the bar
+
+        """
+
+        # Retrieve and return the progress bar description
+        return self.progress_bar_info.get('progress_bar.description.short.after')
+
+    def _modify_description_before(self, description: str) -> str:
+        """Modifies the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            Description string for the progress bar
+
+        Returns
+        -------
+        Modified description string
+
+        """
+
+        return description
+
+    def _modify_description_after(self, description: str) -> str:
+        """Modifies the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            Description string for the progress bar
+
+        Returns
+        -------
+        Modified description string
+
+        """
+
+        return description
+
+    def _modify_description_short_before(self, description: str) -> str:
+        """Modifies the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            Description string for the progress bar
+
+        Returns
+        -------
+        Modified description string
+
+        """
+
+        return description
+
+    def _modify_description_short_after(self, description: str) -> str:
+        """Modifies the description of the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            Description string for the progress bar
+
+        Returns
+        -------
+        Modified description string
+
+        """
+
+        return description
+
+    # utility methods
+
+    def _get_percentage(self, data: DataMuncher) -> float:
+        """Returns the percentage of the process.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data to create the bar prefix of the form:
+                {
+                    "item":
+                            {
+                                "current_item_index": ,
+                                "total_items_count": ,
+                            }
+                }
+
+        Returns
+        -------
+        A float that is the percentage of the process
+
+        """
+
+        # The percentage of the progress
+        percent: float = data.get('item.current_item_index') / data.get('item.total_items_count')
+        percent = float(np.clip(percent, 0., 1.))
+
+        return percent
+
+    def _get_fractional_progress(self, data: DataMuncher) -> (str, DataMuncher):
+        """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data to create the bar prefix of the form:
+                {
+                    "item":
+                            {
+                                "current_item_index": ,
+                                "total_items_count": ,
+                            }
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing the fractional progress
+            data built
 
         """
 
         # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(self.state_info.get('item.total_items_count')))) if self.state_info.get('item.total_items_count') > 0 else 5
+        length_items = int(np.ceil(np.log10(data.get('item.total_items_count')))) if data.get('item.total_items_count') > 0 else 5
 
         # Create the string
-        fractional_progress: str = f'{self.state_info.get("item.current_item_index"): {length_items}d}'
+        fractional_progress: str = f'{data.get("item.current_item_index"): {length_items}d}'
         fractional_progress += f'/'
-        fractional_progress += f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
+        fractional_progress += f'{data.get("item.total_items_count")}' if data.get('item.total_items_count') > 0 else '?'
 
-        return fractional_progress
+        # update the output data
+        output_data = DataMuncher({
+            "items": data.get("item.current_item_index"),
+            "total_items": data.get("item.total_items_count") if data.get('item.total_items_count') > 0 else 0,
+        })
+
+        return fractional_progress, output_data
 
     def _remove_non_printing_chars(self, message: str) -> str:
         """Removes the unicode and non-printing characters from the string given and returns it.
@@ -1364,8 +1776,20 @@ class TheProgressBar:
 
         return re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', message)
 
-    def _get_item_per_second(self) -> float:
+    def _get_item_per_second(self, data: DataMuncher) -> float:
         """Returns the average number of items processed in a second.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data to create the bar prefix of the form:
+                {
+                    "average":
+                            {
+                                "average_item_per_update": ,
+                                "average_time_per_update": ,
+                            }
+                }
 
         Returns
         -------
@@ -1374,9 +1798,9 @@ class TheProgressBar:
         """
 
         average_item_per_second = \
-            self.statistics_info.get('average.average_item_per_update') \
+            data.get('average.average_item_per_update') \
             / \
-            self.statistics_info.get('average.average_time_per_update')
+            data.get('average.average_time_per_update')
 
         return average_item_per_second
 
@@ -1428,6 +1852,8 @@ class TheProgressBar:
             freq = float(np.clip(2 * average_freq, 2, 60))
 
         return freq
+
+    # writing methods
 
     def _direct_write(self, msg: str) -> None:
         """Write the msg directly on the output with no buffers.
@@ -1491,42 +1917,73 @@ class TheProgressBarColored(TheProgressBar):
 
     # TODO: Code duplication, fix it
 
-    def _make_and_get_bar_prefix(self) -> str:
+    def _make_and_get_bar_prefix(self, data: DataMuncher = None) -> (str, DataMuncher):
         """Returns the string that comes before the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher, optional
+            refer to super class
 
         Returns
         -------
-        A string that comes before the bar
+        (str, DataMuncher)
+            refer to super class
 
         """
 
         # Get the original one
-        bar_prefix = super()._make_and_get_bar_prefix()
+        bar_prefix, bar_prefix_data = super()._make_and_get_bar_prefix()
 
         bar_prefix = f'{colored.fg("grey_74")}' \
                      f'{bar_prefix}' \
                      f'{colored.attr("reset")}'
 
-        return bar_prefix
+        return bar_prefix, bar_prefix_data
 
-    def _make_and_get_bar_suffix(self) -> str:
+    def _make_and_get_bar_suffix(self, data: DataMuncher = None) -> (str, DataMuncher):
         """Returns the string that comes after the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher, optional
+            refer to super class
 
         Returns
         -------
-        A string that comes after the bar
+        (str, DataMuncher)
+            refer to super class
 
         """
 
-        bar_suffix: str = self._get_fractional_progress()  # Fractional progress e.g. 12/20
+        # get the prefix data
+        data = self._get_bar_data_suffix() if data is None else data
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "fraction": {},
+                "item_per_sec": {},
+                "time_since_last_update": {},
+                "time_since_beginning_iteration": {},
+            })
+
+        bar_suffix, fractional_data = self._get_fractional_progress(data.get("state"))  # Fractional progress e.g. 12/20
         bar_suffix += f' '
+        item_per_second: float = self._get_item_per_second(data.get("statistics"))
         bar_suffix += f'{colored.fg("grey_74")}' \
-                      f'[{self._get_item_per_second():.2f} it/s]'
+                      f'[{item_per_second:.2f} it/s]'
         bar_suffix += f'{colored.attr("reset")}'
+
+        # update the output
+        output_data = output_data.update({}, {
+            "fraction": fractional_data,
+            "item_per_sec": item_per_second,
+        })
 
         # Time elapsed since the last update
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('last_update_time'))
+        last_update_time = datetime.datetime.fromtimestamp(data.get('statistics.time.last_update_time'))
         delta_time = now - last_update_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1541,8 +1998,20 @@ class TheProgressBarColored(TheProgressBar):
                                      f'.' \
                                      f'{microseconds:04d}'
 
+        # update the output
+        output_data = output_data.update({}, {
+            '$set': {
+                "time_since_last_update": {
+                    "hours": hours,
+                    "minutes": minutes,
+                    "seconds": seconds,
+                    "microseconds": microseconds,
+                }
+            }
+        })
+
         # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(self.statistics_info.get('time').get('initial_progress_bar_time'))
+        init_time = datetime.datetime.fromtimestamp(data.get('statistics.time.initial_progress_bar_time'))
         delta_time = now - init_time
         hours, remainder = divmod(delta_time.seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -1552,38 +2021,64 @@ class TheProgressBarColored(TheProgressBar):
                                          f':' \
                                          f'{seconds:02d}'
 
+        # update the output
+        output_data = output_data.update({}, {
+            '$set': {
+                "time_since_beginning_iteration": {
+                     "hours": hours,
+                     "minutes": minutes,
+                     "seconds": seconds,
+                }
+            }
+        })
+
         # Add the elapsed time to the bar_suffix
         bar_suffix += f' {colored.fg("grey_39")}{delta_time_str_last_update}' \
                       f'{colored.fg("grey_74")} - ' \
                       f'{delta_time_str_since_beginning}{colored.attr("reset")}'
 
-        return bar_suffix
+        return bar_suffix, output_data
 
-    def _get_fractional_progress(self) -> str:
+    def _get_fractional_progress(self, data: DataMuncher) -> (str, DataMuncher):
         """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            refer to super class
 
         Returns
         -------
-        A string containing the fractional progress
+        (str, DataMuncher)
+            A string containing the fractional progress
+            data built
 
         """
 
         # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(self.state_info.get('item.total_items_count')))) if self.state_info.get('item.total_items_count') > 0 else 5
+        length_items = int(np.ceil(np.log10(data.get('item.total_items_count')))) if data.get(
+            'item.total_items_count') > 0 else 5
 
         # Create the string
         fractional_progress: str = f'{colored.fg("gold_3b")}' \
-                                   f'{self.state_info.get("item.current_item_index"): {length_items}d}'
+                                   f'{data.get("item.current_item_index"): {length_items}d}'
         fractional_progress += f'{colored.fg("grey_46")}' \
                                f'/'
         fractional_progress += f'{colored.fg("orange_4b")}' + \
-                               f'{self.state_info.get("item.total_items_count")}' if self.state_info.get('item.total_items_count') > 0 else '?'
+                               f'{data.get("item.total_items_count")}' if data.get('item.total_items_count') > 0 else '?'
         fractional_progress += f'{colored.attr("reset")}'
 
-        return fractional_progress
+        # update the output data
+        output_data = DataMuncher({
+            "items": data.get("item.current_item_index"),
+            "total_items": data.get("item.total_items_count") if data.get('item.total_items_count') > 0 else 0,
+        })
+
+        return fractional_progress, output_data
 
     def _make_and_get_progress_bar(
             self,
+            data: DataMuncher = DataMuncher(),
             terminal_size: (int, int) = None,
             include_desc_before: bool = True,
             include_desc_short_before: bool = False,
@@ -1608,6 +2103,7 @@ class TheProgressBarColored(TheProgressBar):
 
         # Get the original progress bar
         progress_bar = super()._make_and_get_progress_bar(
+            data=data,
             terminal_size=terminal_size,
             include_desc_before=include_desc_before,
             include_desc_short_before=include_desc_short_before,
