@@ -586,8 +586,11 @@ class Panacea(PanaceaBase):
 
         # Go deeper if we see the pattern 'item1.item2'
         if '.' in item:
-            return \
-                self.get_option(item.split('.')[0]).get()\
+            element = self.get_option(item.split('.')[0])
+            if element.is_empty():
+                return element
+            else:
+                return element.get()\
                     .get_option('.'.join(item.split('.')[1:]))
 
         # Look for the item and return it
