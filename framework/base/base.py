@@ -29,6 +29,9 @@ class BaseWorker:
         # Set the configuration
         self._config = config if config is not None else ConfigParser({})
 
+        # check and process the config
+        self._check_process_config()
+
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
 
@@ -42,7 +45,10 @@ class BaseWorker:
         self._config.print(depth=depth)
 
     def _check_process_config(self) -> None:
-        """Checks the set config for validity. If mistakes are fatal, raise an error, otherwise set default values."""
+        """
+        Checks the set config for validity. If mistakes are fatal, raise an error, otherwise set default values.
+        This method must be idempotent
+        """
 
         pass
 
