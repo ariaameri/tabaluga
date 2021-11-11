@@ -53,7 +53,7 @@ class Logger:
         self._config = config if config is not None else ConfigParser()
 
         # The level at which we log
-        self._level: int = self._config.get_or_else('level', logging.INFO)
+        self._level: int = self._get_logging_level(self._config.get_or_else('level', "info"))
 
         # Get the logger
         self._logger = logging.getLogger(self._config.get_or_else('name', str(self._counter[0])))
@@ -75,7 +75,7 @@ class Logger:
             self._handler = logging.FileHandler(self._config.get_or_else('file_name', file_name))
 
         # Set the level, format, and attach
-        self._handler.setLevel(self._config.get_or_else('level', logging.INFO))
+        self._handler.setLevel(self._level)
         self._format = self._config.get_or_else('format', self._create_format())
         self._handler.setFormatter(
             logging.Formatter(
@@ -127,6 +127,37 @@ class Logger:
         format += f'{colored.attr("reset")}' + '%(message)s'
 
         return format
+
+    def _get_logging_level(self, level: str) -> int:
+        """
+        Converts a string level to a logging package value.
+
+        Parameters
+        ----------
+        level : str
+            log level, look at the log_abilities to see them
+
+        Returns
+        -------
+        int
+            logging package value
+
+        """
+
+        level = level.lower()
+
+        if level == "debug":
+            return logging.DEBUG
+        elif level == "report":
+            return logging.INFO
+        elif level == "info":
+            return logging.INFO
+        elif level == "warning":
+            return logging.WARNING
+        elif level == "error":
+            return logging.ERROR
+        else:
+            raise ValueError(f"could not understand the log level of {level}, it has to be one of {self.log_abilities}")
 
     def log(self, msg: str, level: str = 'debug') -> None:
         """Logs the given message at the given level.
