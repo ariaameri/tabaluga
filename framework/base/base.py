@@ -32,6 +32,9 @@ class BaseWorker:
         # check and process the config
         self._check_process_config()
 
+        # make logger for this instance
+        self._log = self._create_logger()
+
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
 
@@ -64,6 +67,44 @@ class BaseWorker:
         """
 
         pass
+
+    def _create_logger(self) -> Logger:
+        """Creates a logger for this instance."""
+
+        # this is only to check if we have already create the logger
+        # this problem is troublesome in multi-parent inheritance that this class get initiated more than once
+        # which causes multiple loggers to be created.
+        # here we check if we have already created it and avoid its recreation
+        if hasattr(self, "_log"):
+            return self._log
+
+        config_logger = \
+            self._config\
+                .get_or_empty("logger")\
+                .update({}, {'$set_on_insert': {"name": self._modify_logger_name(self.__class__.__name__)}})
+
+        from ..logger.logger import Logger
+        logger = Logger(config_logger)
+
+        return logger
+
+    def _modify_logger_name(self, name: str = '') -> str:
+        """
+        Modify the logger name provided. Method to be overriden for extra flexibility
+
+        Parameters
+        ----------
+        name : str
+            name provided
+
+        Returns
+        -------
+        str
+            modified name
+
+        """
+
+        return name
 
     def _universal_log(self, msg: str, level: str = 'debug') -> None:
         """Logs the given message at the given level.
