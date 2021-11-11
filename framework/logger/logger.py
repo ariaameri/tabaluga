@@ -68,27 +68,53 @@ class Logger:
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
 
-        # TODO: Should we have logging to both the console and the file?
-        # Determine whether to write to file or console and get the handlers
+        # Determine whether to write to the console and get the handlers
         self.console = self._config.get_or_else('console', True)
         if self.console is True:
             # Get the handler
             self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] =\
                 self._config.get_or_else('console_handler', sys.stdout)
-            self._handler = logging.StreamHandler(self.console_file)
-        else:
+            console_handler = logging.StreamHandler(self.console_file)
+            self._console_handler = self._set_handler_properties(console_handler, self._create_format("console"))
+            self._logger.addHandler(self._console_handler)
+
+        # Determine whether to write to file and get the handlers
+        self.file = self._config.get_or_else('file', False)
+        if self.file is True:
             file_name = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            file_name = f'{file_name}.txt'
-            self._handler = logging.FileHandler(self._config.get_or_else('file_name', file_name))
+            file_name_prefix = self._config.get_option("filename_prefix").map(lambda x: f"{x}-").get_or_else("")
+            file_name = f'{file_name_prefix}{file_name}.txt'
+            file_handler = logging.FileHandler(self._config.get_or_else('file_name', file_name))
+            self._file_handler = self._set_handler_properties(file_handler, self._create_format("file"))
+            self._logger.addHandler(self._file_handler)
+
+    def _set_handler_properties(self, handler: logging.Handler, format: str) -> logging.Handler:
+        """
+        Sets the properties of the handler and returns it
+
+        Parameters
+        ----------
+        handler : logging.Handler
+            handler to set the properties on
+
+        format : str
+            format to set for this handler
+
+        Returns
+        -------
+        logging.Handler
+            result
+
+        """
 
         # Set the level, format, and attach
-        self._handler.setLevel(self._level)
-        self._format = self._config.get_or_else('format', self._create_format())
-        self._handler.setFormatter(
+        handler.setLevel(self._level)
+        handler.setFormatter(
             logging.Formatter(
-                self._format
+                format
             ))
-        self._logger.addHandler(self._handler)
+
+        return handler
 
     def set_name(self, name: str) -> None:
         """Changes the name of the current logger handler
@@ -113,8 +139,14 @@ class Logger:
 
         return self.log_abilities
 
-    def _create_format(self) -> str:
-        """Creates a custom logger format and returns the string.
+    def _create_format(self, handler_type: str) -> str:
+        """
+        Creates a custom logger format and returns the string.
+
+        Parameters
+        ----------
+        handler_type : str
+            Type of handler, it can be "console" or "file"
 
         Returns
         -------
@@ -124,14 +156,18 @@ class Logger:
 
         format = ''
 
-        if self.console is False:
-            format += f'{colored.fg("grey_50")}' + '%(asctime)s '
-            format += f'{colored.fg("grey_50")}' + '- '
-        else:
-            format += f'{colored.fg("dodger_blue_3")}' + f'{SUC.rightwards_arrow_to_bar} '
-        format += f'{colored.fg("gold_3b")}' + '%(name)s'
-        format += f'{colored.fg("grey_50")}' + ' '
-        format += f'{colored.attr("reset")}' + '%(message)s'
+        if handler_type == "console":
+            format += f'{colored.fg("dodger_blue_3")}{SUC.rightwards_arrow_to_bar} ' \
+                      f'{colored.fg("gold_3b")}%(name)s' \
+                      f'{colored.fg("grey_50")} ' \
+                      f'{colored.attr("reset")}%(message)s'
+
+        if handler_type == "file":
+            format += '%(asctime)s ' \
+                      '- ' \
+                      '%(name)s' \
+                      ' ' \
+                      '%(message)s'
 
         return format
 
