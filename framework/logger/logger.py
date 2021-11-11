@@ -16,6 +16,7 @@ import threading
 import signal
 import re
 import colored
+from readerwriterlock import rwlock
 
 
 class Logger:
@@ -23,6 +24,7 @@ class Logger:
 
     # Keep track of how many logger instances we have
     _counter: List[int] = [0]
+    _rwlock = rwlock.RWLockRead()
 
     # Keep track of supported logger functionality/abilities
     log_abilities = ['debug', 'report', 'info', 'warning', 'error']
@@ -56,8 +58,13 @@ class Logger:
         self._level: int = self._get_logging_level(self._config.get_or_else('level', "info"))
 
         # Get the logger
-        self._logger = logging.getLogger(self._config.get_or_else('name', str(self._counter[0])))
-        self._counter[0] += 1
+        # we try to make a unique name for the logger so that we do not mistakenly grab another logger with the
+        # same name, then, we set the name of the logger to the thing we want
+        with self._rwlock.gen_wlock():
+            count = self._counter[0]
+            self._logger = logging.getLogger(str(count))
+            self.set_name(self._config.get_or_else('name', str(count)))
+            self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
 
