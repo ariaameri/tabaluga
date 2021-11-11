@@ -557,7 +557,7 @@ class Panacea(PanaceaBase):
         # Indent the children result and add to the result
         out_string += re.sub(
             r'(^|\n)(?!$)',
-            r'\1' + f'{self.vertical_bar_with_color}' + r'\t',
+            r'\1' + f'{self.vertical_bar_with_color()}' + r'\t',
             out_substring
         )
 
