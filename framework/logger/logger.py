@@ -18,7 +18,7 @@ import re
 import colored
 
 
-class Logger(BaseWorker):
+class Logger:
     """An abstract base/parent class for all logger classes."""
 
     # Keep track of how many logger instances we have
@@ -50,7 +50,7 @@ class Logger(BaseWorker):
 
         """
 
-        super().__init__(config)
+        self._config = config if config is not None else ConfigParser()
 
         # The level at which we log
         self._level: int = self._config.get_or_else('level', logging.INFO)
@@ -63,7 +63,7 @@ class Logger(BaseWorker):
 
         # TODO: Should we have logging to both the console and the file?
         # Determine whether to write to file or console and get the handlers
-        self.console = self._config.get_or_else('console', False)
+        self.console = self._config.get_or_else('console', True)
         if self.console is True:
             # Get the handler
             self.console_file: Union[LoggerConsoleFile, io.TextIOWrapper] =\
