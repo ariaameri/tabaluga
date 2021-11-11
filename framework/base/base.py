@@ -41,6 +41,24 @@ class BaseWorker:
 
         self._config.print(depth=depth)
 
+    def _check_process_config(self) -> None:
+        """Checks the set config for validity. If mistakes are fatal, raise an error, otherwise set default values."""
+
+        pass
+
+    def _update_config(self, new_config: ConfigParser) -> None:
+        """
+        Gets a new config and update own config.
+
+        Parameters
+        ----------
+        new_config : ConfigParser
+            new config to be updated
+
+        """
+
+        pass
+
     def _universal_log(self, msg: str, level: str = 'debug') -> None:
         """Logs the given message at the given level.
 
