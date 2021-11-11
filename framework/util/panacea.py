@@ -646,6 +646,30 @@ class Panacea(PanaceaBase):
         else:
             return out
 
+    def get_or_empty(self, item: str) -> Panacea:
+        """
+        Tries to get an item. If the item does not exist, returns an empty instance of the class.
+
+        Parameters
+        ----------
+        item : str
+            Item to look for. This item has to be a Panacea, otherwise, will panic.
+
+        Returns
+        -------
+            Panacea that either contains the found result or empty
+
+        """
+
+        result = self.get_option(item)
+
+        if result.is_defined():
+            if not issubclass(type(result.get()), Panacea):
+                raise ValueError(f"item of {item} requested resulted in not a branch node.")
+            return result.get()
+        else:
+            return self.__class__()
+
     def get_parameters(self) -> Dict:
         """Gets the entire parameters.
 
