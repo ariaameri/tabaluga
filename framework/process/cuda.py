@@ -64,7 +64,7 @@ class CUDAInformation(Process):
               f"\t\t \u00B7 device count: {pynvml.nvmlDeviceGetCount()}" \
               f"\t\t {device_info}\n"
 
-        self._universal_log(msg, level='info')
+        self._log.info(msg)
 
         # shutdown the pynvml so it does not use resources
         pynvml.nvmlShutdown()
