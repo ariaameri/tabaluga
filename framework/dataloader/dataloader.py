@@ -13,7 +13,7 @@ class DataManager(base.BaseEventManager, ABC):
 
     It is responsible to distribute the train/validation/test metadata among the data loaders."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializer for the data manager.
 
         Parameters
@@ -30,18 +30,18 @@ class DataManager(base.BaseEventManager, ABC):
         self._folders: List[str] = []
 
         # Get the input type
-        self._input_type: str = config.get('input_type')
+        self._input_type: str = self._config.get('input_type')
 
         # Get random seed and shuffle boolean
-        self._seed = config.get_or_else('seed', None)
-        self._shuffle: bool = config.get_or_else('shuffle', False)
+        self._seed = self._config.get_or_else('seed', None)
+        self._shuffle: bool = self._config.get_or_else('shuffle', False)
 
         # Get test and validation ratios
-        self._test_ratio: float = config.get_or_else('test_ratio', 0)
-        self._val_ratio: float = config.get_or_else('val_ratio', 0)
+        self._test_ratio: float = self._config.get_or_else('test_ratio', 0)
+        self._val_ratio: float = self._config.get_or_else('val_ratio', 0)
 
         # Set batch size
-        self.batch_size: int = config.get('batch_size')
+        self.batch_size: int = self._config.get('batch_size')
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
@@ -51,7 +51,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Train, val, and test DataLoaderManager placeholders
         self.workers['train']: DataLoaderManager
-        self.workers['val']: DataLoaderManager
+        self.workers['validation']: DataLoaderManager
         self.workers['test']: DataLoaderManager
 
         # Create general and train, val, test metadata
@@ -257,15 +257,15 @@ class DataManager(base.BaseEventManager, ABC):
 class DataLoaderManager(base.BaseEventManager, ABC):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
-    def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
+    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
         """Initializer for data loader manager.
 
         Parameters
         ----------
-        config : ConfigParser
-            The configuration for the instance
         metadata : pd.DataFrame
             The metadata for the data to be loaded
+        config : ConfigParser
+            The configuration for the instance
         """
 
         super().__init__(config)
@@ -430,15 +430,15 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 class DataLoader(base.BaseEventWorker, ABC):
     """This abstract class loads the data."""
 
-    def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
+    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
         """Initializer for data loader.
 
         Parameters
         ----------
-        config : ConfigParser
-            The configuration for the instance
         metadata : pd.DataFrame
             The metadata for the data to be loaded
+        config : ConfigParser
+            The configuration for the instance
         """
 
         super().__init__(config)
@@ -447,8 +447,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         self.metadata: pd.DataFrame = metadata
 
         # Flag for if we should load the data with multithreading
-        self.multithreading: bool = config.get_or_else('multithreading', True)
-        self.thread_count: int = config.get_or_else('multithreading_count', 5)
+        self.multithreading: bool = self._config.get_or_else('multithreading', True)
+        self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1

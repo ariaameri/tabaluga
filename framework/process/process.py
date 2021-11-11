@@ -6,7 +6,7 @@ from ..util.config import ConfigParser
 class ProcessManager(base.BaseEventManager, ABC):
     """This abstract class manages the Pre- and Post-Process instances or Managers."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializes the class.
 
         Parameters
@@ -22,7 +22,7 @@ class ProcessManager(base.BaseEventManager, ABC):
 class Process(base.BaseWorker, ABC):
     """Abstract class for Process instances."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializes the class.
 
         Parameters

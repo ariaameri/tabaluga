@@ -273,7 +273,7 @@ class BWHCToBCWH(Process):
 class OneHotDecoder(Process):
     """Converts one-hot-encoded data to index data. Also, makes index values from the biggest number in an axis"""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializes the class instance.
 
         Parameters
@@ -288,7 +288,7 @@ class OneHotDecoder(Process):
         super().__init__(config)
 
         # Set the axis
-        self.axis = config.get_or_else('axis', -1)
+        self.axis = self._config.get_or_else('axis', -1)
 
     def process(self, data: np.ndarray, axis: int = None) -> np.ndarray:
         """"Does the decoding.
@@ -324,7 +324,7 @@ class BackgroundToColor(Process):
 
     """
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializes the class instance.
 
         Parameters
@@ -341,10 +341,10 @@ class BackgroundToColor(Process):
         super().__init__(config)
 
         # Set the axis
-        self.axis = config.get_or_else('axis', -1)
+        self.axis = self._config.get_or_else('axis', -1)
 
         # Set the new channel to be filled
-        self.new_channel = config.get_or_else('new_channel', -1)
+        self.new_channel = self._config.get_or_else('new_channel', -1)
 
     def process(self, data: np.ndarray) -> np.ndarray:
         """"Converts background pixels containing all zeros to 255 in some channel

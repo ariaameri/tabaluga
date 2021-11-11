@@ -10,18 +10,18 @@ import cv2
 class ImageLoader(dataloader.DataLoader):
     """This class reads and loads images."""
 
-    def __init__(self, config: ConfigParser, metadata: pd.DataFrame):
+    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
         """Initializer for image data loader.
 
         Parameters
         ----------
-        config : ConfigParser
-            The configuration for the instance
         metadata : pd.DataFrame
             The metadata for the data to be loaded
+        config : ConfigParser
+            The configuration for the instance
         """
 
-        super().__init__(config, metadata)
+        super().__init__(metadata, config)
 
         # Modify the metadata
         self.modify_metadata()

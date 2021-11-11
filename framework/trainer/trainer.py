@@ -15,7 +15,7 @@ import os
 class Trainer(base.BaseEventManager, ABC):
     """A class to help with training a neural network."""
 
-    def __init__(self, config: ConfigParser):
+    def __init__(self, config: ConfigParser = None):
         """Initializer for the this instance of the class"""
 
         super().__init__(config)
