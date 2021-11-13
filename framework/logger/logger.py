@@ -2,6 +2,7 @@ from __future__ import annotations
 from ..util.config import ConfigParser
 from .log_hug import LogHug
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
+from ..util.console_cursor_modifiers import CONSOLE_CURSOR_MODIFIER as CCM
 from ..base.base import BaseWorker, BaseEventManager
 from .the_progress_bar import TheProgressBarColored
 from abc import ABC
@@ -234,7 +235,7 @@ class Logger:
 
         # Adds colored 'report: ' to the beginning of the message
         # first, clear the whole screen until the end
-        report_message = '\033[0J' + \
+        report_message = CCM.get('clear_until_end') + \
                          f'{colored.fg("green_4")}'\
                          f'report: '\
                          f'{colored.attr("reset")}'
@@ -254,7 +255,7 @@ class Logger:
 
         # Adds colored 'info: ' to the beginning of the message
         # first, clear the whole screen until the end
-        info_message = '\033[0J' + \
+        info_message = CCM.get('clear_until_end') + \
                        f'{colored.fg("green_3a")}' \
                        f'info: ' \
                        f'{colored.attr("reset")}'
@@ -274,7 +275,7 @@ class Logger:
 
         # Adds colored 'warning: ' to the beginning of the message
         # first, clear the whole screen until the end
-        warning_message = '\033[0J' +\
+        warning_message = CCM.get('clear_until_end') +\
                           f'{colored.fg("red_1")}'\
                           f'warning: '\
                           f'{colored.attr("reset")}'
@@ -294,7 +295,7 @@ class Logger:
 
         # Adds colored 'ERROR: ' to the beginning of the message and color the message as well
         # first, clear the whole screen until the end
-        error_message = '\033[0J' + \
+        error_message = CCM.get('clear_until_end') + \
                         f'{colored.bg("red")}{colored.fg("white")}'\
                         f'ERROR: '
         error_message += msg
@@ -314,7 +315,7 @@ class Logger:
 
         # Adds colored 'debug: ' to the beginning of the message
         # first, clear the whole screen until the end
-        debug_message = '\033[0J' + \
+        debug_message = CCM.get('clear_until_end') + \
                         f'{colored.fg("indian_red_1b")}'\
                         f'debug: '\
                         f'{colored.attr("reset")}'
