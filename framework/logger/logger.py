@@ -234,12 +234,11 @@ class Logger:
         """
 
         # Adds colored 'report: ' to the beginning of the message
-        # first, clear the whole screen until the end
-        report_message = CCM.get('clear_until_end') + \
-                         f'{colored.fg("green_4")}'\
-                         f'report: '\
-                         f'{colored.attr("reset")}'
-        report_message += msg
+        report_message = \
+            f'{colored.fg("green_4")}'\
+            f'report: '\
+            f'{colored.attr("reset")}' \
+            f'{msg}'
 
         self._logger.info(report_message)
 
@@ -254,12 +253,11 @@ class Logger:
         """
 
         # Adds colored 'info: ' to the beginning of the message
-        # first, clear the whole screen until the end
-        info_message = CCM.get('clear_until_end') + \
-                       f'{colored.fg("green_3a")}' \
-                       f'info: ' \
-                       f'{colored.attr("reset")}'
-        info_message += msg
+        info_message = \
+            f'{colored.fg("green_3a")}' \
+            f'info: ' \
+            f'{colored.attr("reset")}' \
+            f'{msg}'
 
         self._logger.info(info_message)
 
@@ -274,12 +272,11 @@ class Logger:
         """
 
         # Adds colored 'warning: ' to the beginning of the message
-        # first, clear the whole screen until the end
-        warning_message = CCM.get('clear_until_end') +\
-                          f'{colored.fg("red_1")}'\
-                          f'warning: '\
-                          f'{colored.attr("reset")}'
-        warning_message += msg
+        warning_message = \
+            f'{colored.fg("red_1")}'\
+            f'warning: '\
+            f'{colored.attr("reset")}' \
+            f'{msg}'
 
         self._logger.warning(warning_message)
 
@@ -294,12 +291,11 @@ class Logger:
         """
 
         # Adds colored 'ERROR: ' to the beginning of the message and color the message as well
-        # first, clear the whole screen until the end
-        error_message = CCM.get('clear_until_end') + \
-                        f'{colored.bg("red")}{colored.fg("white")}'\
-                        f'ERROR: '
-        error_message += msg
-        error_message += f'{colored.attr("reset")}'
+        error_message = \
+            f'{colored.bg("red")}{colored.fg("white")}'\
+            f'ERROR: ' \
+            f'{msg}' \
+            f'{colored.attr("reset")}'
 
         self._logger.error(error_message)
 
@@ -314,12 +310,11 @@ class Logger:
         """
 
         # Adds colored 'debug: ' to the beginning of the message
-        # first, clear the whole screen until the end
-        debug_message = CCM.get('clear_until_end') + \
-                        f'{colored.fg("indian_red_1b")}'\
-                        f'debug: '\
-                        f'{colored.attr("reset")}'
-        debug_message += msg
+        debug_message = \
+            f'{colored.fg("indian_red_1b")}'\
+            f'debug: '\
+            f'{colored.attr("reset")}' \
+            f'{msg}'
 
         self._logger.debug(debug_message)
 
