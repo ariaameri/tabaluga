@@ -693,6 +693,10 @@ class TheProgressBar:
 
         """
 
+        # if we are paused, we should not print!
+        if self.state_info.get('paused') is True:
+            return False
+
         mode = self.state_info.get('mode')
 
         if mode == self.Modes.NORMAL and self._check_if_foreground():
@@ -1910,7 +1914,7 @@ class TheProgressBar:
             with self.print_lock:
 
                 # Add the progress bar at the end
-                if not msg.endswith('\n\b') and self.state_info.get('mode') == self.Modes.NORMAL:
+                if not msg.endswith('\n\b') and self._check_if_should_print() is True:
                     self.buffer.append(self.actions.get('get_bar')())
 
                 # Create the message from the buffer and print it with extra new line character
