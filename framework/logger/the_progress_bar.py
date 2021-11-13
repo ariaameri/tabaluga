@@ -24,8 +24,6 @@ class TheProgressBar:
     This implementation is based on the alive_progress package.
     """
 
-    # TODO: Refactor the class to keep the state of the progress bar and other info as a DataMuncher
-
     class Modes(Enum):
         """Enum for modes of operation"""
 
@@ -63,8 +61,8 @@ class TheProgressBar:
 
         # Console controlling book keeping
         self.original_sysout = sys.__stdout__
-        self.isatty = sys.stdout.isatty
-        self.fileno = sys.stdout.fileno
+        self._isatty_original = sys.stdout.isatty
+        self._fileno_original = sys.stdout.fileno
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
@@ -470,76 +468,6 @@ class TheProgressBar:
             # self.sleep_timer_info.get('pipe.write').send('timestup!')
             self._print_progress_bar()
 
-    def _run_check_for_resume(self) -> None:
-        """Checks to see if we are in focus to resume the printing."""
-
-        # Check until we are in focus
-        while self._check_if_focused() is False:
-
-            time.sleep(1 / self._get_update_frequency())
-
-        # If we are in focus, resume
-        self.resume()
-
-    def _check_if_should_print(self) -> bool:
-        """
-        Checks whether we should print.
-
-        Returns
-        -------
-        bool
-
-        """
-
-        mode = self.state_info.get('mode')
-
-        if mode == self.Modes.NORMAL and self._check_if_foreground():
-            return True
-        elif mode == self.Modes.NOTTY:
-            return True
-
-        return False
-
-    def _check_if_focused(self) -> bool:
-        """Checks whether the terminal is focused on the progress bar so that it should be printed.
-
-        Returns
-        -------
-        A boolean stating whether or not the progress bar should be printed
-
-        """
-
-        # Check if we are connected to a terminal
-        # Check if we are a foreground process
-        check = self._check_if_atty() \
-            and self._check_if_foreground()
-
-        return check
-
-    def _check_if_atty(self) -> bool:
-        """
-        Checks whether the terminal has a tty.
-
-        Returns
-        -------
-        bool
-
-        """
-
-        return self.isatty()
-
-    def _check_if_foreground(self) -> bool:
-        """
-        Checks if we are running in foreground
-
-        Returns
-        -------
-        bool
-
-        """
-
-        return os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
-
     def set_number_items(self, number_of_items: int) -> TheProgressBar:
         """Set the total number of the items.
 
@@ -684,29 +612,155 @@ class TheProgressBar:
 
             return esc_sequence
 
-    def _exp_average(self, item: float, d_item: float, beta: float = .9) -> float:
-        """Calculates the new exponential moving average for the inputs.
+    # terminal related methods
 
-        Returns d_item if item is -np.inf
+    def _make_and_get_terminal_size(self) -> (int, int):
+        """Returns the stored size of the terminal in form of (columns, rows)."""
+
+        env = os.environ
+
+        def ioctl_GWINSZ(fd):
+            try:
+                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+            except:
+                return
+            return cr
+
+        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+        if not cr:
+            try:
+                fd = os.open(os.ctermid(), os.O_RDONLY)
+                cr = ioctl_GWINSZ(fd)
+                os.close(fd)
+            except:
+                pass
+        if not cr:
+            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
+
+            ### Use get(key[, default]) instead of a try/catch
+            # try:
+            #    cr = (env['LINES'], env['COLUMNS'])
+            # except:
+            #    cr = (25, 80)
+        return int(cr[1]), int(cr[0])
+
+    def _get_terminal_size(self) -> (int, int):
+        """Returns the stored size of the terminal in form of (columns, rows)."""
+
+        return (self.progress_bar_info.get('console.columns'), self.progress_bar_info.get('console.rows'))
+
+    def _update_terminal_size(self, terminal_size: (int, int) = None) -> None:
+        """Updates the stored data for the terminal size.
 
         Parameters
         ----------
-        item : float
-            Current value of the average
-        d_item : float
-            The value of the recent element
-        beta : float
-            Exponential moving average beta
-
-        Returns
-        -------
-        Updated value of the average
+        terminal_size: (int, int), optional
+            Optional terminal size to update the internal knowledge of terminal size. If not given, will be inferred
+                from the actual terminal.
 
         """
 
-        average = beta * item + (1 - beta) * d_item if item != -np.inf else d_item
+        if terminal_size is None:
+            columns, rows = self._make_and_get_terminal_size()
+        else:
+            columns, rows = terminal_size
 
-        return average
+        # Retrieve and store
+        self.progress_bar_info = \
+            self.progress_bar_info.update(
+                {'_bc': {'$regex': 'console$'}},
+                {'rows': rows, 'columns': columns}
+            )
+
+    def _run_check_for_resume(self) -> None:
+        """Checks to see if we are in focus to resume the printing."""
+
+        # Check until we are in focus
+        while self._check_if_focused() is False:
+
+            time.sleep(1 / self._get_update_frequency())
+
+        # If we are in focus, resume
+        self.resume()
+
+    def _check_if_should_print(self) -> bool:
+        """
+        Checks whether we should print.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        mode = self.state_info.get('mode')
+
+        if mode == self.Modes.NORMAL and self._check_if_foreground():
+            return True
+        elif mode == self.Modes.NOTTY:
+            return True
+
+        return False
+
+    def _check_if_focused(self) -> bool:
+        """Checks whether the terminal is focused on the progress bar so that it should be printed.
+
+        Returns
+        -------
+        A boolean stating whether or not the progress bar should be printed
+
+        """
+
+        # Check if we are connected to a terminal
+        # Check if we are a foreground process
+        check = self._check_if_atty() \
+            and self._check_if_foreground()
+
+        return check
+
+    def _check_if_atty(self) -> bool:
+        """
+        Checks whether the terminal has a tty.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        try:
+            return self._isatty_original()
+        except:
+            return False
+
+    def isatty(self) -> bool:
+        """
+        Checks whether the terminal has a tty.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        return self._check_if_atty()
+
+    def _check_if_foreground(self) -> bool:
+        """
+        Checks if we are running in foreground
+
+        Returns
+        -------
+        bool
+
+        """
+
+        try:
+            return os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
+        except:
+            return False
+
+    # progress bar methods
 
     def get_progress_bar_string(self, terminal_size: (int, int) = None, return_to_line_number: int = 0) -> str:
         """Returns the progress bar along with its cursor modifier ANSI escape codes
@@ -967,64 +1021,6 @@ class TheProgressBar:
             self.progress_bar_info.update(
                 {'_bc': {'$regex': 'progress_bar$'}},
                 {'progress_bar': self._make_and_get_progress_bar()}
-            )
-
-    def _make_and_get_terminal_size(self) -> (int, int):
-        """Returns the stored size of the terminal in form of (columns, rows)."""
-
-        env = os.environ
-
-        def ioctl_GWINSZ(fd):
-            try:
-                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
-            except:
-                return
-            return cr
-
-        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
-        if not cr:
-            try:
-                fd = os.open(os.ctermid(), os.O_RDONLY)
-                cr = ioctl_GWINSZ(fd)
-                os.close(fd)
-            except:
-                pass
-        if not cr:
-            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
-
-            ### Use get(key[, default]) instead of a try/catch
-            # try:
-            #    cr = (env['LINES'], env['COLUMNS'])
-            # except:
-            #    cr = (25, 80)
-        return int(cr[1]), int(cr[0])
-
-    def _get_terminal_size(self) -> (int, int):
-        """Returns the stored size of the terminal in form of (columns, rows)."""
-
-        return (self.progress_bar_info.get('console.columns'), self.progress_bar_info.get('console.rows'))
-
-    def _update_terminal_size(self, terminal_size: (int, int) = None) -> None:
-        """Updates the stored data for the terminal size.
-
-        Parameters
-        ----------
-        terminal_size: (int, int), optional
-            Optional terminal size to update the internal knowledge of terminal size. If not given, will be inferred
-                from the actual terminal.
-
-        """
-
-        if terminal_size is None:
-            columns, rows = self._make_and_get_terminal_size()
-        else:
-            columns, rows = terminal_size
-
-        # Retrieve and store
-        self.progress_bar_info = \
-            self.progress_bar_info.update(
-                {'_bc': {'$regex': 'console$'}},
-                {'rows': rows, 'columns': columns}
             )
 
     # bar prefix methods
@@ -1852,6 +1848,30 @@ class TheProgressBar:
             freq = float(np.clip(2 * average_freq, 2, 60))
 
         return freq
+
+    def _exp_average(self, item: float, d_item: float, beta: float = .9) -> float:
+        """Calculates the new exponential moving average for the inputs.
+
+        Returns d_item if item is -np.inf
+
+        Parameters
+        ----------
+        item : float
+            Current value of the average
+        d_item : float
+            The value of the recent element
+        beta : float
+            Exponential moving average beta
+
+        Returns
+        -------
+        Updated value of the average
+
+        """
+
+        average = beta * item + (1 - beta) * d_item if item != -np.inf else d_item
+
+        return average
 
     # writing methods
 
