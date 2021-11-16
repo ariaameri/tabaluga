@@ -134,11 +134,16 @@ class TheProgressBarBase(ABC):
             'paused': False,  # Whether we are on pause mode
             'mode': self.Modes.NORMAL,
             'role': self.Roles.SINGLE,
+            'parallel': {
+                'rank': 0,
+                'size': 0,
+            },
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is not None else False,
             'item': {
                 'total_items_count': -1,  # Count of total number of batches expected
-                'current_item_index': 0  # Current batch item/index/number
+                'current_item_index': 0,  # Current batch item/index/number
+                'current_iteration_index': 0  # the current iteration index or how many times we have reset
             }
         }
         self.state_info = DataMuncher(initial_state_info)
@@ -205,7 +210,7 @@ class TheProgressBarBase(ABC):
 
     # action methods
 
-    def activate(self) -> TheProgressBarBase:
+    def activate(self) -> TheProgressBar:
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
 
         Returns
@@ -235,22 +240,60 @@ class TheProgressBarBase(ABC):
         self.statistics_info = \
             self.statistics_info \
                 .update(
-                    {'_bc': '.time'},
-                    {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
-                )
+                {'_bc': '.time'},
+                {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
+            )
+
+        # If not in single mode, no need to print, thus return now
+        if self._check_action() is False:
+            return self
+
+        # Redirect stdout just in case there is no stdout handler from outside
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self
+        else:
+            self._activate_external_stdout_handler()
+
+        # Hide cursor
+        self._direct_write(self.cursor_modifier.get("hide"))
+
+        # Get the running daemon thread
+        self.run_thread.start()
+
+        # Set the printing event on to start with the printing of the progress bar
+        self.event_print.set()
+
+        # finally, reset so that everything is set
+        self.reset()
 
         return self
 
-    @abstractmethod
     def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
-        raise NotImplementedError
+        # Stop the run thread
+        self.run_thread = None
 
-    def pause(self) -> TheProgressBarBase:
+        # if we are not printing at all, skip
+        if self._check_action() is False:
+            return
+
+        # Show cursor
+        self._direct_write(self.cursor_modifier.get("show"))
+
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self.original_sysout
+        else:
+            self._deactivate_external_stdout_handler()
+
+        # Print the progress bar and leave it
+        self._print_progress_bar(return_to_line_number=-1)
+
+    def pause(self) -> TheProgressBar:
         """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
 
-        This method permanently pauses the instance. To resume run either the `resume` or `_look_to_resume` method.
+        This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
 
         Returns
         -------
@@ -265,9 +308,26 @@ class TheProgressBarBase(ABC):
         # Update the state to know we are paused
         self.state_info = self.state_info.update({}, {'paused': True})
 
+        # if we are not printing at all, skip
+        if self._check_action() is False:
+            return self
+
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self.original_sysout
+        else:
+            self._pause_external_stdout_handler()
+
+        # Show cursor
+        sys.stdout.write(self.cursor_modifier.get("show"))
+        sys.stdout.flush()
+
+        # Pause printing
+        self.event_print.clear()
+
         return self
 
-    def resume(self) -> TheProgressBarBase:
+    def resume(self) -> TheProgressBar:
         """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
 
         Returns
@@ -282,6 +342,114 @@ class TheProgressBarBase(ABC):
 
         # Update the state to know we are not paused
         self.state_info = self.state_info.update({}, {'paused': False})
+
+        # if we are not printing at all, skip
+        if self._check_action() is False:
+            return self
+
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self
+        else:
+            self._resume_external_stdout_handler()
+
+        # Hide cursor
+        self._direct_write(self.cursor_modifier.get("hide"))
+
+        # No longer look if we should resume
+        self.check_for_resume_thread = None
+
+        # Start printing
+        self.event_print.set()
+
+        return self
+
+    def update(self, count: int) -> None:
+        """Updates the progress bar by adding 'count' to the number of items.
+
+        Parameter
+        ---------
+        count : int
+            The count at which the progress items should be increased. It has to be non-negative
+
+        """
+
+        if count > 0:
+            # Update current item
+            self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
+                                                     {'$inc': {'current_item_index': count}})
+
+            # Keep track of an average number of elements in each update
+            self.statistics_info = \
+                self.statistics_info.update(
+                    {'_bc': {'$regex': 'average$'}},
+                    {'average_item_per_update':
+                        Calculation.exp_average(
+                             item=self.statistics_info.get('average.average_item_per_update'),
+                             d_item=count
+                         )
+                    }
+                )
+
+            # Update the time
+            self._update_time_counter()
+
+            # notify the sleeping timer
+            self._notify_sleep()
+
+    def reset(self, return_to_line_number: int = -1) -> TheProgressBarBase:
+        """Resets the progress bar and returns its instance.
+
+        Parameters
+        ----------
+        return_to_line_number: int, optional
+            The line number to return to
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # Print the progress bar and leave it if we have done any progress
+        if self.state_info.get('item.current_item_index') != 0:
+            self._print_progress_bar(return_to_line_number=return_to_line_number)
+
+        # do the rest of resetting
+        # increment the iteration index
+        self.state_info = \
+            self.state_info \
+                .update(
+                    {'_bc': {'$regex': 'item$'}},
+                    {'$inc': {'current_iteration_index': 1}}
+                )
+
+        # Set the initial time
+        current_time = time.time()
+        self.statistics_info = \
+            self.statistics_info \
+                .update(
+                    {'_bc': {'$regex': 'time$'}},
+                    {'initial_progress_bar_time': current_time, 'last_update_time': current_time}
+                )
+
+        # Reset the current item counter
+        self.state_info = self.state_info.update(
+            {'_bc': {'$regex': 'item$'}},
+            {'$set': {'current_item_index': 0, 'total_items_count': -1}}
+        )
+
+        # Reset the sleep info
+        self.sleep_timer_info = self.sleep_timer_info.update(
+            {},
+            {'$set': {'stat.last_item_index': 0}},
+        )
+
+        # Reset the descriptions
+        self.set_description_after('')
+        self.set_description_before('')
+        self.set_description_short_after('')
+        self.set_description_short_before('')
 
         return self
 
@@ -324,57 +492,6 @@ class TheProgressBarBase(ABC):
 
         return self
 
-    def reset(self) -> TheProgressBarBase:
-        """Resets the progress bar and returns its instance.
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        # Set the initial time
-        current_time = time.time()
-        self.statistics_info = \
-            self.statistics_info\
-                .update(
-                    {'_bc': {'$regex': 'time$'}},
-                    {'initial_progress_bar_time': current_time, 'last_update_time': current_time}
-                )
-
-        # Reset the current item counter
-        self.state_info = self.state_info.update(
-            {'_bc': {'$regex': 'item$'}},
-            {'$set': {'current_item_index': 0, 'total_items_count': -1}}
-        )
-
-        # Reset the sleep info
-        self.sleep_timer_info = self.sleep_timer_info.update(
-            {},
-            {'$set': {'stat.last_item_index': 0}},
-        )
-
-        # Reset the descriptions
-        self.set_description_after('')
-        self.set_description_before('')
-        self.set_description_short_after('')
-        self.set_description_short_before('')
-
-        return self
-
-    @abstractmethod
-    def update(self, count: int) -> None:
-        """Updates the progress bar by adding 'count' to the number of items.
-
-        Parameter
-        ---------
-        count : int
-            The count at which the progress items should be increased. It has to be non-negative
-
-        """
-
-        raise NotImplementedError
-
     def _configure_mode(self):
         """Method to find out and set the mode of operation."""
 
@@ -393,6 +510,11 @@ class TheProgressBarBase(ABC):
         """Sets the proper actions based on the conditions."""
 
         raise NotImplementedError
+
+    def _check_action(self) -> bool:
+        """Method to return conditional on whether we should perform the action methods."""
+
+        return True
 
     # terminal related methods
 
@@ -1087,7 +1209,7 @@ class TheProgressBarBase(ABC):
         """
 
         # get the prefix data
-        data = self._get_bar_data_suffix() if data is None else data
+        data = self._get_bar_suffix_data() if data is None else data
 
         # construct the data that has to be outputted
         output_data = \
@@ -1173,7 +1295,7 @@ class TheProgressBarBase(ABC):
         # Retrieve and return
         return self.progress_bar_info.get('progress_bar.suffix')
 
-    def _get_bar_data_suffix(self) -> DataMuncher:
+    def _get_bar_suffix_data(self) -> DataMuncher:
         """
         Makes and return the data needed to create the bar suffix.
 
@@ -1807,201 +1929,24 @@ class TheProgressBar(TheProgressBarBase):
 
     # action methods
 
-    def activate(self) -> TheProgressBar:
-        """Activates the progress bar: redirected stdout to this class and prints the progress bar
+    def _check_action(self) -> bool:
+        """Method to return conditional on whether we should perform the action methods."""
 
-        Parameters
-        ----------
-        master_mode : bool, optional
-            Whether this instance should behave in master mode.
-                When master mode is on, this instance takes care of printing the progress bar and takes care of stdout.
-                When master mode is off, this instance only updates its own state and can be accessed with the method
-                    `get_progress_bar_string` to retrieve the string of the progress bar.
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        super().activate()
-
-        # If not in single mode, no need to print, thus return now
         if self.state_info.get('role') != self.Roles.SINGLE:
-            return self
+            return False
 
-        # Redirect stdout just in case there is no stdout handler from outside
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self
-        else:
-            self._activate_external_stdout_handler()
-
-        # Hide cursor
-        self._direct_write(self.cursor_modifier.get("hide"))
-
-        # Get the running daemon thread
-        self.run_thread.start()
-
-        # Set the printing event on to start with the printing of the progress bar
-        self.event_print.set()
-
-        # finally, reset so that everything is set
-        self.reset()
-
-        return self
-
-    def deactivate(self) -> None:
-        """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
-
-        # Stop the run thread
-        self.run_thread = None
-
-        # Show cursor
-        self._direct_write(self.cursor_modifier.get("show"))
-
-        # Revert stdout back to its original place
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self.original_sysout
-        else:
-            self._deactivate_external_stdout_handler()
-
-        # Print the progress bar and leave it
-        self._print_progress_bar(return_to_line_number=-1)
-
-    def pause(self) -> TheProgressBarBase:
-        """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
-
-        This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        super().pause()
-
-        # if we are not printing at all, skip
-        if self.state_info.get('role') != self.Roles.SINGLE:
-            return self
-
-        # Revert stdout back to its original place
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self.original_sysout
-        else:
-            self._pause_external_stdout_handler()
-
-        # Show cursor
-        sys.stdout.write(self.cursor_modifier.get("show"))
-        sys.stdout.flush()
-
-        # Pause printing
-        self.event_print.clear()
-
-        return self
-
-    def resume(self) -> TheProgressBarBase:
-        """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        super().resume()
-
-        # if we are not printing at all, skip
-        if self.state_info.get('role') != self.Roles.SINGLE:
-            return self
-
-        # Revert stdout back to its original place
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self
-        else:
-            self._resume_external_stdout_handler()
-
-        # Hide cursor
-        self._direct_write(self.cursor_modifier.get("hide"))
-
-        # No longer look if we should resume
-        self.check_for_resume_thread = None
-
-        # Start printing
-        self.event_print.set()
-
-        return self
-
-    def update(self, count: int) -> None:
-        """Updates the progress bar by adding 'count' to the number of items.
-
-        Parameter
-        ---------
-        count : int
-            The count at which the progress items should be increased. It has to be non-negative
-
-        """
-
-        if count > 0:
-            # Update current item
-            self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
-                                                     {'$inc': {'current_item_index': count}})
-
-            # Keep track of an average number of elements in each update
-            self.statistics_info = \
-                self.statistics_info.update(
-                    {'_bc': {'$regex': 'average$'}},
-                    {'average_item_per_update':
-                        Calculation.exp_average(
-                             item=self.statistics_info.get('average.average_item_per_update'),
-                             d_item=count
-                         )
-                    }
-                )
-
-            # Update the time
-            self._update_time_counter()
-
-            # notify the sleeping timer
-            self._notify_sleep()
-
-    def reset(self, return_to_line_number: int = -1) -> TheProgressBarBase:
-        """Resets the progress bar and returns its instance.
-
-        Parameters
-        ----------
-        return_to_line_number: int, optional
-            The line number to return to
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        # Print the progress bar and leave it if we have done any progress
-        if self.state_info.get('item.current_item_index') != 0:
-            self._print_progress_bar(return_to_line_number=return_to_line_number)
-
-        # do the rest of resetting
-        super().reset()
-
-        return self
+        return True
 
     def _configure_role(self):
         """Method to find out and set the role."""
 
         # find and update the role
         if self.state_info.get('parallel.size') > 1:
-            if self.state_info.get('parallel.rank') == 0:
-                role = self.Roles.MANAGER
-            else:
-                role = self.Roles.WORKER
             # update the role
-            self.state_info = self.state_info.update({}, {'$set': {'role': role}})
+            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.WORKER}})
         else:
             # leave it be single mode
-            pass
+            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.SINGLE}})
 
     def _set_actions(self):
         """Sets the proper actions based on the conditions."""
@@ -2045,6 +1990,23 @@ class TheProgressBar(TheProgressBarBase):
                 'get_bar': get_bar_curry,
             })
 
+    # terminal related methods
+
+    def _check_if_should_print(self) -> bool:
+        """
+        Checks whether we should print.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        if self.state_info.get('role') != self.Roles.SINGLE:
+            return False
+
+        return super()._check_if_should_print()
+
     # utility methods
 
     def _notify_sleep(self):
@@ -2074,8 +2036,8 @@ class TheProgressBar(TheProgressBarBase):
             # let the time go off
             # we will print the bar ourselves because we do not want to have a race condition: while we are telling
             # the other thread to type, this thread can go and reset the bar that would lead to undefined results
-            # self.sleep_timer_info.get('pipe.write').send('timestup!')
-            self._print_progress_bar()
+            self.sleep_timer_info.get('pipe.write').send('timesup!')
+            # self._print_progress_bar()
 
     def _get_update_frequency(self) -> float:
         """Returns the number of times in a second that the progress bar should be updated.
@@ -2149,8 +2111,8 @@ class TheProgressBarColored(TheProgressBar):
 
         """
 
-        # get the prefix data
-        data = self._get_bar_data_suffix() if data is None else data
+        # get the suffix data
+        data = self._get_bar_suffix_data() if data is None else data
 
         # construct the data that has to be outputted
         output_data = \
