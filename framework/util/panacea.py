@@ -405,6 +405,17 @@ class Panacea(PanaceaBase):
 
             return out
 
+        # checking for validity
+        for item in config_dict.keys():
+
+            # check that the names do not contain `.`s
+            if '.' in item:
+                raise ValueError(f'cannot have a key of name {item}: key elements cannot have `.` in their names')
+
+            # check if the key is string
+            if not isinstance(item, str):
+                raise ValueError(f'cannot have a key of {item}, keys have to be strings')
+
         # Create the dictionary of parameters
         final_parameters = {key: helper(value) for key, value in config_dict.items()}
 
