@@ -3,7 +3,7 @@ import multiprocessing
 import select
 import threading
 import sys
-from typing import List
+from typing import List, Optional, Any, Callable
 from abc import abstractmethod, ABC
 import numpy as np
 import time
@@ -45,13 +45,10 @@ class TheProgressBarBase(ABC):
 
         # A daemon thread placeholder for running the update of the progress bar
         # Also, a daemon thread placeholder for when on pause
-        self.run_thread: threading.Thread = threading.Thread(
-            name='run_daemon_thread',
-            target=self.run,
-            args=(),
-            daemon=True
-        )  # Setting it to None will cause the daemon process not to run
-        self.check_for_resume_thread: threading.Thread = None
+        self.run_thread: Optional[threading.Thread] \
+            = None  # Setting it to None will cause the daemon process not to run
+        self.run_thread_function: Optional[Callable] = None  # function to give to run_thread
+        self.check_for_resume_thread: Optional[threading.Thread] = None
 
         # Get a CursorModifier that contains ANSI escape codes for the cursor
         self.cursor_modifier = self.CursorModifier()
@@ -210,7 +207,7 @@ class TheProgressBarBase(ABC):
 
     # action methods
 
-    def activate(self) -> TheProgressBar:
+    def activate(self) -> TheProgressBarBase:
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
 
         Returns
@@ -240,9 +237,13 @@ class TheProgressBarBase(ABC):
         self.statistics_info = \
             self.statistics_info \
                 .update(
-                {'_bc': '.time'},
-                {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
-            )
+                    {'_bc': '.time'},
+                    {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
+                )
+
+        # set and the running daemon thread
+        self._make_run_thread()
+        self.run_thread.start()
 
         # If not in single mode, no need to print, thus return now
         if self._check_action() is False:
@@ -256,9 +257,6 @@ class TheProgressBarBase(ABC):
 
         # Hide cursor
         self._direct_write(self.cursor_modifier.get("hide"))
-
-        # Get the running daemon thread
-        self.run_thread.start()
 
         # Set the printing event on to start with the printing of the progress bar
         self.event_print.set()
@@ -290,7 +288,7 @@ class TheProgressBarBase(ABC):
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_line_number=-1)
 
-    def pause(self) -> TheProgressBar:
+    def pause(self) -> TheProgressBarBase:
         """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
 
         This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
@@ -327,7 +325,7 @@ class TheProgressBarBase(ABC):
 
         return self
 
-    def resume(self) -> TheProgressBar:
+    def resume(self) -> TheProgressBarBase:
         """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
 
         Returns
@@ -473,6 +471,26 @@ class TheProgressBarBase(ABC):
                 self._look_to_resume()  # Constantly check if we can resume
 
             self._sleep()
+
+    @abstractmethod
+    def _set_run_thread_function(self) -> None:
+        """Set the function to give to run_thread to run."""
+
+        raise NotImplementedError
+
+    def _make_run_thread(self) -> None:
+        """Makes and sets the run thread"""
+
+        # first, set the function to run
+        self._set_run_thread_function()
+
+        # now, create the thread object
+        self.run_thread = threading.Thread(
+            name='run_daemon_thread',
+            target=self.run_thread_function,
+            args=(),
+            daemon=True
+        )
 
     def set_number_items(self, number_of_items: int) -> TheProgressBarBase:
         """Set the total number of the items.
@@ -1989,6 +2007,12 @@ class TheProgressBar(TheProgressBarBase):
             self.actions = self.actions.update({}, {
                 'get_bar': get_bar_curry,
             })
+
+    def _set_run_thread_function(self) -> None:
+        """Set the function to give to run_thread to run."""
+        # find out the function to run
+        if self.state_info.get('role') == self.Roles.SINGLE:
+            self.run_thread_function = self.run
 
     # terminal related methods
 
