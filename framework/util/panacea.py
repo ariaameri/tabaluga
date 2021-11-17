@@ -1641,7 +1641,14 @@ class Modification:
 
                 """
 
-                return x.exist(lambda item: item == value)
+                # if a dictionary, convert and then compare
+                # if a dictionary, it only makes sense to compare if x is a branch
+                if isinstance(value, dict) and x.filter(lambda q: q.is_branch()).is_defined():
+                    value_new = x.get().__class__(value)
+                else:
+                    value_new = value
+
+                return x.exist(lambda item: item == value_new)
 
             return helper
 
@@ -2023,66 +2030,24 @@ class Modification:
 
                 """
 
-                # If x Option exists, update it, otherwise, set it
-                if x.is_defined():
-                    result: Some = self._update_only(value)(key, x)
-                else:
-                    result: Some = self._set_only(value)(key, x)
+                # set recursively if required
+                if self.condition_dict.get(self.Conditionals.RECURSIVE.value) is True and isinstance(value, dict) and x.is_defined():
 
-                return result
+                    pan: PanaceaBase = x.get()
 
-            return helper
+                    # if we have gone too far!
+                    if pan.is_leaf():
+                        return Some((key, value))
 
-        def _set_recursive(self, value: Any) -> Callable[[str, Option], Some]:
-            """Wrapper function for recursively setting a value on an Option value.
-
-            Parameters
-            ----------
-            value : Any
-                A value to set to the Option value.
-                    If Option value exists, i.e. it is a PanaceaBase, update it recursively
-                    If Option value does not exist, set the value
-
-            Returns
-            -------
-            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
-
-            """
-
-            def helper(key: str, x: Option) -> Some:
-                """Function to be called on an Option value to set a value. The function then recursively calls
-                sub nodes to be set as well.
-
-                Parameters
-                ----------
-                key : str
-                    Name of the Option value
-                x : Option
-                    An Option value to set the value
-
-                Returns
-                -------
-                Option, Some, (key, value) pair with the set value
-
-                """
-
-                # If x Option exists, update it recursively, otherwise, set it
-                if x.is_defined():
-                    if not isinstance(value, dict):
-                        final_value = value
-                    elif isinstance(value, dict):
-                        pan: PanaceaBase = x.get()
-                        final_value = pan.get_parameters()
-                        for k, v in value.items():
-                            if not isinstance(v, dict):
-                                final_value[k] = v
-                            elif isinstance(v, dict):
-                                final_value[k] = pan.update({}, {'$set_recursive': {k: v}}).get(k)
-
+                    final_value = pan.get_parameters()
+                    for k, v in value.items():
+                        if not isinstance(v, dict):
+                            final_value[k] = v
+                        elif isinstance(v, dict):
+                            final_value[k] = pan.update({}, {self.Operations.SET: {k: v}}, self.condition_dict).get(k)
                     result: Some = Some((key, final_value))
                 else:
-                    result: Some = self._set_only(value)(key, x)
-
+                    result = Some((key, value))
                 return result
 
             return helper
@@ -2119,11 +2084,39 @@ class Modification:
 
                 """
 
-                # Check if the Option does not exist
-                if x.is_defined():
-                    raise ValueError(f"The value {x} to be `set_only` exists!")
+                # set recursively if required
+                if self.condition_dict.get(self.Conditionals.RECURSIVE.value) is True \
+                        and isinstance(value, dict) \
+                        and x.is_defined():
 
-                return Some((key, value))
+                    pan: PanaceaBase = x.get()
+
+                    # if we have gone too far!
+                    if pan.is_leaf():
+                        raise ValueError(f"The value '{key}' to`{self.Operations.SET_ONLY.value}` exists!")
+
+                    final_value = pan.get_parameters()
+                    for k, v in value.items():
+                        if not isinstance(v, dict):
+                            # here, we have the value we want to set
+                            if k in final_value.keys():
+                                # if such a value already exists
+                                raise ValueError(f"The value '{k}' to`{self.Operations.SET_ONLY.value}` exists!")
+                            # if such value does not exist
+                            final_value[k] = v
+                        elif isinstance(v, dict):
+                            final_value[k] = pan.update({}, {self.Operations.SET_ONLY: {k: v}}, self.condition_dict).get(k)
+                    result: Some = Some((key, final_value))
+
+                # if the value exists
+                elif x.is_defined():
+                    raise ValueError(f"The value '{key}' to `{self.Operations.SET_ONLY.value}` exists!")
+
+                # the good case!
+                else:
+                    result = Some((key, value))
+
+                return result
 
             return helper
 
@@ -2159,7 +2152,32 @@ class Modification:
 
                 """
 
-                return x.map(lambda a: (key, a)).or_else(Some((key, value)))
+                if self.condition_dict.get(self.Conditionals.RECURSIVE.value) is True \
+                        and isinstance(value, dict) \
+                        and x.is_defined():
+
+                    pan: PanaceaBase = x.get()
+
+                    # if we have gone too far!
+                    if pan.is_leaf():
+                        return Some((key, pan))
+
+                    final_value = pan.get_parameters()
+                    for k, v in value.items():
+                        if not isinstance(v, dict):
+                            # here, we have the value we want to set
+                            if k not in final_value.keys():
+                                # if such value does not exist
+                                final_value[k] = v
+                        elif isinstance(v, dict):
+                            final_value[k] = pan.update({}, {self.Operations.SET_ON_INSERT: {k: v}}, self.condition_dict).get(k)
+                    result: Option = Some((key, final_value))
+
+                # the good case!
+                else:
+                    result = x.map(lambda a: (key, a)).or_else(Some((key, value)))
+
+                return result
 
             return helper
 
@@ -2195,11 +2213,40 @@ class Modification:
 
                 """
 
-                # Check if the Option does exist
-                if x.is_empty():
-                    raise ValueError(f"The value {x} to be `update` does not exist!")
+                # update recursively if required
+                if self.condition_dict.get(self.Conditionals.RECURSIVE.value) is True \
+                        and isinstance(value, dict) \
+                        and x.is_defined():
 
-                return Some((key, value))
+                    pan: PanaceaBase = x.get()
+
+                    # if we have gone too far and its good!
+                    if pan.is_leaf():
+                        return Some((key, value))
+
+                    final_value = pan.get_parameters()
+                    for k, v in value.items():
+                        if not isinstance(v, dict):
+                            # here, we have the value we want to set
+                            if k not in final_value.keys():
+                                # if such a value does not exist
+                                raise ValueError(f"The value '{k}' to `{self.Operations.UPDATE_ONLY.value}` does not exist!")
+                            # if such value does exist
+                            final_value[k] = v
+                        elif isinstance(v, dict):
+                            final_value[k] = pan.update({}, {self.Operations.UPDATE_ONLY: {k: v}},
+                                                        self.condition_dict).get(k)
+                    result: Some = Some((key, final_value))
+
+                # if the value does not exist
+                elif x.is_empty():
+                    raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY.value}` does not exist!")
+
+                # the good case!
+                else:
+                    result = Some((key, value))
+
+                return result
 
             return helper
 
@@ -2235,7 +2282,34 @@ class Modification:
 
                 """
 
-                return x.map(lambda a: (key, value))
+                # update recursively if required
+                if self.condition_dict.get(self.Conditionals.RECURSIVE.value) is True \
+                        and isinstance(value, dict) \
+                        and x.is_defined():
+
+                    pan: PanaceaBase = x.get()
+
+                    # if we have gone too far and its good!
+                    if pan.is_leaf():
+                        return Some((key, value))
+
+                    final_value = pan.get_parameters()
+                    for k, v in value.items():
+                        if not isinstance(v, dict):
+                            # here, we have the value we want to set
+                            if k in final_value.keys():
+                                # if such a value exist
+                                final_value[k] = v
+                        elif isinstance(v, dict):
+                            out = pan.update({}, {self.Operations.UPDATE: {k: v}}, self.condition_dict).get_option(k)
+                            if out.is_defined():
+                                final_value[k] = out.get()
+                    result: Option = Some((key, final_value))
+
+                else:
+                    result = x.map(lambda a: (key, value))
+
+                return result
 
             return helper
 
