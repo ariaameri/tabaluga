@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 import multiprocessing
 import select
 import threading
@@ -12,11 +13,62 @@ import os
 import colored
 from ..util.data_muncher import DataMuncher
 from ..util.calculation import Calculation
+from ..communicator import mpi
 import re
 import fcntl
 import termios
 import struct
 from enum import Enum
+
+# message template to use
+# keep in mind that this has to be exactly the same as the default values set in the classes below
+data_msg_template: DataMuncher = DataMuncher({
+    'progress_bar': {
+        'prefix': {
+            "state": {
+                "item":
+                    {
+                        "current_item_index": 0,
+                        "total_items_count": -1,
+                    }
+                }
+            },
+        'bar': {
+            "percentage": 0.01,
+            "bar_chars": '',
+        },
+        'suffix': {
+            "state": {
+                    "item": {
+                        "current_item_index": 0,
+                        "total_items_count": -1,
+                    },
+                },
+            "statistics": {
+                    "average": {
+                        "average_item_per_update": -np.inf,
+                        "average_time_per_update": -np.inf,
+                    },
+                    "time": {
+                        "last_update_time": -1,
+                        "initial_progress_bar_time": -1,
+                    }
+                }
+        },
+        'description': {
+            'full': {
+                'before': '',
+                'after': '',
+            },
+            'short': {
+                'before': '',
+                'after': '',
+            },
+        },
+    },
+    'current_iteration_index': 0,
+    'aggregation_data': None,
+})
 
 
 class TheProgressBarBase(ABC):
@@ -132,8 +184,8 @@ class TheProgressBarBase(ABC):
             'mode': self.Modes.NORMAL,
             'role': self.Roles.SINGLE,
             'parallel': {
-                'rank': 0,
-                'size': 0,
+                'rank': mpi.mpi_communicator.get_rank(),
+                'size': mpi.mpi_communicator.get_size(),
             },
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is not None else False,
@@ -995,6 +1047,13 @@ class TheProgressBarBase(ABC):
                 {'_bc': {'$regex': 'progress_bar$'}},
                 {'progress_bar': self._make_and_get_progress_bar()}
             )
+
+    # communication methods
+
+    def _init_communication(self) -> None:
+        """initialize the communication stuff."""
+
+        pass
 
     # bar prefix methods
 
@@ -1945,6 +2004,9 @@ class TheProgressBar(TheProgressBarBase):
 
         super().__init__(stdout_handler=stdout_handler)
 
+        # book keeping for aggregation data in case of distributed run
+        self.aggregation_data: Any = None
+
     # action methods
 
     def _check_action(self) -> bool:
@@ -2013,6 +2075,36 @@ class TheProgressBar(TheProgressBarBase):
         # find out the function to run
         if self.state_info.get('role') == self.Roles.SINGLE:
             self.run_thread_function = self.run
+        elif self.state_info.get('role') == self.Roles.WORKER:
+            self.run_thread_function = self.run_publish
+
+    def run_publish(self) -> None:
+        """Publish the information to the broker for communication."""
+
+        while self.run_thread:
+
+            # do the communication tasks
+            self._send_broker_info()
+
+            # sleep :D
+            self._sleep()
+
+    def set_aggregation_data(self, data: Any) -> None:
+        """
+        Sets the aggregation data.
+
+        This data will be sent to the manager in case of distributed run. The manager will then call a function to
+        aggregate these data and use them.
+
+        Parameters
+        ----------
+        data : Any
+            the data to be passed to the manager for aggregation.
+            note that this data has to be serialize-able.
+
+        """
+
+        self.aggregation_data = data
 
     # terminal related methods
 
@@ -2030,6 +2122,78 @@ class TheProgressBar(TheProgressBarBase):
             return False
 
         return super()._check_if_should_print()
+
+    # progress bar methods
+
+    def _make_and_get_progress_bar_data(self) -> DataMuncher:
+
+        # get the progress bar data in the correct form!
+        data: DataMuncher = data_msg_template.get('progress_bar')
+
+        # update it!
+        data = data.update({}, {'$update_only': {
+            'prefix': self._get_bar_prefix_data(),
+            'bar': self._get_bar_data(),
+            'suffix': self._get_bar_suffix_data(),
+            'description': {
+                'full': {
+                    'before': self._get_bar_description_before(),
+                    'after': self._get_bar_description_after(),
+                },
+                'short': {
+                    'before': self._get_bar_description_short_before(),
+                    'after': self._get_bar_description_short_after(),
+                },
+            }
+        }})
+
+        return data
+
+    # communication methods
+
+    def _make_and_get_communication_message(self) -> DataMuncher:
+        """
+        Makes and returns the message needed for communication in distributed mode.
+
+        Returns
+        -------
+        DataMuncher
+            the message in DataMuncher format
+
+        """
+
+        data = data_msg_template.update(
+            {},
+            {'$update_only': {
+                'progress_bar': self._make_and_get_progress_bar_data(),
+                'current_iteration_index': self.state_info.get('item.current_iteration_index'),
+                'aggregation_data': self.aggregation_data,
+            }}
+        )
+
+        return data
+
+    def _make_and_get_communication_message_json_str(self) -> str:
+        """
+        Makes and returns json str message needed for communication in distributed mode.
+
+        Returns
+        -------
+        str
+            the str representation of the json message
+
+        """
+
+        data: str = json.dumps(self._make_and_get_communication_message())
+
+        return data
+
+    def _send_broker_info(self) -> None:
+        """Make and send the information to the broker."""
+
+        data = self._make_and_get_communication_message()
+        data.print()
+        pass
 
     # utility methods
 
