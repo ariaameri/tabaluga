@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Dict, Any, List, Type, Union, Callable
 from types import FunctionType
 import yaml
+from enum import Enum
 import re
 from itertools import chain
 from .option import Some, nothing, Option
@@ -1360,6 +1361,15 @@ class Modification:
     class Filter:
         """A class that parses, holds and checks the filtering queries for Panacea."""
 
+        # List of available operations
+        class Operations(Enum):
+            FUNCTION = '$function'
+            EXISTS = '$exists'
+            REGEX = '$regex'
+            EQUAL = '$equal'
+            OR = '$or'
+            AND = '$and'
+
         def __init__(self, query: Dict):
             """Initializer to the class which will parse the query and create the corresponding actions.
 
@@ -1442,18 +1452,18 @@ class Modification:
                 """
 
                 # If the operation is a function, return the wrapper with the function
-                if single_operator == '$function':
+                if single_operator == self.Operations.FUNCTION or single_operator == self.Operations.FUNCTION.value:
                     return self._function(value)
                 # Do the rest of the operations
-                elif single_operator == '$exists':
+                elif single_operator == self.Operations.EXISTS or single_operator == self.Operations.EXISTS.value:
                     return self._exists(value)
-                elif single_operator == '$regex':
+                elif single_operator == self.Operations.REGEX or single_operator == self.Operations.REGEX.value:
                     return self._regex(value)
-                elif single_operator == '$equal':
+                elif single_operator == self.Operations.EQUAL or single_operator == self.Operations.EQUAL.value:
                     return self._equal(value)
-                elif single_operator == '$or':
+                elif single_operator == self.Operations.OR or single_operator == self.Operations.OR.value:
                     return self._or(value)
-                elif single_operator == '$and':
+                elif single_operator == self.Operations.AND or single_operator == self.Operations.AND.value:
                     return self._and(value)
                 else:
                     raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
@@ -1730,6 +1740,29 @@ class Modification:
     class Update:
         """A class that parses, holds and updates the update rules for Panacea."""
 
+        # List of available operations
+        class Operations(Enum):
+            UNSET = '$unset'
+            SET = '$set'
+            SET_ONLY = '$set_only'
+            SET_ON_INSERT = '$set_on_insert'
+            UPDATE_ONLY = '$update_only'
+            UPDATE = '$update'
+            RENAME = '$rename'
+            INC = '$inc'
+            MULT = '$mult'
+            FUNCTION = '$function'
+            MAP = '$map'
+            MAP_ON_VALUE = '$map_on_value'
+            MAP_ON_VALUE_THREAD = '$map_on_value_thread'
+
+        # List of available conditionals
+        class Conditionals(Enum):
+            DEEP = 'deep'
+            THREAD_MAX_COUNT = 'thread_max_count'
+            PROCESS_MAX_COUNT = 'process_max_count'
+            RECURSIVE = 'recursive'
+
         def __init__(self, query: Dict, condition_dict: Dict = None):
             """Initializer to the class which will parse the update rule/query and create the corresponding actions.
 
@@ -1792,11 +1825,11 @@ class Modification:
 
         def _process_condition(self, condition_dict):
 
-            condition_dict['process_max_count'] = \
-                min(multiprocessing.cpu_count(), condition_dict.get('process_max_count') or 5)
+            condition_dict[self.Conditionals.PROCESS_MAX_COUNT.value] = \
+                min(multiprocessing.cpu_count(), condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT.value) or 5)
 
-            condition_dict['thread_max_count'] = \
-                min(multiprocessing.cpu_count() * 5, condition_dict.get('process_max_count') or 5)
+            condition_dict[self.Conditionals.THREAD_MAX_COUNT.value] = \
+                min(multiprocessing.cpu_count() * 5, condition_dict.get(self.Conditionals.THREAD_MAX_COUNT.value) or 5)
 
             return condition_dict
 
@@ -1837,39 +1870,50 @@ class Modification:
                 """
 
                 # If the operation is $operator, set the function to its corresponding wrapper
-                if single_operator == '$unset':
+                if single_operator == self.Operations.UNSET.value or \
+                        single_operator == self.Operations.UNSET:
                     function = self._unset
-                elif single_operator == '$set':
+                elif single_operator == self.Operations.SET.value or \
+                        single_operator == self.Operations.SET:
                     function = self._set
-                elif single_operator == '$set_recursive':
-                    function = self._set_recursive
-                elif single_operator == '$set_only':
+                elif single_operator == self.Operations.SET_ONLY.value or \
+                        single_operator == self.Operations.SET_ONLY:
                     function = self._set_only
-                elif single_operator == '$set_on_insert':
+                elif single_operator == self.Operations.SET_ON_INSERT.value or \
+                        single_operator == self.Operations.SET_ON_INSERT:
                     function = self._set_on_insert
-                elif single_operator == '$update_only':
+                elif single_operator == self.Operations.UPDATE_ONLY.value or \
+                        single_operator == self.Operations.UPDATE_ONLY:
                     function = self._update_only
-                elif single_operator == '$update':
+                elif single_operator == self.Operations.UPDATE.value or \
+                        single_operator == self.Operations.UPDATE:
                     function = self._update
-                elif single_operator == '$rename':
+                elif single_operator == self.Operations.RENAME.value or \
+                        single_operator == self.Operations.RENAME:
                     function = self._rename
-                elif single_operator == '$inc':
+                elif single_operator == self.Operations.INC.value or \
+                        single_operator == self.Operations.INC:
                     function = self._inc
-                elif single_operator == '$mult':
+                elif single_operator == self.Operations.MULT.value or \
+                        single_operator == self.Operations.MULT:
                     function = self._mult
-                elif single_operator == '$function':
+                elif single_operator == self.Operations.FUNCTION.value or \
+                        single_operator == self.Operations.FUNCTION:
                     function = self._function
-                elif single_operator == '$map':
+                elif single_operator == self.Operations.MAP.value or \
+                        single_operator == self.Operations.MAP:
                     function = self._map
-                elif single_operator == '$map_on_value':
+                elif single_operator == self.Operations.MAP_ON_VALUE.value or \
+                        single_operator == self.Operations.MAP_ON_VALUE:
                     function = self._map_on_value
-                elif single_operator == '$map_on_value_thread':
+                elif single_operator == self.Operations.MAP_ON_VALUE_THREAD.value or \
+                        single_operator == self.Operations.MAP_ON_VALUE_THREAD:
                     function = self._map_on_value_thread
                 # TODO: FIx multiprocessing, it does not currently work
                 # elif single_operator == '$map_on_value_process':
                 #     function = self._map_on_value_process
                 else:
-                    raise AttributeError(f"Such operator {single_operator} does not exist for updating!")
+                    raise AttributeError(f"Such operator '{single_operator}' does not exist for updating!")
 
                 # Modify the update dictionary with the corresponding function
                 modified_update_dict = {key: function(value) for key, value in update_dict.items()}
@@ -2537,7 +2581,8 @@ class Modification:
 
                     result = item
 
-                    with multiprocessing.Pool(self.condition_dict.get('process_max_count')) as executor:
+                    with multiprocessing.Pool(self.condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT.value)) \
+                            as executor:
                         # Apply all the functions in order
                         for func in funcs:
                             result = executor.map(func, result)
@@ -2614,7 +2659,8 @@ class Modification:
 
                     result = item
 
-                    with ThreadPoolExecutor(self.condition_dict.get('thread_max_count')) as executor:
+                    with ThreadPoolExecutor(self.condition_dict.get(self.Conditionals.THREAD_MAX_COUNT.value)) \
+                            as executor:
                         # Apply all the functions in order
                         for func in funcs:
                             result = executor.map(func, result)
@@ -2822,7 +2868,7 @@ class Modification:
             **{key: value for key, value in filter_dict.items()
                if isinstance(value, dict) and not key.startswith('$')},
             # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
-            **{key: {'$equal': value} for key, value in filter_dict.items()
+            **{key: {self.Filter.Operations.EQUAL.value: value} for key, value in filter_dict.items()
                if not isinstance(value, dict) and not key.startswith('$')}
         }
         # Add operator keys
@@ -3014,7 +3060,8 @@ class Modification:
             key: value for key, value in update_dict.items() if not isinstance(value, dict)
         }
         # If the '$set' operator already exists, extend it, otherwise, put it there
-        modified_update_dict['$set'] = {**(modified_update_dict.get('$set') or {}), **set_dict}
+        modified_update_dict[self.Update.Operations.SET] = \
+            {**(modified_update_dict.get(self.Update.Operations.SET) or {}), **set_dict}
 
         # Process the update_dict and get a modified update dictionary
         processed_update_dict: Dict = \
@@ -3160,7 +3207,7 @@ class Modification:
         # If the `panacea` instance met the filtering criteria
         # After that, do the updating and return the result in a correct way
         # If we should go even deeper than the shallowest level matched, go deeper!
-        if self.condition_dict.get('deep') is True:
+        if self.condition_dict.get(self.Update.Conditionals.DEEP.value) is True:
             do_after_satisfied = lambda key, panacea: propagate(key, self.update_self(panacea))
         else:
             do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
