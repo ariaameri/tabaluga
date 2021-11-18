@@ -77,7 +77,7 @@ class BaseWorker:
 
         config_logger = \
             self._config\
-                .get_or_empty("logger")\
+                .get_or_empty("_logger")\
                 .update({}, {'$set_on_insert': {"name": self._modify_logger_name(self.__class__.__name__)}})
 
         logger = Logger(config_logger)
