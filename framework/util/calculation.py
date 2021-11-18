@@ -25,6 +25,9 @@ class Calculation:
         import numpy as np
 
         # Do the exponential averaging
-        average = beta * item + (1 - beta) * d_item if item != -np.inf and item is not None else d_item
+        average = \
+            beta * item + (1 - beta) * d_item \
+            if item != -np.inf and item != np.inf and item is not None \
+            else d_item
 
         return average

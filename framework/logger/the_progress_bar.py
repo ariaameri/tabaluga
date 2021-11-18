@@ -29,7 +29,7 @@ data_msg_template: DataMuncher = DataMuncher({
                 "item":
                     {
                         "current_item_index": 0,
-                        "total_items_count": -1,
+                        "total_items_count": -np.inf,
                     }
                 }
             },
@@ -41,7 +41,7 @@ data_msg_template: DataMuncher = DataMuncher({
             "state": {
                     "item": {
                         "current_item_index": 0,
-                        "total_items_count": -1,
+                        "total_items_count": -np.inf,
                     },
                 },
             "statistics": {
@@ -50,8 +50,8 @@ data_msg_template: DataMuncher = DataMuncher({
                         "average_time_per_update": -np.inf,
                     },
                     "time": {
-                        "last_update_time": -1,
-                        "initial_progress_bar_time": -1,
+                        "last_update_time": -np.inf,
+                        "initial_progress_bar_time": -np.inf,
                     }
                 }
         },
@@ -165,10 +165,10 @@ class TheProgressBarBase(ABC):
         # Book keeping for the information regarding the collected statistics
         initial_statistics_info = {
             'time': {
-                'initial_run_time': -1,  # The time when this instance is first activated
-                'initial_progress_bar_time': -1,  # The time when this instance is activated or reset,
-                                                  # i.e. the time when this current, specific progress bar started
-                'last_update_time': -1  # The time when the latest update to this instance happened
+                'initial_run_time': -np.inf,  # The time when this instance is first activated
+                'initial_progress_bar_time': -np.inf,  # The time when this instance is activated or reset,
+                                                       # i.e. the time when this current, specific progress bar started
+                'last_update_time': -np.inf  # The time when the latest update to this instance happened
             },
             'average': {
                 'average_time_per_update': -np.inf,
@@ -190,7 +190,7 @@ class TheProgressBarBase(ABC):
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is not None else False,
             'item': {
-                'total_items_count': -1,  # Count of total number of batches expected
+                'total_items_count': -np.inf,  # Count of total number of batches expected
                 'current_item_index': 0,  # Current batch item/index/number
                 'current_iteration_index': 0  # the current iteration index or how many times we have reset
             }
@@ -486,7 +486,7 @@ class TheProgressBarBase(ABC):
         # Reset the current item counter
         self.state_info = self.state_info.update(
             {'_bc': {'$regex': 'item$'}},
-            {'$set': {'current_item_index': 0, 'total_items_count': -1}}
+            {'$set': {'current_item_index': 0, 'total_items_count': -np.inf}}
         )
 
         # Reset the sleep info
