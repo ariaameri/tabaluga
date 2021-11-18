@@ -5,13 +5,14 @@ from abc import ABC, abstractmethod
 import numpy as np
 import re
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from ..logger.logger_sole import Logger
+from ..logger.logger_sole import Logger, LoggerConsoleFile
 
 
 class BaseWorker:
     """Class to serve as the base of all workers."""
 
     _universal_logger_shared = []
+    _console_handler = LoggerConsoleFile()
 
     def __init__(self, config: ConfigParser = None):
         """Initializer of the instance.
@@ -78,7 +79,12 @@ class BaseWorker:
         config_logger = \
             self._config\
                 .get_or_empty("_logger")\
-                .update({}, {'$set_on_insert': {"name": self._modify_logger_name(self.__class__.__name__)}})
+                .update({}, {
+                    '$set_on_insert': {
+                        "name": self._modify_logger_name(self.__class__.__name__),
+                        "console_handler": self._console_handler,
+                    }
+                })
 
         logger = Logger(config_logger)
 

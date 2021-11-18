@@ -8,7 +8,6 @@ from .logger_sole import LoggerConsoleFile, Logger
 from abc import ABC
 from typing import Dict, List, Union, Any
 import numpy as np
-import signal
 import re
 import colored
 
@@ -26,19 +25,7 @@ class LoggerManager(BaseEventManager, ABC):
 
         """
 
-        # Add the console handler
-        # Update each and every logger config that we have within our config
-        self.console_file = LoggerConsoleFile().activate()
-        config = config.update({'_bc': {'$regex': r'\.\w+$'}}, {'$set': {'console_handler': self.console_file}})
-
         super().__init__(config)
-
-    def on_os_signal(self, info: Dict = None):
-
-        os_signal = info['signal']
-
-        if os_signal == signal.SIGINT or os_signal == signal.SIGTERM:
-            self.console_file.deactivate()
 
 
 class TheProgressBarLogger(Logger):

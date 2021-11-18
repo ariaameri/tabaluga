@@ -20,6 +20,9 @@ class Trainer(base.BaseEventManager, ABC):
 
         super().__init__(config)
 
+        # initialize the console handler
+        self._console_handler.activate()
+
         # Total number of epochs, total batch count, batch size, current epoch, and current batch number
         self.epochs: int = self._config.get('epochs')
         self.number_of_iterations: int = -1  # Has to be set by the data loader
@@ -250,3 +253,9 @@ class Trainer(base.BaseEventManager, ABC):
         signal.signal(signal.SIGTERM, self.signal_catcher)
         signal.signal(signal.SIGTSTP, self.signal_catcher)
         signal.signal(signal.SIGCONT, self.signal_catcher)
+
+    def __del__(self):
+        """Method to be called when the object is being deleted."""
+
+        # deactivate the console handler
+        self._console_handler.deactivate()
