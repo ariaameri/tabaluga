@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # a list of restricted names that are used and a key name should not collide with these
-_restricted_names = ['_value', '_self', '_bc']
+_restricted_names = ['_value', '_self', '_bc', '_key_name']
 
 
 class PanaceaBase(ABC):
@@ -3167,6 +3167,13 @@ class Modification:
                 .filter(Some(panacea)) \
                 if filter_dict.get('_special').get('_self') is not None \
                 else True
+        satisfied &= \
+            filter_dict \
+                .get('_special') \
+                .get('_key_name') \
+                .filter(Some(bc.split('.')[-1])) \
+                if filter_dict.get('_special').get('_key_name') is not None \
+                else True
 
         # For special item '_value', `panacea` has to be a leaf
         satisfied &= \
@@ -3309,11 +3316,13 @@ class Modification:
 
         return processed_update_dict
 
-    def update_self(self, panacea: PanaceaBase, update_dict: Dict = None) -> PanaceaBase:
+    def update_self(self, key: str, panacea: PanaceaBase, update_dict: Dict = None) -> (str, PanaceaBase):
         """Method to update the `panacea` instance based on the update rules and returns the result.
 
         Parameters
         ----------
+        key : str
+            the key name
         panacea : PanaceaBase
             PanaceaBase instance to update
         update_dict : Dict, optional
@@ -3330,6 +3339,7 @@ class Modification:
 
         # Dummy variable
         new_panacea = panacea
+        new_key = key
 
         # First the field update rules are applied
         # Then, on the result, _special rules are applied
@@ -3357,9 +3367,10 @@ class Modification:
                 in
                 {
                     key.split('.')[0]: self.update_self(
+                        key,
                         panacea.get_option(key.split('.')[0]).get_or_else(panacea.__class__()),
                         {'field': {key[(key.index('.') + 1):]: update}, '_special': {}}
-                    )
+                    )[1]
                     for key, update
                     in update_dict.get('field').items()
                     if '.' in key
@@ -3383,10 +3394,14 @@ class Modification:
 
         # Apply the special updates
         if update_dict.get('_special').get('_self') is not None:
-
             # Apply the update rule
             # Note that the result can be anything, anything that the user says, not necessarily a leaf
             new_panacea: Any = update_dict.get('_special').get('_self')('', Some(new_panacea)).get()[1]
+        if update_dict.get('_special').get('_key_name') is not None:
+            # Apply the update rule
+            new_key: str = update_dict.get('_special').get('_key_name')('', Some(key)).get()[1]
+            if not isinstance(new_key, str):
+                raise ValueError('operation on key name resulted in a non string variable.')
 
         # If we have a `_value' item and new_panacea (after all the updates yet) is a leaf, update it
         if update_dict.get('_special').get('_value') is not None and issubclass(type(new_panacea), PanaceaLeaf):
@@ -3397,7 +3412,7 @@ class Modification:
             # Make a new leaf from the new value
             new_panacea = new_panacea.map(lambda x: result)
 
-        return new_panacea
+        return new_key, new_panacea
 
     def update(self, panacea, bc: str = '') -> Option[(str, PanaceaBase)]:
         """Method to (filter and) update the `panacea` instance.
@@ -3439,9 +3454,9 @@ class Modification:
         # After that, do the updating and return the result in a correct way
         # If we should go even deeper than the shallowest level matched, go deeper!
         if self.condition_dict.get(self.Update.Conditionals.DEEP.value) is True:
-            do_after_satisfied = lambda key, panacea: propagate(key, self.update_self(panacea))
+            do_after_satisfied = lambda key, panacea: propagate(*self.update_self(key, panacea))
         else:
-            do_after_satisfied = lambda key, panacea: Some((key, self.update_self(panacea)))
+            do_after_satisfied = lambda key, panacea: Some(self.update_self(key, panacea))
 
         # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
