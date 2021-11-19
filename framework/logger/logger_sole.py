@@ -211,10 +211,11 @@ class LoggerConsoleFile:
             return ready
 
         def __getattr__(self, item):
-            attr = getattr(self.handler, item)
 
-            return attr
-
+            try:
+                return getattr(self.handler, item)
+            except:
+                return None
 
 class Logger:
     """An abstract base/parent class for all logger classes."""
