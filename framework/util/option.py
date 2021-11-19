@@ -335,7 +335,7 @@ class Some(Option):
     def flatten(self) -> Option[Any]:
         """Returns the nested Option value within."""
 
-        return self._value if isinstance(self._value, Some) else nothing
+        return self._value if isinstance(self._value, Some) else self
 
     def map(self, function: Callable[[T], Any]) -> Some:
         """Method to apply the function to the internal value.
