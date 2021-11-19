@@ -171,7 +171,7 @@ class Option(Generic[T], ABC):
 
         """
 
-        return Some(default_value) if self.is_empty() else self
+        return default_value if self.is_empty() else self
 
     @abstractmethod
     def get_or_else(self, default_value: Any) -> Any:
