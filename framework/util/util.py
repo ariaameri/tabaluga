@@ -16,11 +16,28 @@ def check_terminal_focused() -> bool:
     # check if we have a tty
     result = check_terminal_atty()
 
+    # check if we are on the foreground
+    result &= check_terminal_foreground()
+
+    return result
+
+
+def check_terminal_foreground() -> bool:
+    """
+    Returns whether or not the terminal is in foreground.
+
+    Returns
+    -------
+    bool
+        True if we are foreground and False otherwise
+
+    """
+
     try:
-        # check if we are on the foreground
-        result &= os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
+        # check
+        result = os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
     except:
-        result &= False
+        return False
 
     return result
 
