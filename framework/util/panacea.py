@@ -611,6 +611,33 @@ class Panacea(PanaceaBase):
         else:
             return nothing
 
+    def get_value_option(self, item: str) -> Option[Any]:
+        """
+        Gets an item in the instance and return an Option value of that.
+        This should be noted that this is the same as get_option method except in the case that the search result in a
+        leaf node, in which the returned value will be an Option-wrapped of the value of the leaf.
+
+        Parameters
+        ----------
+        item : str
+            Item to look for in the shallowest level or in the deeper level where levels are separated by '.'
+                For example item1.item2 will look at item1 in the shallowest level and will look for item2 inside item1.
+
+        Returns
+        -------
+        An Option value possibly containing the item
+
+        """
+
+        # get the item
+        value: Option[PanaceaBase] = self.get_option(item)
+
+        # return the right thing!
+        if value.filter(lambda x: x.is_leaf).is_defined():
+            return value.map(lambda x: x.get())
+        else:
+            return value
+
     def get_leaf(self, item: str) -> PanaceaLeaf:
         """Gets a leaf node in the instance and return it.
 
