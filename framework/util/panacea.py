@@ -2895,7 +2895,8 @@ class Modification:
             # TODO: Check if the dictionary has not changed, do not produce a new instance
 
             # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
-            if new_dict:
+            # this is the same if panacea was empty in the first place! otherwise, we would remove empty panaceas
+            if new_dict or panacea.is_empty():
                 return Some((key, panacea.__class__(new_dict)))
             else:
                 return nothing
