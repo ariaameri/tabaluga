@@ -1233,7 +1233,7 @@ class PanaceaLeaf(PanaceaBase):
 
     # Getters
 
-    def get_option(self, item: str = None) -> Option[PanaceaBase]:
+    def get_option(self, item: str = '_value') -> Option[PanaceaBase]:
         """
         Gets a branch/leaf item in the instance and return an Option value of that.
         Basically, return an Option value of self
@@ -1249,7 +1249,7 @@ class PanaceaLeaf(PanaceaBase):
 
         """
 
-        return Some(self)
+        return nothing
 
     def get_value_option(self, item: str = '_value') -> Option[Any]:
         """
