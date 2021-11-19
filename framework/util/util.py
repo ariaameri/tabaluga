@@ -15,8 +15,12 @@ def check_terminal_focused() -> bool:
 
     # check if we have a tty
     result = check_terminal_atty()
-    # check if we are on the foreground
-    result &= os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
+
+    try:
+        # check if we are on the foreground
+        result &= os.getpgrp() == os.tcgetpgrp(sys.stdout.fileno())
+    except:
+        result &= False
 
     return result
 
@@ -32,7 +36,10 @@ def check_terminal_atty() -> bool:
 
     """
 
-    # check if we have a tty
-    result = sys.stdout.isatty()
+    try:
+        # check if we have a tty
+        result = sys.stdout.isatty()
+    except:
+        return False
 
     return result
