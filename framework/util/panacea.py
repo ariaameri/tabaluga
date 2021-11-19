@@ -11,6 +11,10 @@ import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
 
+# a list of restricted names that are used and a key name should not collide with these
+_restricted_names = ['_value', '_self', '_bc']
+
+
 class PanaceaBase(ABC):
     """A class that will act as a base node class for the config tree classes."""
 
@@ -19,8 +23,6 @@ class PanaceaBase(ABC):
 
         # Create a dictionary to hold the data
         self._parameters: Dict[str, Any] = {}
-
-        pass
 
     # Representation
 
@@ -413,6 +415,14 @@ class Panacea(PanaceaBase):
             if '.' in item:
                 raise ValueError(f'cannot have a key of name {item}: key elements cannot have `.` in their names')
 
+            # check for invalid key names
+            if item in _restricted_names:
+                restricted_names_str = '"' + '," "'.join(_restricted_names) + '"'
+                raise ValueError(
+                    f'cannot have a key of name {item}: '
+                    f'key elements must be different than {restricted_names_str}'
+                )
+
             # check if the key is string
             if not isinstance(item, str):
                 raise ValueError(f'cannot have a key of {item}, keys have to be strings')
@@ -581,8 +591,11 @@ class Panacea(PanaceaBase):
 
     # Getters
 
-    def get_option(self, item: str) -> Option:
-        """Gets an item in the instance and return an Option value of that.
+    def get_option(self, item: str) -> Option[PanaceaBase]:
+        """
+        Gets a branch/leaf item in the instance and return an Option value of that.
+        This should be noted that this method returns a PanaceaBase, so the search can result in a branch or leaf node,
+        which will be wrapped in an Option and returned.
 
         Parameters
         ----------
