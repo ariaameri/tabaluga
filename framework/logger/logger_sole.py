@@ -217,6 +217,7 @@ class LoggerConsoleFile:
             except:
                 return None
 
+
 class Logger:
     """An abstract base/parent class for all logger classes."""
 
@@ -321,6 +322,16 @@ class Logger:
             New name to be set
 
         """
+
+        from ..communicator import mpi
+        if mpi.mpi_communicator.is_mpi_run is True:
+            name_suffix = f' ' \
+                           f'{colored.fg("dodger_blue_3")}at rank ' \
+                           f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_rank()}' \
+                           f'{colored.fg("grey_50")}/' \
+                           f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_size()}' \
+                           f'{colored.attr("reset")}'
+            name += name_suffix
 
         self._logger.name = name
 

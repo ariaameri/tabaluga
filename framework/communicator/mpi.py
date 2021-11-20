@@ -1,7 +1,10 @@
+import subprocess
+from ..util import util
 from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Option
+from typing import Optional
 from mpi4py import MPI
 import os
 from readerwriterlock import rwlock
@@ -27,9 +30,6 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         super().__init__(config)
 
-        # set logger name
-        self._log.set_name("OpenMPI communicator")
-
         # lock for accessing elements
         _lock = rwlock.RWLockFair()
         self._lock_read = _lock.gen_rlock()
@@ -48,6 +48,41 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         self._local_size: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE") or 1)
         self._universe_size: int = int(os.getenv("OMPI_UNIVERSE_SIZE") or 1)
         self._node_rank: int = int(os.getenv("OMPI_COMM_WORLD_NODE_RANK") or 0)
+
+        # check if we have run by mpirun and get real tty
+        parent_command = \
+            subprocess.check_output(
+                ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
+            ).decode('utf-8').strip().split()[0]
+        self.is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
+        self.mpi_tty_fd = \
+            subprocess.check_output(
+                ['readlink', '-f', f'/proc/{os.getppid()}/fd/1']
+            ).decode('utf-8').strip() \
+            if self.is_mpi_run is True \
+            else util.get_tty_fd()
+
+    def _create_logger(self):
+        """
+        Creates a logger for this instance.
+        This has to be done to get rid of the circular dependency between this class and the logger class.
+        """
+
+        return None
+
+    def init_logger(self):
+        """
+        Initializes the logging feature.
+        This has to be called after initializing.
+        This is to prevent circular dependency between this class and the logger class.
+
+        """
+
+        # create the logger
+        self._log = super()._create_logger()
+
+        # set logger name
+        self._log.set_name("OpenMPI communicator")
 
     def update_env_vars(self):
         """Updates the internal representation of the OpenMPI related environmental variables"""
@@ -106,8 +141,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         with self._lock_write:
             self._communicators = \
                 self._communicators.update({}, {
-                name: communicator,
-            })
+                    name: communicator,
+                })
         return True
 
     def get_communicator_option(self, name: str) -> Option[MPI.Comm]:
@@ -206,15 +241,11 @@ class _MPICommunicatorSingletonClass(BaseWorker):
     def get_rank(self) -> int:
         """Returns the rank."""
 
-        return 0
-
         with self._lock_read:
             return self._rank
 
     def get_size(self) -> int:
         """Returns the size."""
-
-        return 10
 
         with self._lock_read:
             return self._size
@@ -223,9 +254,10 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 # this is the only instance that everyone should use
 # this instance has to be initialized and set at the beginning of the program
 # then everyone should use this instance
-mpi_communicator: _MPICommunicatorSingletonClass = None
+mpi_communicator: Optional[_MPICommunicatorSingletonClass] = None
 
 
 def init(config: ConfigParser = None):
     global mpi_communicator
     mpi_communicator = _MPICommunicatorSingletonClass(config)
+    mpi_communicator.init_logger()
