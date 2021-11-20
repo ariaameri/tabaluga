@@ -1,6 +1,7 @@
 import colored
 from .process import Process
 from ..util.config import ConfigParser
+from ..communicator import mpi
 import pynvml
 
 
@@ -29,6 +30,10 @@ class CUDAInformation(Process):
         * Nothing *
 
         """
+
+        # skip if not the main local rank
+        if mpi.mpi_communicator.get_local_rank() != 0:
+            return
 
         import re
 
