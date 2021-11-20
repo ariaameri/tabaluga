@@ -73,7 +73,7 @@ class BaseWorker:
         # this problem is troublesome in multi-parent inheritance that this class get initiated more than once
         # which causes multiple loggers to be created.
         # here we check if we have already created it and avoid its recreation
-        if hasattr(self, "_log"):
+        if hasattr(self, "_log") and self._log is not None:
             return self._log
 
         config_logger = \
