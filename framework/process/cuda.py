@@ -16,9 +16,8 @@ class CUDAInformation(Process):
         pynvml.nvmlInit()
 
     def process(self, data=None):
-        """Retrieves information and prints them.
-
-        This function can only be run once as it shuts down the pynvml at the end.
+        """
+        Retrieves information and prints them.
 
         Parameters
         ----------
@@ -32,8 +31,11 @@ class CUDAInformation(Process):
         """
 
         # skip if not the main local rank
-        if mpi.mpi_communicator.get_local_rank() != 0:
+        if not mpi.mpi_communicator.is_main_local_rank():
             return
+
+        # initialize the cuda nvml library
+        pynvml.nvmlInit()
 
         import re
 
