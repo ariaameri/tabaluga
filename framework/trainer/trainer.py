@@ -18,6 +18,15 @@ class Trainer(base.BaseEventManager, ABC):
     def __init__(self, config: ConfigParser = None):
         """Initializer for the this instance of the class"""
 
+        # initialize mpi
+        from ..communicator import mpi
+        mpi.init(config.get_or_empty("mpi"))
+
+        # initialize rabbitmq if exist
+        if config.get_option("rabbitmq").is_defined() and mpi.mpi_communicator.is_distributed() is True:
+            from ..communicator import rabbitmq
+            rabbitmq.init(config.get("rabbitmq"))
+
         super().__init__(config)
 
         # initialize the console handler
