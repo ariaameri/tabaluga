@@ -174,8 +174,12 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_train_batch_begin()
 
             self.train_info_dict = self.train_one_batch()
-            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Train'}},
-                                                                 {'$set_recursive': self.train_info_dict})
+            self.train_statistics = \
+                self.train_statistics.update(
+                    {'_bc': {'$regex': 'Train'}},
+                    {'$set': self.train_info_dict},
+                    {'recursive': True}
+                )
 
             self.on_train_batch_end()
             self.on_batch_end()
@@ -199,8 +203,12 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_batch_begin()
 
             self.val_info_dict = self.val_one_batch()
-            self.train_statistics = self.train_statistics.update({'_bc': {'$regex': 'Validation'}},
-                                                                 {'$set_recursive': self.val_info_dict})
+            self.train_statistics = \
+                self.train_statistics.update(
+                    {'_bc': {'$regex': 'Validation'}},
+                    {'$set': self.val_info_dict},
+                    {'recursive': True}
+                )
 
             self.on_val_batch_end()
 
