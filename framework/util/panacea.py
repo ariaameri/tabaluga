@@ -3206,13 +3206,16 @@ class Modification:
                             {
                                 self.Update.Operations.UNSET: {name: 1},
                             }
-                        )\
-                        .update(
-                            {},
-                            {
-                                self.Update.Operations.SET: {updated_key: updated_panacea},
-                            }
                         )
+                    if not updated_panacea.is_empty():
+                        new_panacea = \
+                            new_panacea \
+                            .update(
+                                {},
+                                {
+                                    self.Update.Operations.SET: {updated_key: updated_panacea},
+                                }
+                            )
         if update_dict.get('_special').get('_key_name') is not None:
             # Apply the update rule
             new_key: str = update_dict.get('_special').get('_key_name')('', Some(key)).get()[1]
