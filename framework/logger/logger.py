@@ -51,9 +51,11 @@ class TheProgressBarLogger(Logger):
         super().__init__(config)
 
         # Create the instance of the TheProgressBar
-        self._the_progress_bar = TheProgressBar(self.console_file)
+        self._the_progress_bar = TheProgressBar(self.console_file, self._config)
         self._the_progress_bar_manager = \
-            TheProgressBarParallelManager(self.console_file) if mpi.mpi_communicator.is_distributed() else None
+            TheProgressBarParallelManager(self.console_file, self._config) \
+            if mpi.mpi_communicator.is_distributed() \
+            else None
 
         # The number of total items and epochs
         self._total: int = -1
