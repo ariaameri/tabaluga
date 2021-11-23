@@ -1,4 +1,6 @@
 import os
+import pathlib
+import subprocess
 import sys
 
 
@@ -60,3 +62,22 @@ def check_terminal_atty() -> bool:
         return False
 
     return result
+
+
+def get_tty_fd() -> pathlib.Path:
+    """
+    Returns the tty file descriptor.
+
+    Returns
+    -------
+    pathlib.Path
+        file descriptor path
+    """
+
+    try:
+        return pathlib.Path(os.ttyname(sys.stdout.fileno()))
+    except:
+        out = subprocess.check_output(
+                ['readlink', '-f', f'/proc/{os.getpid()}/fd/1']
+                ).decode('utf-8').strip()
+        return pathlib.Path(out)
