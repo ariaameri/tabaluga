@@ -1,28 +1,35 @@
 from __future__ import annotations
-import json
+import math
 import multiprocessing
+import pathlib
 import select
+import subprocess
 import threading
 import sys
 from typing import List, Optional, Any, Callable
 from abc import abstractmethod, ABC
+import kombu
 import numpy as np
 import time
 import datetime
 import os
 import colored
 from ..util.data_muncher import DataMuncher
+from ..base.base import BaseWorker
+from ..util.config import ConfigParser
 from ..util.calculation import Calculation
+from ..util.option import Some
 from ..communicator import mpi
+from ..communicator import rabbitmq
 import re
 import fcntl
 import termios
-import struct
 from enum import Enum
 
 # message template to use
 # keep in mind that this has to be exactly the same as the default values set in the classes below
-data_msg_template: DataMuncher = DataMuncher({
+gather_info_data_msg_template: DataMuncher = DataMuncher({
+    'rank': 0,
     'progress_bar': {
         'prefix': {
             "state": {
@@ -70,8 +77,54 @@ data_msg_template: DataMuncher = DataMuncher({
     'aggregation_data': None,
 })
 
+# variable to hold rabbit data
+rabbit_data: Optional[ConfigParser] = None
 
-class TheProgressBarBase(ABC):
+# global variables definitions
+REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
+REGEX_INDENTATION = re.compile(r'(^|\n)')
+
+
+# function to initialize rabbit data
+# this is because mpi_communicator is not ready at the time of importing this module and will become ready later
+def make_rabbit_data():
+
+    global rabbit_data
+
+    # if already defined, skip
+    if rabbit_data is not None:
+        return
+
+    # set the variable
+    rabbit_data = ConfigParser({
+        'gather_info': {
+            'exchange': {
+                'name': 'tpb_data_gather',
+                'type': rabbitmq.RabbitMQExchangeType.DIRECT,
+                'durable': False,
+                'auto_delete': True,
+                'delivery_mode': 1
+            },
+            'queue': {
+                'name': f'tpb_data_gatherer_info_{mpi.mpi_communicator.get_rank()}',
+                'name_template': f'tpb_data_gatherer_info_<rank>',
+                # exchange is in '..exchange'
+                # routing key is in '..message'
+                "max_length": 1,  # we only want the latest update
+                'durable': False,
+                'auto_delete': True,
+            },
+            'message': {
+                'routing_key': f'data.update_info.{mpi.mpi_communicator.get_rank()}',
+            },
+            'consumer': {
+                'name': 'tpb_data_gather_consumer',
+            },
+        },
+    })
+
+
+class TheProgressBarBase(ABC, BaseWorker):
 
     class Modes(Enum):
         """Enum for modes of operation"""
@@ -86,8 +139,13 @@ class TheProgressBarBase(ABC):
         MANAGER = 2  # Whether we are in master mode, meaning we are responsible for printing the progress bar
         WORKER = 3
 
-    def __init__(self, stdout_handler=None):
+    def __init__(self, stdout_handler=None, config: ConfigParser = None):
         """Initializes the instance."""
+
+        super().__init__(config)
+
+        # set rabbit data
+        make_rabbit_data()
 
         # Create a lock so that one thread at a time can use the console to write
         self.print_lock = threading.Lock()
@@ -95,20 +153,25 @@ class TheProgressBarBase(ABC):
         # Create a threading.Event for knowing when to write the progress bar
         self.event_print = threading.Event()
 
-        # A daemon thread placeholder for running the update of the progress bar
+        # A daemon thread placeholder for running the update of the progress bar and other stuff
         # Also, a daemon thread placeholder for when on pause
-        self.run_thread: Optional[threading.Thread] \
-            = None  # Setting it to None will cause the daemon process not to run
-        self.run_thread_function: Optional[Callable] = None  # function to give to run_thread
-        self.check_for_resume_thread: Optional[threading.Thread] = None
+        initial_run_threads_info = {
+            'print': {
+                'main': None,  # daemon thread placeholder for running the update of the progress bar
+                'resume': None,  # daemon thread placeholder for when on pause
+            },
+            'gather_info': {
+                'main': None,
+            }
+        }
+        self.run_thread_info = DataMuncher(initial_run_threads_info)
 
         # Get a CursorModifier that contains ANSI escape codes for the cursor
         self.cursor_modifier = self.CursorModifier()
 
         # Console controlling book keeping
         self.original_sysout = sys.__stdout__
-        self._isatty_original = sys.stdout.isatty
-        self._fileno_original = sys.stdout.fileno
+        self._isatty_original = self._make_isatty()
 
         # Keep the stdout handler to write to
         self.stdout_handler = stdout_handler or self.original_sysout
@@ -116,6 +179,10 @@ class TheProgressBarBase(ABC):
         # keep the actions that we should take based on the configurations
         initial_actions = {
             'get_bar': self._get_progress_bar_with_spaces,
+            'aggregator': {  # this is used to aggregate the given user data
+                'full': lambda x: '',
+                'short': lambda x: '',
+            }
         }
         self.actions = DataMuncher(initial_actions)
 
@@ -128,11 +195,11 @@ class TheProgressBarBase(ABC):
                 'write': w,
             },
             # the amount of update we should see before we do an update
-            'update_interval': -1,
+            'update_interval': self._config.get_or_else('sleep_timer.update_interval', -1),
             # the number of times we should do an update in an iteration
-            'update_number_per_iteration': 4,
+            'update_number_per_iteration': self._config.get_or_else('sleep_timer.update_number_per_iteration', 4),
             'stat': {
-                'last_item_index': 0,
+                'last_item_index': -np.inf,
             }
         }
         self.sleep_timer_info = DataMuncher(initial_sleep_timer_info)
@@ -158,6 +225,9 @@ class TheProgressBarBase(ABC):
             'console': {  # Information regarding the console
                 'rows': -1,
                 'columns': -1
+            },
+            'aggregation_data': {
+                'aggregation_data': None,
             }
         }
         self.progress_bar_info = DataMuncher(initial_progress_bar_info)
@@ -186,6 +256,8 @@ class TheProgressBarBase(ABC):
             'parallel': {
                 'rank': mpi.mpi_communicator.get_rank(),
                 'size': mpi.mpi_communicator.get_size(),
+                'is_distributed': mpi.mpi_communicator.is_distributed(),
+                'is_main_rank': mpi.mpi_communicator.is_main_rank(),
             },
             # Whether we should write to some external stdout handler or take care of it ourselves
             'external_stdout_handler': True if stdout_handler is not None else False,
@@ -196,6 +268,25 @@ class TheProgressBarBase(ABC):
             }
         }
         self.state_info = DataMuncher(initial_state_info)
+
+        # book keeping for communication relate data
+        initial_communication_info = {
+            'gather_info': {
+                'exchange': {
+                    'exchange': None,
+                },
+                'queue': {
+                    'queue': None,
+                },
+                'consumer': {
+                    'consumer': None,  # to be used by the manager
+                }
+            },
+        }
+        self.communication_info = DataMuncher(initial_communication_info)
+
+        # initialize the communication related tasks
+        self._init_communication()
 
         # A buffer for the messages to be printed
         self.buffer: List = []
@@ -284,6 +375,9 @@ class TheProgressBarBase(ABC):
         # set the actions
         self._set_actions()
 
+        # first, reset so that everything is set
+        self.reset()
+
         # Set the initial time
         current_time = time.time()
         self.statistics_info = \
@@ -293,9 +387,8 @@ class TheProgressBarBase(ABC):
                     {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
                 )
 
-        # set and the running daemon thread
-        self._make_run_thread()
-        self.run_thread.start()
+        # set and run the running daemon thread
+        self.run()
 
         # If not in single mode, no need to print, thus return now
         if self._check_action() is False:
@@ -313,16 +406,13 @@ class TheProgressBarBase(ABC):
         # Set the printing event on to start with the printing of the progress bar
         self.event_print.set()
 
-        # finally, reset so that everything is set
-        self.reset()
-
         return self
 
     def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
         # Stop the run thread
-        self.run_thread = None
+        self.run_thread_info = self.run_thread_info.update({}, {'print.main': None})
 
         # if we are not printing at all, skip
         if self._check_action() is False:
@@ -412,6 +502,9 @@ class TheProgressBarBase(ABC):
         # Start printing
         self.event_print.set()
 
+        # notify the sleeper as well!
+        self._notify_sleep()
+
         return self
 
     def update(self, count: int) -> None:
@@ -461,6 +554,9 @@ class TheProgressBarBase(ABC):
 
         """
 
+        # reset the communication tasks
+        self._reset_communication()
+
         # Print the progress bar and leave it if we have done any progress
         if self.state_info.get('item.current_item_index') != 0:
             self._print_progress_bar(return_to_line_number=return_to_line_number)
@@ -492,7 +588,7 @@ class TheProgressBarBase(ABC):
         # Reset the sleep info
         self.sleep_timer_info = self.sleep_timer_info.update(
             {},
-            {'$set': {'stat.last_item_index': 0}},
+            {'$set': {'stat.last_item_index': -np.inf}},
         )
 
         # Reset the descriptions
@@ -503,17 +599,22 @@ class TheProgressBarBase(ABC):
 
         return self
 
-    def run(self) -> None:
+    @abstractmethod
+    def run(self):
+        """Method to run the threads needed, unblockingly."""
+
+        raise NotImplementedError
+
+    def run_print(self) -> None:
         """Prints the progress bar and takes care of other controls.
 
         Method to be run by the daemon progress bar thread.
         """
 
-        while self.run_thread:
+        while self.run_thread_info.get('print.main'):
 
             # Wait for the event to write
             self.event_print.wait()
-
             # Print the progress bar only if it is focused on
             # If we are not focused, pause
             if self._check_if_should_print():
@@ -524,25 +625,35 @@ class TheProgressBarBase(ABC):
 
             self._sleep()
 
-    @abstractmethod
-    def _set_run_thread_function(self) -> None:
-        """Set the function to give to run_thread to run."""
-
-        raise NotImplementedError
-
     def _make_run_thread(self) -> None:
         """Makes and sets the run thread"""
 
-        # first, set the function to run
-        self._set_run_thread_function()
-
         # now, create the thread object
-        self.run_thread = threading.Thread(
+        run_print_thread = threading.Thread(
             name='run_daemon_thread',
-            target=self.run_thread_function,
+            target=self.run_print,
             args=(),
             daemon=True
         )
+        self.run_thread_info = self.run_thread_info.update({}, {'print.main': run_print_thread})
+
+    @abstractmethod
+    def run_gather_info(self) -> None:
+        """Publish the information to the broker for communication."""
+
+        raise NotImplementedError
+
+    def _make_gather_info_thread(self) -> None:
+        """Makes and sets the gather info thread"""
+
+        # now, create the thread object
+        gather_info_thread = threading.Thread(
+            name='gather_info_daemon_thread',
+            target=self.run_gather_info,
+            args=(),
+            daemon=True
+        )
+        self.run_thread_info = self.run_thread_info.update({}, {'gather_info.main': gather_info_thread})
 
     def set_number_items(self, number_of_items: int) -> TheProgressBarBase:
         """Set the total number of the items.
@@ -610,32 +721,38 @@ class TheProgressBarBase(ABC):
         if data is not None:
             return data.get('columns'), data.get('rows')
 
-        env = os.environ
+        if self._check_if_atty() is False:
+            return -1, -1
 
-        def ioctl_GWINSZ(fd):
-            try:
-                cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
-            except:
-                return
-            return cr
+        out = os.get_terminal_size()
+        return out.columns, out.lines
 
-        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
-        if not cr:
-            try:
-                fd = os.open(os.ctermid(), os.O_RDONLY)
-                cr = ioctl_GWINSZ(fd)
-                os.close(fd)
-            except:
-                pass
-        if not cr:
-            cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
-
-            ### Use get(key[, default]) instead of a try/catch
-            # try:
-            #    cr = (env['LINES'], env['COLUMNS'])
-            # except:
-            #    cr = (25, 80)
-        return int(cr[1]), int(cr[0])
+        # env = os.environ
+        #
+        # def ioctl_GWINSZ(fd):
+        #     try:
+        #         cr = struct.unpack('hh', fcntl.ioctl(fd, termios.TIOCGWINSZ, '1234'))
+        #     except:
+        #         return
+        #     return cr
+        #
+        # cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+        # if not cr:
+        #     try:
+        #         fd = os.open(os.ctermid(), os.O_RDONLY)
+        #         cr = ioctl_GWINSZ(fd)
+        #         os.close(fd)
+        #     except:
+        #         pass
+        # if not cr:
+        #     cr = (env.get('LINES', 25), env.get('COLUMNS', 80))
+        #
+        #     ### Use get(key[, default]) instead of a try/catch
+        #     # try:
+        #     #    cr = (env['LINES'], env['COLUMNS'])
+        #     # except:
+        #     #    cr = (25, 80)
+        # return int(cr[1]), int(cr[0])
 
     def _get_terminal_size(self) -> (int, int):
         """Returns the stored size of the terminal in form of (columns, rows)."""
@@ -699,6 +816,24 @@ class TheProgressBarBase(ABC):
 
         return False
 
+    def _check_if_should_append_progress_bar(self) -> bool:
+        """
+        Checks whether we should append the progress bar at the end of each external print request.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        # if we should print
+        check = self._check_if_should_print()
+
+        # only add when in normal mode
+        check &= True if self.state_info.get('mode') == self.Modes.NORMAL else False
+
+        return check
+
     def _check_if_focused(self) -> bool:
         """Checks whether the terminal is focused on the progress bar so that it should be printed.
 
@@ -714,6 +849,19 @@ class TheProgressBarBase(ABC):
             and self._check_if_foreground()
 
         return check
+
+    @abstractmethod
+    def _make_isatty(self) -> Callable:
+        """
+        Makes the new atty function.
+
+        Returns
+        -------
+        Callable
+            the function to be called whose output defines whether or not we have a tty.
+        """
+
+        raise NotImplementedError
 
     def _check_if_atty(self) -> bool:
         """
@@ -751,6 +899,11 @@ class TheProgressBarBase(ABC):
         bool
 
         """
+
+        # return True
+        # import subprocess
+        # out = subprocess.check_output(['ps', '-o', 'stat', '-p', str(os.getpid())])
+        # return True if '+' in out.decode('utf-8') else False
 
         try:
             return os.getpgrp() == os.tcgetpgrp(self.original_sysout.fileno())
@@ -849,7 +1002,7 @@ class TheProgressBarBase(ABC):
         # print(f"got {return_to_line_number} this time")
 
         # if terminal size given is negative, just return the progress_bar
-        if data.get_option('terminal').filter(lambda x: x.get('columns') < 0 or x.get('rows') < 0).is_defined():
+        if data.get_option('terminal').filter(lambda x: x.get('columns') <= 0 or x.get('rows') <= 0).is_defined():
             return progress_bar + '\n'
 
         # Clear the line and write it
@@ -903,11 +1056,11 @@ class TheProgressBarBase(ABC):
 
         """
 
-        # If we are in paused mode or non-master mode, do not do anything
-        if self.state_info.get('paused') is True:
+        # If we are in paused mode or we should not print, do not do anything
+        if self.state_info.get('paused') is True or self._check_if_should_print() is False:
             return
 
-        # Get the progress bar with spaces
+        # Get the progress bar
         progress_bar = self.actions.get('get_bar')(return_to_line_number=return_to_line_number)
 
         # Print the progress bar
@@ -977,6 +1130,8 @@ class TheProgressBarBase(ABC):
                     self._make_and_get_terminal_size(
                         data=data.get_or_else('terminal', None)
                     )
+                # if columns <= 0 or rows <= 0:
+                #     break
                 # Calculate the written char length of the prefix, suffix, and the first line of description without the
                 # special unicode or console non-printing characters
                 len_bar_desc_before = \
@@ -1022,7 +1177,8 @@ class TheProgressBarBase(ABC):
         progress_bar = \
             f'{description_before or description_short_before}' \
             f' {bar_prefix} {bar} {bar_suffix} ' \
-            f'{description_after or description_short_after}'
+            f'{description_after or description_short_after}' \
+            f'{colored.attr("reset")}'
 
         return progress_bar
 
@@ -1051,9 +1207,28 @@ class TheProgressBarBase(ABC):
     # communication methods
 
     def _init_communication(self) -> None:
-        """initialize the communication stuff."""
+        """Initializes everything related to communication."""
 
-        pass
+        # if we are not in distributed mode, skip
+        if mpi.mpi_communicator.get_size() == 1:
+            return
+
+        # initialize the 'gather info' communication
+        self._init_communication_gather_info()
+
+    @abstractmethod
+    def _reset_communication(self):
+        """Do all the tasks required when resetting that are related to the communication"""
+
+        raise NotImplementedError
+
+    ## 'gather info' communication methods
+
+    @abstractmethod
+    def _init_communication_gather_info(self) -> None:
+        """Initializes everything related to gathering update to the manager."""
+
+        raise NotImplementedError
 
     # bar prefix methods
 
@@ -1093,6 +1268,11 @@ class TheProgressBarBase(ABC):
 
         # construct the data that has to be outputted
         output_data = DataMuncher({"percentage": percent / 100})
+
+        # add color
+        bar_prefix = f'{colored.fg("grey_74")}' \
+                     f'{bar_prefix}' \
+                     f'{colored.attr("reset")}'
 
         return bar_prefix, output_data
 
@@ -1182,7 +1362,7 @@ class TheProgressBarBase(ABC):
         bar_length = length - 2
 
         # get bar chars
-        bar_chars = data.get("bar_chars")
+        bar_chars = data.get("bar_chars") or self.bar_chars
 
         # Figure how many 'complete' bar characters (of index -1) we need
         # Figure what other character of bar characters is needed
@@ -1300,7 +1480,10 @@ class TheProgressBarBase(ABC):
         bar_suffix, fractional_data = self._get_fractional_progress(data.get("state"))  # Fractional progress e.g. 12/20
         bar_suffix += f' '
         item_per_second: float = self._get_item_per_second(data.get("statistics"))
-        bar_suffix += f'[{item_per_second:.2f} it/s]'
+        item_per_second_str: str = f'{item_per_second:.2f}' if math.isfinite(item_per_second) else '?'
+        bar_suffix += f'{colored.fg("grey_74")}' \
+                      f'[{item_per_second_str} it/s]'
+        bar_suffix += f'{colored.attr("reset")}'
 
         # update the output
         output_data = output_data.update({}, {
@@ -1309,54 +1492,70 @@ class TheProgressBarBase(ABC):
         })
 
         # Time elapsed since the last update
+        hours = minutes = seconds = microseconds = np.nan
         now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(data.get('statistics.time.last_update_time'))
-        delta_time = now - last_update_time
-        hours, remainder = divmod(delta_time.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        microseconds = delta_time.microseconds
-        # For formatting purposes, just keep the first 4 digits
-        microseconds = int(str(microseconds)[:4])
-        delta_time_str_last_update = f'{hours:02d}' \
-                                     f':' \
-                                     f'{minutes:02d}' \
-                                     f':' \
-                                     f'{seconds:02d}' \
-                                     f'.' \
-                                     f'{microseconds:04d}'
+        last_update_time = data.get('statistics.time.last_update_time')
+        if math.isfinite(last_update_time):
+            last_update_time = datetime.datetime.fromtimestamp(last_update_time)
+            delta_time = now - last_update_time
+            hours, remainder = divmod(delta_time.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            microseconds = delta_time.microseconds
+            # For formatting purposes, just keep the first 4 digits
+            microseconds = int(str(microseconds)[:4])
+            delta_time_str_last_update = f'{hours:02d}' \
+                                         f':' \
+                                         f'{minutes:02d}' \
+                                         f':' \
+                                         f'{seconds:02d}' \
+                                         f'.' \
+                                         f'{microseconds:04d}'
+        else:
+            delta_time_str_last_update = '?'
 
         # update the output
         output_data = output_data.update({}, {
-            "time_since_last_update": {
-                "hours": hours,
-                "minutes": minutes,
-                "seconds": seconds,
-                "microseconds": microseconds,
+            '$set': {
+                "time_since_last_update": {
+                    "hours": hours,
+                    "minutes": minutes,
+                    "seconds": seconds,
+                    "microseconds": microseconds,
+                }
             }
         })
 
         # Time elapsed since the beginning of the iteration
-        init_time = datetime.datetime.fromtimestamp(data.get('statistics.time.initial_progress_bar_time'))
-        delta_time = now - init_time
-        hours, remainder = divmod(delta_time.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        delta_time_str_since_iteration_beginning = f'{hours:02d}' \
-                                         f':' \
-                                         f'{minutes:02d}' \
-                                         f':' \
-                                         f'{seconds:02d}'
+        hours = minutes = seconds = np.nan
+        init_progress_bar_time = data.get('statistics.time.initial_progress_bar_time')
+        if math.isfinite(init_progress_bar_time):
+            init_time = datetime.datetime.fromtimestamp(init_progress_bar_time)
+            delta_time = now - init_time
+            hours, remainder = divmod(delta_time.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            delta_time_str_since_iteration_beginning = f'{hours:02d}' \
+                                                       f':' \
+                                                       f'{minutes:02d}' \
+                                                       f':' \
+                                                       f'{seconds:02d}'
+        else:
+            delta_time_str_since_iteration_beginning = '?'
 
         # update the output
         output_data = output_data.update({}, {
-            "time_since_beginning_iteration": {
-                "hours": hours,
-                "minutes": minutes,
-                "seconds": seconds,
+            '$set': {
+                "time_since_beginning_iteration": {
+                    "hours": hours,
+                    "minutes": minutes,
+                    "seconds": seconds,
+                }
             }
         })
 
         # Add the elapsed time to the bar_suffix
-        bar_suffix += f' {delta_time_str_last_update} - {delta_time_str_since_iteration_beginning}'
+        bar_suffix += f' {colored.fg("grey_39")}{delta_time_str_last_update}' \
+                      f'{colored.fg("grey_74")} - ' \
+                      f'{delta_time_str_since_iteration_beginning}{colored.attr("reset")}'
 
         return bar_suffix, output_data
 
@@ -1540,6 +1739,13 @@ class TheProgressBarBase(ABC):
         # get the description
         description = self._get_bar_description_after() if data is None else data.get('after')
 
+        # also add the aggregation string
+        subs_str = r'\1\t'
+        description += \
+            f'\n\n' \
+            f'{REGEX_INDENTATION.sub(subs_str, self._make_and_get_aggregation_str())}' \
+            f'\n'
+
         # construct the data that has to be outputted
         output_data = \
             DataMuncher({
@@ -1599,6 +1805,13 @@ class TheProgressBarBase(ABC):
 
         # get the description
         description = self._get_bar_description_short_after() if data is None else data.get('after')
+
+        # also add the aggregation string
+        aggregation_str = self._make_and_get_aggregation_short_str()
+        # make sure its a one liner
+        if '\n' in aggregation_str:
+            raise ValueError('aggregation short function must result in a one-line string')
+        description += f' {aggregation_str}'
 
         # construct the data that has to be outputted
         output_data = \
@@ -1720,6 +1933,84 @@ class TheProgressBarBase(ABC):
 
         return description
 
+    # aggregation methods
+
+    def set_aggregation_data(self, data: Any) -> None:
+        """
+        Sets the aggregation data.
+
+        This data will be passed to the custom aggregation functions provided and the result will be showed.
+        This data will be sent to the manager in case of distributed run. The manager will then call a function to
+        aggregate these data and use them.
+
+        Parameters
+        ----------
+        data : Any
+            the data to be passed to the manager for aggregation.
+            note that this data has to be serialize-able.
+
+        """
+
+        self.progress_bar_info = self.progress_bar_info.update({}, {'aggregation_data.aggregation_data': data})
+
+    def set_aggregator_function_full(self, func: Callable[[list], str]):
+        """
+        Sets the aggregator function that is used to process the aggregated data and give full output.
+
+        Parameters
+        ----------
+        func : Callable[[list], str
+            function that is given a list of to-be-aggregated data and should return the full aggregation.
+
+        """
+
+        self.actions = self.actions.update({}, {'aggregator.full': func})
+
+    def set_aggregator_function_short(self, func: Callable[[list], str]):
+        """
+        Sets the aggregator function that is used to process the aggregated data and give short output.
+
+        Parameters
+        ----------
+        func : Callable[[list], str
+            function that is given a list of to-be-aggregated data and should return the short aggregation.
+
+        """
+
+        self.actions = self.actions.update({}, {'aggregator.short': func})
+
+    def _make_and_get_aggregation_str(self) -> str:
+        """
+        Calls the custom full aggregation function and returns the string
+
+        Returns
+        -------
+        str
+            String returned by calling the custom aggregation function
+
+        """
+
+        aggregation_str = \
+            self.actions.get('aggregator.full')([self.progress_bar_info.get('aggregation_data.aggregation_data')])
+
+        return aggregation_str
+
+    def _make_and_get_aggregation_short_str(self) -> str:
+        """
+        Calls the custom short aggregation function and returns the string
+
+        Returns
+        -------
+        str
+            String returned by calling the custom short aggregation function
+
+        """
+
+        aggregation_str = \
+            self.actions.get('aggregator.short')([self.progress_bar_info.get('aggregation_data.aggregation_data')])
+
+        return aggregation_str
+
     # utility methods
 
     def _get_percentage(self, data: DataMuncher) -> float:
@@ -1777,10 +2068,14 @@ class TheProgressBarBase(ABC):
             'item.total_items_count') > 0 else 5
 
         # Create the string
-        fractional_progress: str = f'{data.get("item.current_item_index"): {length_items}d}'
-        fractional_progress += f'/'
-        fractional_progress += f'{data.get("item.total_items_count")}' if data.get(
-            'item.total_items_count') > 0 else '?'
+        fractional_progress = f'{colored.fg("gold_3b")}' \
+                              f'{data.get("item.current_item_index"): {length_items}d}' \
+                              f'{colored.fg("grey_46")}' \
+                              f'/'
+        fractional_progress += f'{colored.fg("orange_4b")}' \
+                               f'{data.get("item.total_items_count")}' \
+            if data.get('item.total_items_count') > 0 else '?'
+        fractional_progress += f'{colored.attr("reset")}'
 
         # update the output data
         output_data = DataMuncher({
@@ -1804,7 +2099,7 @@ class TheProgressBarBase(ABC):
 
         """
 
-        return re.sub(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]', '', message)
+        return REGEX_REMOVE_NONPRINT_CHARS.sub('', message)
 
     def _get_item_per_second(self, data: DataMuncher) -> float:
         """Returns the average number of items processed in a second.
@@ -1894,23 +2189,61 @@ class TheProgressBarBase(ABC):
         for r in rs:
             r.recv()
 
-    @abstractmethod
     def _notify_sleep(self):
         """Figure out if it is a good time to wake the sleeping time up!"""
 
-        raise NotImplementedError
+        if self.sleep_timer_info.get('update_interval') > 0:
+            interval = self.sleep_timer_info.get('update_interval')
+        elif self.sleep_timer_info.get('update_number_per_iteration') > 0:
+            interval = \
+                self.state_info.get('item.total_items_count') \
+                // self.sleep_timer_info.get('update_number_per_iteration')
+        else:
+            return
 
-    @abstractmethod
+        # if we should print
+        # also print at 0% and 100%
+        if \
+                self.state_info.get('item.current_item_index') \
+                >=\
+                self.sleep_timer_info.get('stat.last_item_index') + interval:
+
+            # first update the stats
+            self.sleep_timer_info = \
+                self.sleep_timer_info.update({}, {
+                    'stat.last_item_index': self.state_info.get('item.current_item_index'),
+                })
+
+            # let the time go off
+            # we will print the bar ourselves because we do not want to have a race condition: while we are telling
+            # the other thread to type, this thread can go and reset the bar that would lead to undefined results
+            # TODO: FIX THIS!
+            # self.sleep_timer_info.get('pipe.write').send('timesup!')
+            self._print_progress_bar()
+
     def _get_update_frequency(self) -> float:
         """Returns the number of times in a second that the progress bar should be updated.
 
-        Returns
-        -------
-        The frequency at which the progress bar should be updated
+                Returns
+                -------
+                The frequency at which the progress bar should be updated
 
-        """
+                """
 
-        raise NotImplementedError
+        # Calculated the average number of items processed per second
+        average_freq: float = 1 / self.statistics_info.get('average').get('average_time_per_update')
+
+        # Rule: update at least 2 times and at most 60 times in a second unless needed to be faster
+        # Also be twice as fast as the update time difference
+        # Also, if we are on pause, update with frequency 1
+        if self.state_info.get('paused') is True:
+            freq = 1.0
+        elif self.state_info.get('mode') == self.Modes.NOTTY:
+            freq = 1 / 60  # if we do not have a tty, print every minute
+        else:
+            freq = float(np.clip(2 * average_freq, 2, 60))
+
+        return freq
 
     def _exp_average(self, item: float, d_item: float, beta: float = .9) -> float:
         """
@@ -1974,7 +2307,7 @@ class TheProgressBarBase(ABC):
             with self.print_lock:
 
                 # Add the progress bar at the end
-                if not msg.endswith('\n\b') and self._check_if_should_print() is True:
+                if not msg.endswith('\n\b') and self._check_if_should_append_progress_bar() is True:
                     self.buffer.append(self.actions.get('get_bar')())
 
                 # Create the message from the buffer and print it with extra new line character
@@ -2005,7 +2338,7 @@ class TheProgressBar(TheProgressBarBase):
         super().__init__(stdout_handler=stdout_handler)
 
         # book keeping for aggregation data in case of distributed run
-        self.aggregation_data: Any = None
+        self.gather_info_aggregation_data: Any = None
 
     # action methods
 
@@ -2021,7 +2354,7 @@ class TheProgressBar(TheProgressBarBase):
         """Method to find out and set the role."""
 
         # find and update the role
-        if self.state_info.get('parallel.size') > 1:
+        if self.state_info.get('parallel.is_distributed') is True:
             # update the role
             self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.WORKER}})
         else:
@@ -2070,43 +2403,69 @@ class TheProgressBar(TheProgressBarBase):
                 'get_bar': get_bar_curry,
             })
 
-    def _set_run_thread_function(self) -> None:
-        """Set the function to give to run_thread to run."""
-        # find out the function to run
-        if self.state_info.get('role') == self.Roles.SINGLE:
-            self.run_thread_function = self.run
-        elif self.state_info.get('role') == self.Roles.WORKER:
-            self.run_thread_function = self.run_publish
+    def run(self):
+        """Runs the daemon threads."""
 
-    def run_publish(self) -> None:
+        # if we are single and non-distributed, just print
+        if self.state_info.get('role') == self.Roles.SINGLE:
+            self._make_run_thread()
+            self.run_thread_info.get('print.main').start()
+
+        # if we are in a distributed mode, just publish
+        elif self.state_info.get('role') == self.Roles.WORKER:
+            self._make_gather_info_thread()
+            self.run_thread_info.get('gather_info.main').start()
+
+    def reset(self, return_to_line_number: int = -1) -> TheProgressBar:
+        """Resets the progress bar and returns its instance.
+
+        Parameters
+        ----------
+        return_to_line_number: int, optional
+            The line number to return to
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # do the resetting
+        super().reset(return_to_line_number=return_to_line_number)
+
+        return self
+
+    def run_gather_info(self) -> None:
         """Publish the information to the broker for communication."""
 
-        while self.run_thread:
+        while self.run_thread_info.get('gather_info.main'):
 
             # do the communication tasks
-            self._send_broker_info()
+            self._send_gather_info_broker_info()
 
             # sleep :D
             self._sleep()
 
-    def set_aggregation_data(self, data: Any) -> None:
-        """
-        Sets the aggregation data.
-
-        This data will be sent to the manager in case of distributed run. The manager will then call a function to
-        aggregate these data and use them.
-
-        Parameters
-        ----------
-        data : Any
-            the data to be passed to the manager for aggregation.
-            note that this data has to be serialize-able.
-
-        """
-
-        self.aggregation_data = data
-
     # terminal related methods
+
+    def _make_isatty(self) -> Callable:
+        """Makes the new atty function."""
+
+        return sys.stdout.isatty
+
+    def _check_if_foreground(self) -> bool:
+        """
+        Checks if we are running in foreground
+
+        Returns
+        -------
+        bool
+
+        """
+
+        # most of the time the actual foreground checking does not work, for example in Docker environment with no
+        # pseudo-terminal. so, for now, we just remove it
+        return True
 
     def _check_if_should_print(self) -> bool:
         """
@@ -2128,7 +2487,7 @@ class TheProgressBar(TheProgressBarBase):
     def _make_and_get_progress_bar_data(self) -> DataMuncher:
 
         # get the progress bar data in the correct form!
-        data: DataMuncher = data_msg_template.get('progress_bar')
+        data: DataMuncher = gather_info_data_msg_template.get('progress_bar')
 
         # update it!
         data = data.update({}, {'$update_only': {
@@ -2151,7 +2510,65 @@ class TheProgressBar(TheProgressBarBase):
 
     # communication methods
 
-    def _make_and_get_communication_message(self) -> DataMuncher:
+    def _reset_communication(self):
+        """Do all the tasks required when resetting that are related to the communication"""
+
+        # if not in distributed mode, skip
+        if not mpi.mpi_communicator.is_distributed():
+            return
+
+        # send the final message
+        self._send_gather_info_broker_info()
+
+    def _send_gather_info_broker_info(self) -> None:
+        """Make and send the information to the broker."""
+
+        # gather data
+        data: dict = self._make_and_get_gather_info_communication_message_json()
+
+        # send the data
+        rabbitmq.rabbitmq_communicator.publish(
+            body=data,
+            routing_key=rabbit_data.get('gather_info.message.routing_key'),
+            exchange=self.communication_info.get('gather_info.exchange.exchange'),
+            # also declare our queue
+            extra_declare=[self.communication_info.get('gather_info.queue.queue')]
+        )
+
+    ## 'gather info' communication methods
+
+    def _init_communication_gather_info(self) -> None:
+        """Initializes everything related to gathering update to the manager."""
+
+        # define the exchange
+        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+            name=rabbit_data.get('gather_info.exchange.name'),
+            type=rabbit_data.get('gather_info.exchange.type'),
+            durable=rabbit_data.get('gather_info.exchange.durable'),
+            auto_delete=rabbit_data.get('gather_info.exchange.auto_delete'),
+            delivery_mode=rabbit_data.get('gather_info.exchange.delivery_mode'),
+        )
+
+        # define the queue
+        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+            name=rabbit_data.get('gather_info.queue.name'),
+            exchange_name=rabbit_data.get('gather_info.exchange.name'),
+            routing_key=rabbit_data.get('gather_info.message.routing_key'),
+            max_length=rabbit_data.get('gather_info.queue.max_length'),
+            durable=rabbit_data.get('gather_info.queue.durable'),
+            auto_delete=rabbit_data.get('gather_info.queue.auto_delete'),
+        )
+
+        # update the info
+        self.communication_info = self.communication_info.update(
+            {'_bc': {'$regex': r'gather_info$'}},
+            {
+                'exchange.exchange': exchange,
+                'queue.queue': queue,
+            }
+        )
+
+    def _make_and_get_gather_info_communication_message(self) -> DataMuncher:
         """
         Makes and returns the message needed for communication in distributed mode.
 
@@ -2162,300 +2579,665 @@ class TheProgressBar(TheProgressBarBase):
 
         """
 
-        data = data_msg_template.update(
+        data = gather_info_data_msg_template.update(
             {},
             {'$update_only': {
+                'rank': mpi.mpi_communicator.get_rank(),
                 'progress_bar': self._make_and_get_progress_bar_data(),
                 'current_iteration_index': self.state_info.get('item.current_iteration_index'),
-                'aggregation_data': self.aggregation_data,
+                'aggregation_data': self.progress_bar_info.get('aggregation_data'),
             }}
         )
 
         return data
 
-    def _make_and_get_communication_message_json_str(self) -> str:
+    def _make_and_get_gather_info_communication_message_json(self) -> dict:
         """
-        Makes and returns json str message needed for communication in distributed mode.
+        Makes and returns json message needed for communication in distributed mode.
 
         Returns
         -------
         str
-            the str representation of the json message
+            the json representation of the message
 
         """
 
-        data: str = json.dumps(self._make_and_get_communication_message())
+        data: dict = self._make_and_get_gather_info_communication_message().dict_representation()
 
         return data
 
-    def _send_broker_info(self) -> None:
-        """Make and send the information to the broker."""
 
-        data = self._make_and_get_communication_message()
-        data.print()
+class TheProgressBarParallelManager(TheProgressBarBase):
+
+    def __init__(self, stdout_handler=None, config: ConfigParser = None):
+        """Initializes the instance."""
+
+        super().__init__(stdout_handler=stdout_handler, config=config)
+
+        # keep worker info
+        initial_worker_gather_info = {
+            'worker': {
+                str(index): gather_info_data_msg_template
+                for index in range(mpi.mpi_communicator.get_size())
+            },
+        }
+        self.worker_gather_info = DataMuncher(initial_worker_gather_info)
+
+        # keeping mpirun process info
+        self.mpirun_process_info = self._init_mpi_process_info()
+
+    # action methods
+
+    def activate(self) -> TheProgressBarParallelManager:
+        """Activates the progress bar: redirected stdout to this class and prints the progress bar
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        if mpi.mpi_communicator.is_main_rank() is False:
+            return self
+
+        return super().activate()
+
+    def run(self):
+        """Runs the daemon threads."""
+
+        # if we are in a distributed mode, just publish
+        if self.state_info.get('role') == self.Roles.MANAGER and mpi.mpi_communicator.is_main_rank():
+
+            # run the gather info thread
+            self._make_gather_info_thread()
+            self.run_thread_info.get('gather_info.main').start()
+
+            # run the print thread
+            self._make_run_thread()
+            self.run_thread_info.get('print.main').start()
+
+    def reset(self, return_to_line_number: int = -1) -> TheProgressBarParallelManager:
+        """Resets the progress bar and returns its instance.
+
+        Parameters
+        ----------
+        return_to_line_number: int, optional
+            The line number to return to
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # do the resetting
+        super().reset(return_to_line_number=return_to_line_number)
+
+        # reset the worker info
+        initial_worker_gather_info = {
+            str(index): gather_info_data_msg_template
+            for index in range(mpi.mpi_communicator.get_size())
+        }
+        self.worker_gather_info = self.worker_gather_info.update({}, {'worker': DataMuncher(initial_worker_gather_info)})
+
+        return self
+
+    def set_number_items(self, number_of_items: int) -> TheProgressBarParallelManager:
+        """Set the total number of the items.
+
+        Parameters
+        ----------
+        number_of_items : int
+            The total number of items
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # do nothing
+        # the total number of items will be updated from the workers
+
+        return self
+
+    def _set_number_items(self, number_of_items: int) -> TheProgressBarParallelManager:
+        """Set the total number of the items.
+
+        Parameters
+        ----------
+        number_of_items : int
+            The total number of items
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        super().set_number_items(number_of_items)
+
+        return self
+
+    def run_gather_info(self) -> None:
+        """Publish the information to the broker for communication."""
+
+        consumer: rabbitmq.RabbitMQConsumer = self.communication_info.get('gather_info.consumer.consumer')
+        consumer.run()
+
+    def _act_on_gather_info(self, body, message: kombu.Message):
+        """Callback handler for when a new message arrives for gather info operation."""
+
+        # we only accept jsons!
+        if message.content_type != "application/json":
+            return
+
+        # turn the body, which is json to a data muncher
+        data: DataMuncher = DataMuncher(body)
+
+        # only accept the info if it is in the same iteration, i.e. has the same current_iteration_index
+        current_iteration_index = self.state_info.get('item.current_iteration_index')
+        if \
+                data.get_value_option('current_iteration_index')\
+                .filter(lambda x: x == current_iteration_index)\
+                .is_empty():
+            return
+
+        # do the updates based on the received info
+        self._act_on_gather_info_update(data)
+
+        # save the result
+        self.worker_gather_info = self.worker_gather_info.update(
+            {},
+            {f'worker.{data.get("rank")}': data}
+        )
+
+        # if data.get('current_iteration_index') == 3:
+        #     data.print()
+
+        # self._direct_write(self._get_progress_bar_with_spaces())
+
+    def _act_on_gather_info_update(self, data: DataMuncher):
+        """Update this instance counter based on the received data in gather info process."""
+
+        # update myself!
+        # first, extract current item index from somewhere!
+        # then find the difference of the current version we have of it and the new version we received to update myself
+        updated_item_index = \
+            data.get('progress_bar.prefix.state.item.current_item_index')
+        current_item_index = \
+            self.worker_gather_info.get(f'worker.{data.get("rank")}.progress_bar.prefix.state.item.current_item_index')
+        delta_item_count = \
+            updated_item_index - current_item_index
+        self.update(count=delta_item_count)
+
+        # update the total count
+        if self.worker_gather_info.get(f'worker.{data.get("rank")}.progress_bar.prefix.state.item.total_items_count') == -np.inf \
+                and data.get('progress_bar.prefix.state.item.total_items_count') != -np.inf:
+            new_total = data.get('progress_bar.prefix.state.item.total_items_count')
+            updated_total = self.state_info.get_value_option('item.total_items_count') \
+                .filter(lambda x: x != -np.inf) \
+                .or_else(Some(0)) \
+                .map(lambda x: x + new_total).get()
+            self._set_number_items(updated_total)
+
+    def _check_action(self) -> bool:
+        """Method to return conditional on whether we should perform the action methods."""
+
+        if self.state_info.get('role') != self.Roles.MANAGER:
+            return False
+
+        return True
+
+    def _configure_role(self):
+        """Method to find out and set the role."""
+
+        # find and update the role
+        if self.state_info.get('parallel.is_distributed') is True:
+            # update the role
+            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.MANAGER}})
+        else:
+            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.SINGLE}})
+
+    def _set_actions(self):
+        """Sets the proper actions based on the conditions."""
+
+        if self.state_info.get('mode') == self.Modes.NORMAL:
+            def get_bar_curry(return_to_line_number: int = 0):
+                out = self._get_progress_bar_with_spaces(
+                    data=DataMuncher(),
+                    return_to_line_number=return_to_line_number,
+                    include_desc_before=True,
+                    include_desc_short_before=False,
+                    include_prefix=True,
+                    include_bar=True,
+                    include_suffix=True,
+                    include_desc_after=True,
+                    include_desc_short_after=False,
+                )
+                return out
+
+            self.actions = self.actions.update({}, {
+                'get_bar': get_bar_curry,
+            })
+
+        elif self.state_info.get('mode') == self.Modes.NOTTY:
+            def get_bar_curry(return_to_line_number: int = 0):
+                out = self._get_progress_bar_with_spaces(
+                    # the following is to avoid reading the terminal size and update the text
+                    data=DataMuncher({"terminal": {"columns": -1, "rows": -1}}),
+                    return_to_line_number=return_to_line_number,
+                    include_desc_before=False,
+                    include_desc_short_before=True,
+                    include_prefix=True,
+                    include_bar=False,
+                    include_suffix=True,
+                    include_desc_after=False,
+                    include_desc_short_after=True,
+                )
+                return out
+
+            self.actions = self.actions.update({}, {
+                'get_bar': get_bar_curry,
+            })
+
+        # if self.state_info.get('mode') == self.Modes.NORMAL:
+        #     def get_bar_curry(return_to_line_number: int = 0):
+        #         out = self._get_progress_bar_with_spaces(
+        #             data=XXX,
+        #             return_to_line_number=return_to_line_number,
+        #             include_desc_before=True,
+        #             include_desc_short_before=False,
+        #             include_prefix=True,
+        #             include_bar=True,
+        #             include_suffix=True,
+        #             include_desc_after=True,
+        #             include_desc_short_after=False,
+        #         )
+        #         return out
+        #
+        #     self.actions = self.actions.update({}, {
+        #         'get_bar': get_bar_curry,
+        #     })
+        #
+        # elif self.state_info.get('mode') == self.Modes.NOTTY:
+        #     def get_bar_curry(return_to_line_number: int = 0):
+        #         out = self._get_progress_bar_with_spaces(
+        #             # the following is to avoid reading the terminal size and update the text
+        #             data=XXXDataMuncher({"terminal": {"columns": -1, "rows": -1}}),
+        #             return_to_line_number=return_to_line_number,
+        #             include_desc_before=False,
+        #             include_desc_short_before=True,
+        #             include_prefix=True,
+        #             include_bar=False,
+        #             include_suffix=True,
+        #             include_desc_after=False,
+        #             include_desc_short_after=True,
+        #         )
+        #         return out
+        #
+        #     self.actions = self.actions.update({}, {
+        #         'get_bar': get_bar_curry,
+        #     })
+
+        return
+        raise NotImplementedError
+
+    # description methods
+
+    def set_description_after(self, description: str) -> None:
+        """Sets the description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes after the progress bar
+
+        """
+
+        # do nothing
+        return
+
+    def set_description_short_after(self, description: str) -> None:
+        """Sets the short description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes after the progress bar
+
+        """
+
+        # do nothing
+        return
+
+    def _make_and_get_description_after(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the full description that comes after the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'after': '',
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing full description after
+            data built
+
+        """
+
+        # get the passed description and return it
+        if data is not None:
+            return data.get('after'), DataMuncher({"description": data.get('after')})
+
+        # get the terminal size and manipulate it
+        # we assume that the bars are indented by a fixed amount. this amount is the max we can indent them
+        terminal_cols, terminal_rows = \
+            self._make_and_get_terminal_size() \
+            if self.state_info.get('mode') == self.Modes.NORMAL \
+            else (-1, -1)
+        terminal_cols -= len(('\t' * 3).expandtabs())
+
+        # to minimize the lookup, make a local variable
+        attr_reset = colored.attr("reset")
+
+        # construct the progress bar for each worker
+        worker_progress_bars: list[str] = []
+        for rank in range(mpi.mpi_communicator.get_size()):
+            progress_bar = \
+                self._make_and_get_progress_bar(
+                    self.worker_gather_info.get(f'worker.{rank}')
+                    .update(
+                        {},
+                        {
+                            '$set':
+                            {
+                                # set terminal size
+                                'progress_bar.terminal': {'columns': terminal_cols, 'rows': terminal_rows}},
+                                # remove any descriptions
+                                # 'progress_bar.description': gather_info_data_msg_template.get('progress_bar.description'),
+                            }
+                    )
+                    .get('progress_bar'),
+                    include_desc_before=False,
+                    include_desc_short_before=False,
+                    include_prefix=True,
+                    include_bar=True,
+                    include_suffix=True,
+                    include_desc_after=False,
+                    include_desc_short_after=True,
+                )
+            worker_progress_bars.append(
+                f'{colored.fg("blue")}{rank} {colored.fg("dodger_blue_3")}\u21C0{attr_reset} {progress_bar}'
+            )
+
+        # construct the whole thing
+        prefix = '\t' * 2
+
+        # the progress bars
+        border_color = colored.fg("chartreuse_3a")
+        final_bars = \
+            f'{prefix}{border_color}\u251C{attr_reset} ' + \
+            f'\n{prefix}{border_color}\u251C{attr_reset} '.join(worker_progress_bars[:-1]) + \
+            f'\n{prefix}{border_color}\u2514{attr_reset} {worker_progress_bars[-1]}'
+
+        # get the aggregation
+        # first, gather all aggregation data
+        aggregation_data = \
+            [
+                self.worker_gather_info.get_or_else(f'worker.{rank}.aggregation_data.aggregation_data', None)
+                for rank
+                in range(self.state_info.get('parallel.size'))
+            ]
+        # now, get the string
+        aggregation_str = self.actions.get('aggregator.full')(aggregation_data)
+        # finally, indent the string
+        aggregation_str = REGEX_INDENTATION.sub(r'\1' + prefix, aggregation_str)
+
+        # construct the final output
+        description = \
+            f'\n' \
+            f'{prefix}{border_color}\u25CD{attr_reset}\n' \
+            f'{final_bars}\n\n' \
+            f'{aggregation_str}'
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
+    # communication methods
+
+    def _init_mpi_process_info(self) -> DataMuncher:
+        """Finds the mpi process info and return them as a DataMuncher."""
+
+        # get the stdout file descriptor path
+        try:
+            stdout_fd = \
+                pathlib.Path(
+                    subprocess.check_output(['readlink', '-f', f'/proc/{os.getppid()}/fd/1']).decode('utf-8').strip()
+                )
+        except:
+            stdout_fd = None
+
+        # try to find the terminal size
+        try:
+            out = \
+                subprocess.check_output(
+                    ['stty',
+                     '-F', stdout_fd,
+                     'size'])\
+                    .decode('utf-8').strip().split()
+            out = [int(item) for item in out]
+            lines, columns = out
+        except:
+            lines = columns = -1
+
+        data = DataMuncher({
+            'mpirun': {
+                'pid': os.getppid(),
+                'fd': {
+                    'stdout': stdout_fd,
+                },
+            },
+            'terminal': {
+                'size': {  # this is the initial size of the terminal
+                    'lines': lines,
+                    'columns': columns,
+                }
+            }
+        })
+
+        return data
+
+    def _reset_communication(self):
+        """Do all the tasks required when resetting that are related to the communication"""
+
+        # do nothing for now!
+        return
+
+    def _init_communication_gather_info(self) -> None:
+        """Initializes everything related to gathering update to the manager."""
+
+        # define the exchange
+        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+            name=rabbit_data.get('gather_info.exchange.name'),
+            type=rabbit_data.get('gather_info.exchange.type'),
+            return_on_exist=True,
+            durable=rabbit_data.get('gather_info.exchange.durable'),
+            auto_delete=rabbit_data.get('gather_info.exchange.auto_delete'),
+            delivery_mode=rabbit_data.get('gather_info.exchange.delivery_mode'),
+        )
+
+        # update the info
+        self.communication_info = self.communication_info.update(
+            {'_bc': {'$regex': r'gather_info$'}},
+            {
+                'exchange.exchange': exchange,
+            }
+        )
+
+        # make all the queues
+        queue_names = []
+        for index in range(mpi.mpi_communicator.get_size()):
+            # define the queue
+            queue_name = rabbit_data.get('gather_info.queue.name_template').replace('<rank>', str(index))
+            queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+                name=queue_name,
+                exchange_name=rabbit_data.get('gather_info.exchange.name'),
+                routing_key=rabbit_data.get('gather_info.message.routing_key'),
+                return_on_exist=True,
+                max_length=rabbit_data.get('gather_info.queue.max_length'),
+                durable=rabbit_data.get('gather_info.queue.durable'),
+                auto_delete=rabbit_data.get('gather_info.queue.auto_delete'),
+            )
+
+            # update the info
+            queue_names.append(queue_name)
+            self.communication_info = self.communication_info.update(
+                {'_bc': {'$regex': r'gather_info$'}},
+                {
+                    f'queue.{index}.queue': queue,
+                }
+            )
+
+        # make the consumer and store it
+        consumer = \
+            rabbitmq.rabbitmq_communicator.consume(
+                name=rabbit_data.get('gather_info.consumer.name'),
+                queue_names=queue_names,
+            ).add_callback([self._act_on_gather_info])
+        self.communication_info = self.communication_info.update(
+            {'_bc': {'$regex': r'gather_info$'}},
+            {
+                f'consumer.consumer': consumer,
+            }
+        )
+
+    # progress bar methods
+
+    def _make_and_get_progress_bar_data(self) -> DataMuncher:
+
         pass
+
+    # terminal related methods
+
+    def _make_and_get_terminal_size(self, data: DataMuncher = None) -> (int, int):
+        """
+        Returns the size of the terminal in form of (columns, rows).
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    "rows": ,
+                    "columns": ,
+                }
+
+        Returns
+        -------
+        (int, int)
+            terminal size in form of (columns, rows)
+        """
+
+        if data is not None:
+            return data.get('columns'), data.get('rows')
+
+        if self._check_if_atty() is False:
+            return -1, -1
+
+        # THE FOLLOWING SUBPROCESS TASK IS RATHER HEAVY, SO FOR NOW, WE IGNORE IT AND GO WITH THE INITIAL TERMINAL SIZE
+        lines = self.mpirun_process_info.get('terminal.size.lines')
+        columns = self.mpirun_process_info.get('terminal.size.columns')
+
+        return columns, lines
+
+        # we are in distributed mode which means the actual terminal belongs to mpirun, our parent process
+        # therefore, we read the parent process's terminal size
+        # try:
+        #     out = \
+        #         subprocess.check_output(
+        #             ['stty',
+        #              '-F', self.mpirun_process_info.get('mpirun.fd.stdout'),
+        #              'size'])\
+        #             .decode('utf-8').strip().split()
+        #     out = [int(item) for item in out]
+        #     lines, columns = out
+        # except:
+        #     lines = columns = -1
+        #
+        # return columns, lines
+
+
+    def _make_isatty(self) -> Callable:
+        """Makes the new atty function."""
+
+        if mpi.mpi_communicator.is_distributed() is False:
+            return sys.stdout.isatty
+
+        # if we are in distributed mode running with mpirun, we have to check for the stdout file descriptor of our
+        # parent process, which is the mpirun process itself
+        ppid = os.getppid()
+        parent_stdout_fd = pathlib.Path(f'/proc/{ppid}/fd/1')
+        # if mpirun is connected to a tty, then the file descriptor 1 of it has to have a group owner of 'tty' on Linux
+        if parent_stdout_fd.group() == 'tty':
+            return lambda: True
+        else:
+            return lambda: False
+
+    def _check_if_foreground(self) -> bool:
+        """
+        Checks if we are running in foreground
+
+        Returns
+        -------
+        bool
+
+        """
+
+        # THIS IS CUMBERSOME! IT TAKES A LONG TIME TO RUN THE FOLLOWING SUBPROCESS COMMAND
+        # SO, FOR NOW, WE DO NOT TEST WHETHER IF WE ARE IN THE FOREGROUND OR NOT
+        return True
+
+        # the following runs a subprocess command to determine if we are running in the foreground
+        # out = subprocess.check_output(['ps', '-o', 'stat', '-p', str(os.getpid())])
+        # return True if '+' in out.decode('utf-8') else False
+
+    def _check_if_should_print(self) -> bool:
+        """
+        Checks whether we should print.
+
+        Returns
+        -------
+        bool
+
+        """
+
+        if self.state_info.get('role') != self.Roles.MANAGER:
+            return False
+
+        return super()._check_if_should_print()
+
+
+
+
 
     # utility methods
 
     def _notify_sleep(self):
         """Figure out if it is a good time to wake the sleeping time up!"""
 
-        if self.sleep_timer_info.get('update_interval') > 0:
-            interval = self.sleep_timer_info.get('update_interval')
-        elif self.sleep_timer_info.get('update_number_per_iteration') > 0:
-            interval = \
-                self.state_info.get('item.total_items_count') \
-                // self.sleep_timer_info.get('update_number_per_iteration')
-        else:
-            return
+        super()._notify_sleep()
 
-        # if we should print
-        if \
-                self.state_info.get('item.current_item_index') \
-                >=\
-                self.sleep_timer_info.get('stat.last_item_index') + interval:
+        return
 
-            # first update the stats
-            self.sleep_timer_info = \
-                self.sleep_timer_info.update({}, {
-                    'stat.last_item_index': self.state_info.get('item.current_item_index'),
-                })
+        raise NotImplementedError
 
-            # let the time go off
-            # we will print the bar ourselves because we do not want to have a race condition: while we are telling
-            # the other thread to type, this thread can go and reset the bar that would lead to undefined results
-            self.sleep_timer_info.get('pipe.write').send('timesup!')
-            # self._print_progress_bar()
-
-    def _get_update_frequency(self) -> float:
-        """Returns the number of times in a second that the progress bar should be updated.
-
-        Returns
-        -------
-        The frequency at which the progress bar should be updated
-
-        """
-
-        # Calculated the average number of items processed per second
-        average_freq: float = 1 / self.statistics_info.get('average').get('average_time_per_update')
-
-        # Rule: update at least 2 times and at most 60 times in a second unless needed to be faster
-        # Also be twice as fast as the update time difference
-        # Also, if we are on pause, update with frequency 1
-        if self.state_info.get('paused') is True:
-            freq = 1.0
-        elif self.state_info.get('mode') == self.Modes.NOTTY:
-            freq = 1 / 60  # if we do not have a tty, print every minute
-        else:
-            freq = float(np.clip(2 * average_freq, 2, 60))
-
-        return freq
-
-
-class TheProgressBarColored(TheProgressBar):
-
-    def __init__(self, handler=None):
-
-        super().__init__(handler)
-
-    # TODO: Code duplication, fix it
-
-    def _make_and_get_bar_prefix(self, data: DataMuncher = None) -> (str, DataMuncher):
-        """Returns the string that comes before the bar.
-
-        Parameters
-        ----------
-        data : DataMuncher, optional
-            refer to super class
-
-        Returns
-        -------
-        (str, DataMuncher)
-            refer to super class
-
-        """
-
-        # Get the original one
-        bar_prefix, bar_prefix_data = super()._make_and_get_bar_prefix()
-
-        bar_prefix = f'{colored.fg("grey_74")}' \
-                     f'{bar_prefix}' \
-                     f'{colored.attr("reset")}'
-
-        return bar_prefix, bar_prefix_data
-
-    def _make_and_get_bar_suffix(self, data: DataMuncher = None) -> (str, DataMuncher):
-        """Returns the string that comes after the bar.
-
-        Parameters
-        ----------
-        data : DataMuncher, optional
-            refer to super class
-
-        Returns
-        -------
-        (str, DataMuncher)
-            refer to super class
-
-        """
-
-        # get the suffix data
-        data = self._get_bar_suffix_data() if data is None else data
-
-        # construct the data that has to be outputted
-        output_data = \
-            DataMuncher({
-                "fraction": {},
-                "item_per_sec": {},
-                "time_since_last_update": {},
-                "time_since_beginning_iteration": {},
-            })
-
-        bar_suffix, fractional_data = self._get_fractional_progress(data.get("state"))  # Fractional progress e.g. 12/20
-        bar_suffix += f' '
-        item_per_second: float = self._get_item_per_second(data.get("statistics"))
-        bar_suffix += f'{colored.fg("grey_74")}' \
-                      f'[{item_per_second:.2f} it/s]'
-        bar_suffix += f'{colored.attr("reset")}'
-
-        # update the output
-        output_data = output_data.update({}, {
-            "fraction": fractional_data,
-            "item_per_sec": item_per_second,
-        })
-
-        # Time elapsed since the last update
-        now = datetime.datetime.now()
-        last_update_time = datetime.datetime.fromtimestamp(data.get('statistics.time.last_update_time'))
-        delta_time = now - last_update_time
-        hours, remainder = divmod(delta_time.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        microseconds = delta_time.microseconds
-        # For formatting purposes, just keep the first 4 digits
-        microseconds = int(str(microseconds)[:4])
-        delta_time_str_last_update = f'{hours:02d}' \
-                                     f':' \
-                                     f'{minutes:02d}' \
-                                     f':' \
-                                     f'{seconds:02d}' \
-                                     f'.' \
-                                     f'{microseconds:04d}'
-
-        # update the output
-        output_data = output_data.update({}, {
-            '$set': {
-                "time_since_last_update": {
-                    "hours": hours,
-                    "minutes": minutes,
-                    "seconds": seconds,
-                    "microseconds": microseconds,
-                }
-            }
-        })
-
-        # Time elapsed since the beginning
-        init_time = datetime.datetime.fromtimestamp(data.get('statistics.time.initial_progress_bar_time'))
-        delta_time = now - init_time
-        hours, remainder = divmod(delta_time.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        delta_time_str_since_beginning = f'{hours:02d}' \
-                                         f':' \
-                                         f'{minutes:02d}' \
-                                         f':' \
-                                         f'{seconds:02d}'
-
-        # update the output
-        output_data = output_data.update({}, {
-            '$set': {
-                "time_since_beginning_iteration": {
-                     "hours": hours,
-                     "minutes": minutes,
-                     "seconds": seconds,
-                }
-            }
-        })
-
-        # Add the elapsed time to the bar_suffix
-        bar_suffix += f' {colored.fg("grey_39")}{delta_time_str_last_update}' \
-                      f'{colored.fg("grey_74")} - ' \
-                      f'{delta_time_str_since_beginning}{colored.attr("reset")}'
-
-        return bar_suffix, output_data
-
-    def _get_fractional_progress(self, data: DataMuncher) -> (str, DataMuncher):
-        """Returns a string of the form x*/y* where x* and y* are the current and total number of items.
-
-        Parameters
-        ----------
-        data : DataMuncher
-            refer to super class
-
-        Returns
-        -------
-        (str, DataMuncher)
-            A string containing the fractional progress
-            data built
-
-        """
-
-        # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(data.get('item.total_items_count')))) if data.get(
-            'item.total_items_count') > 0 else 5
-
-        # Create the string
-        fractional_progress: str = f'{colored.fg("gold_3b")}' \
-                                   f'{data.get("item.current_item_index"): {length_items}d}'
-        fractional_progress += f'{colored.fg("grey_46")}' \
-                               f'/'
-        fractional_progress += f'{colored.fg("orange_4b")}' + \
-                               f'{data.get("item.total_items_count")}' if data.get('item.total_items_count') > 0 else '?'
-        fractional_progress += f'{colored.attr("reset")}'
-
-        # update the output data
-        output_data = DataMuncher({
-            "items": data.get("item.current_item_index"),
-            "total_items": data.get("item.total_items_count") if data.get('item.total_items_count') > 0 else 0,
-        })
-
-        return fractional_progress, output_data
-
-    def _make_and_get_progress_bar(
-            self,
-            data: DataMuncher = DataMuncher(),
-            include_desc_before: bool = True,
-            include_desc_short_before: bool = False,
-            include_prefix: bool = True,
-            include_bar: bool = True,
-            include_suffix: bool = True,
-            include_desc_after: bool = True,
-            include_desc_short_after: bool = False,
-    ) -> str:
-        """Returns a string containing the progress bar.
-
-        Parameters
-        ----------
-        terminal_size : (int, int), optional
-            The given terminal size so that the method behaves according to this size, mainly used in non-master mode
-
-        Returns
-        -------
-        A string containing the progress bar
-
-        """
-
-        # Get the original progress bar
-        progress_bar = super()._make_and_get_progress_bar(
-            data=data,
-            include_desc_before=include_desc_before,
-            include_desc_short_before=include_desc_short_before,
-            include_prefix=include_prefix,
-            include_bar=include_bar,
-            include_suffix=include_suffix,
-            include_desc_after=include_desc_after,
-            include_desc_short_after=include_desc_short_after,
-        )
-
-        # Always reset the color back to normal
-        progress_bar += f'{colored.attr("reset")}'
-
-        return progress_bar
