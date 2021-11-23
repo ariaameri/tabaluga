@@ -145,6 +145,21 @@ class _MPICommunicatorSingletonClass(BaseWorker):
                 })
         return True
 
+    def is_distributed(self) -> bool:
+        """Returns true if we are in distributed mode."""
+
+        return self.is_mpi_run is True and self.get_size() > 1
+
+    def is_main_rank(self) -> bool:
+        """Returns true if we are the main rank."""
+
+        return self.get_rank() == 0
+
+    def is_main_local_rank(self) -> bool:
+        """Returns true if we are the main local rank."""
+
+        return self.get_local_rank() == 0
+
     def get_communicator_option(self, name: str) -> Option[MPI.Comm]:
         """
         Returns an Option with the communicator.
@@ -216,6 +231,21 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return comm
 
+    def barrier(self, name: str = None) -> None:
+        """
+        implements the call to the barrier method to wait for synchronization.
+
+        Parameters
+        ----------
+        name : str, optional
+            the name of the communicator to use for barrier. if not given, world will be used
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        communicator.barrier()
+
     @staticmethod
     def get_rank_size(communicator: MPI.Comm) -> (int, int):
         """
@@ -253,11 +283,15 @@ class _MPICommunicatorSingletonClass(BaseWorker):
     def get_rank(self) -> int:
         """Returns the rank."""
 
+        # return 0
+
         with self._lock_read:
             return self._rank
 
     def get_size(self) -> int:
         """Returns the size."""
+
+        # return 0
 
         with self._lock_read:
             return self._size
