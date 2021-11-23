@@ -1,3 +1,4 @@
+import pathlib
 import subprocess
 from ..util import util
 from ..base.base import BaseWorker
@@ -55,10 +56,10 @@ class _MPICommunicatorSingletonClass(BaseWorker):
                 ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
             ).decode('utf-8').strip().split()[0]
         self.is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
-        self.mpi_tty_fd = \
-            subprocess.check_output(
+        self.mpi_tty_fd: pathlib.Path = \
+            pathlib.Path(subprocess.check_output(
                 ['readlink', '-f', f'/proc/{os.getppid()}/fd/1']
-            ).decode('utf-8').strip() \
+            ).decode('utf-8').strip()) \
             if self.is_mpi_run is True \
             else util.get_tty_fd()
 
