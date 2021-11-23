@@ -3020,10 +3020,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # get the stdout file descriptor path
         try:
-            stdout_fd = \
-                pathlib.Path(
-                    subprocess.check_output(['readlink', '-f', f'/proc/{os.getppid()}/fd/1']).decode('utf-8').strip()
-                )
+            stdout_fd = mpi.mpi_communicator.mpi_tty_fd
         except:
             stdout_fd = None
 
@@ -3185,8 +3182,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # if we are in distributed mode running with mpirun, we have to check for the stdout file descriptor of our
         # parent process, which is the mpirun process itself
-        ppid = os.getppid()
-        parent_stdout_fd = pathlib.Path(f'/proc/{ppid}/fd/1')
+        parent_stdout_fd = mpi.mpi_communicator.mpi_tty_fd
         # if mpirun is connected to a tty, then the file descriptor 1 of it has to have a group owner of 'tty' on Linux
         if parent_stdout_fd.group() == 'tty':
             return lambda: True
