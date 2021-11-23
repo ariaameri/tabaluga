@@ -602,7 +602,9 @@ class Panacea(PanaceaBase):
             ''.join(
                 item.str_representation(name=key, depth=depth-1)
                 for key, item
-                in sorted(self._parameters.items())
+                in
+                # first print the leaves and then the branches
+                sorted(self._parameters.items(), key=lambda x: (not x[1].is_leaf(), x[0]))
             )
 
         # Indent the children result and add to the result
