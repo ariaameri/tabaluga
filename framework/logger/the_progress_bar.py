@@ -2332,10 +2332,10 @@ class TheProgressBar(TheProgressBarBase):
     This implementation is based on the alive_progress package.
     """
 
-    def __init__(self, stdout_handler=None):
+    def __init__(self, stdout_handler=None, config: ConfigParser = None):
         """Initializes the instance."""
 
-        super().__init__(stdout_handler=stdout_handler)
+        super().__init__(stdout_handler=stdout_handler, config=config)
 
         # book keeping for aggregation data in case of distributed run
         self.gather_info_aggregation_data: Any = None
