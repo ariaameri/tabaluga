@@ -121,6 +121,28 @@ def make_rabbit_data():
                 'name': 'tpb_data_gather_consumer',
             },
         },
+        'printer_gatherer': {
+            'exchange': {
+                'name': 'tpb_printer',
+                'type': rabbitmq.RabbitMQExchangeType.DIRECT,
+                'durable': False,
+                'auto_delete': True,
+                'delivery_mode': 1
+            },
+            'queue': {
+                'name': f'tpb_printer',
+                # exchange is in '..exchange'
+                # routing key is in '..message'
+                'durable': False,
+                'auto_delete': True,
+            },
+            'message': {
+                'routing_key': f'data.printer.manager',
+            },
+            'consumer': {
+                'name': 'tpb_printer_consumer',
+            },
+        },
     })
 
 
@@ -272,6 +294,17 @@ class TheProgressBarBase(ABC, BaseWorker):
         # book keeping for communication relate data
         initial_communication_info = {
             'gather_info': {
+                'exchange': {
+                    'exchange': None,
+                },
+                'queue': {
+                    'queue': None,
+                },
+                'consumer': {
+                    'consumer': None,  # to be used by the manager
+                }
+            },
+            'printer_gatherer': {
                 'exchange': {
                     'exchange': None,
                 },
@@ -1227,6 +1260,9 @@ class TheProgressBarBase(ABC, BaseWorker):
         # initialize the 'gather info' communication
         self._init_communication_gather_info()
 
+        # initialize the 'printer' communication
+        self._init_communication_printer_gatherer()
+
     @abstractmethod
     def _reset_communication(self):
         """Do all the tasks required when resetting that are related to the communication"""
@@ -1238,6 +1274,14 @@ class TheProgressBarBase(ABC, BaseWorker):
     @abstractmethod
     def _init_communication_gather_info(self) -> None:
         """Initializes everything related to gathering update to the manager."""
+
+        raise NotImplementedError
+
+    ## 'printer gatherer' communication methods
+
+    @abstractmethod
+    def _init_communication_printer_gatherer(self) -> None:
+        """Initializes everything related to printing to the manager."""
 
         raise NotImplementedError
 
@@ -2619,6 +2663,89 @@ class TheProgressBar(TheProgressBarBase):
 
         return data
 
+    ## 'printer gatherer' communication methods
+
+    def _init_communication_printer_gatherer(self) -> None:
+        """Initializes everything related to printing to the manager."""
+
+        # define the exchange
+        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+            name=rabbit_data.get('printer_gatherer.exchange.name'),
+            type=rabbit_data.get('printer_gatherer.exchange.type'),
+            return_on_exist=True,
+            durable=rabbit_data.get('printer_gatherer.exchange.durable'),
+            auto_delete=rabbit_data.get('printer_gatherer.exchange.auto_delete'),
+            delivery_mode=rabbit_data.get('printer_gatherer.exchange.delivery_mode'),
+        )
+
+        # define the queue
+        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+            name=rabbit_data.get('printer_gatherer.queue.name'),
+            exchange_name=rabbit_data.get('printer_gatherer.exchange.name'),
+            routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
+            return_on_exist=True,
+            durable=rabbit_data.get('printer_gatherer.queue.durable'),
+            auto_delete=rabbit_data.get('printer_gatherer.queue.auto_delete'),
+        )
+
+        # update the info
+        self.communication_info = self.communication_info.update(
+            {'_bc': {'$regex': r'printer_gatherer$'}},
+            {
+                'exchange.exchange': exchange,
+                'queue.queue': queue,
+            }
+        )
+
+    def _send_printer_gatherer_broker_info(self, data: Any) -> None:
+        """
+        Send the information to the broker as part of the 'printer' communication.
+
+        Parameters
+        ----------
+        data : Any
+            data to be sent to the manager for printing
+
+        """
+
+        # send the data
+        try:
+            rabbitmq.rabbitmq_communicator.publish(
+                body=data,
+                routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
+                exchange=self.communication_info.get('printer_gatherer.exchange.exchange'),
+                # also declare our queue
+                extra_declare=[self.communication_info.get('printer_gatherer.queue.queue')]
+            )
+        except BaseException as e:
+            sys.stderr.write(
+                f"encountered an error while publishing to rabbitmq to exchange of "
+                f"'{self.communication_info.get('printer_gatherer.exchange.exchange')}'"
+                f"with error of '{e}'\n"
+                f"here is the data that failed to be sent:\n"
+                f"\t{data}"
+            )
+            sys.stderr.flush()
+
+    def write(self, msg: str) -> None:
+        """
+        Prints a message to the output.
+
+        Parameters
+        ----------
+        msg : str
+            The message to be written
+
+        """
+
+        # if we are in distributed mode, send the msg to the manager
+        if self.state_info.get('parallel.is_distributed') is True:
+            self._send_printer_gatherer_broker_info(msg)
+            return
+
+        # go with the usual printing
+        super().write(msg)
+
 
 class TheProgressBarParallelManager(TheProgressBarBase):
 
@@ -2664,6 +2791,10 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             # run the gather info thread
             self._make_gather_info_thread()
             self.run_thread_info.get('gather_info.main').start()
+
+            # run the printer-gatherer thread
+            self._make_printer_gatherer_thread()
+            self.run_thread_info.get('printer_gatherer.main').start()
 
             # run the print thread
             self._make_run_thread()
@@ -2793,6 +2924,34 @@ class TheProgressBarParallelManager(TheProgressBarBase):
                 .or_else(Some(0)) \
                 .map(lambda x: x + new_total).get()
             self._set_number_items(updated_total)
+
+    def run_printer_gatherer(self) -> None:
+        """Consumes the broker information.."""
+
+        consumer: rabbitmq.RabbitMQConsumer = self.communication_info.get('printer_gatherer.consumer.consumer')
+        consumer.run()
+
+    def _make_printer_gatherer_thread(self) -> None:
+        """Makes and sets the printer_gatherer thread"""
+
+        # now, create the thread object
+        printer_gatherer_thread = threading.Thread(
+            name='printer_gatherer_daemon_thread',
+            target=self.run_printer_gatherer,
+            args=(),
+            daemon=True
+        )
+        self.run_thread_info = self.run_thread_info.update({}, {'printer_gatherer.main': printer_gatherer_thread})
+
+    def _act_on_printer_gatherer(self, body, message: kombu.Message):
+        """Callback handler for when a new message arrives for printer gatherer operation."""
+
+        # we only accept strings!
+        # if message.content_type != "application/json":
+        #     return
+
+        # just print it!
+        self.write(body)
 
     def _check_action(self) -> bool:
         """Method to return conditional on whether we should perform the action methods."""
@@ -3130,6 +3289,48 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             {'_bc': {'$regex': r'gather_info$'}},
             {
                 f'consumer.consumer': consumer,
+            }
+        )
+
+    ## 'printer gatherer' communication methods
+
+    def _init_communication_printer_gatherer(self) -> None:
+        """Initializes everything related to printing to the manager."""
+
+        # define the exchange
+        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+            name=rabbit_data.get('printer_gatherer.exchange.name'),
+            type=rabbit_data.get('printer_gatherer.exchange.type'),
+            return_on_exist=True,
+            durable=rabbit_data.get('printer_gatherer.exchange.durable'),
+            auto_delete=rabbit_data.get('printer_gatherer.exchange.auto_delete'),
+            delivery_mode=rabbit_data.get('printer_gatherer.exchange.delivery_mode'),
+        )
+
+        # define the queue
+        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+            name=rabbit_data.get('printer_gatherer.queue.name'),
+            exchange_name=rabbit_data.get('printer_gatherer.exchange.name'),
+            routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
+            return_on_exist=True,
+            durable=rabbit_data.get('printer_gatherer.queue.durable'),
+            auto_delete=rabbit_data.get('printer_gatherer.queue.auto_delete'),
+        )
+
+        # make the consumer and store it
+        consumer = \
+            rabbitmq.rabbitmq_communicator.consume(
+                name=rabbit_data.get('printer_gatherer.consumer.name'),
+                queue_names=[rabbit_data.get('printer_gatherer.queue.name')],
+            ).add_callback([self._act_on_printer_gatherer])
+
+        # update the info
+        self.communication_info = self.communication_info.update(
+            {'_bc': {'$regex': r'printer_gatherer$'}},
+            {
+                'exchange.exchange': exchange,
+                'queue.queue': queue,
+                'consumer.consumer': consumer,
             }
         )
 
