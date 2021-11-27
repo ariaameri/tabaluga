@@ -19,6 +19,44 @@ class ModelManager(base.BaseEventManager, ABC):
 
         super().__init__(config)
 
+    @abstractmethod
+    def save(self, path: pathlib.Path) -> bool:
+        """
+        Takes care of saving its models.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            The path at which the models should be saved, this can be used any how>
+
+        Returns
+        -------
+        bool
+            whether the save was successful
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def load(self, path: pathlib.Path) -> bool:
+        """
+        Takes care of loading its models.
+
+        Parameters
+        ----------
+        path : pathlib.Path
+            The path at which the model should be loaded, this can be used any how>
+
+        Returns
+        -------
+        bool
+            whether the loading was successful
+
+        """
+
+        raise NotImplementedError
+
 
 class Model(base.BaseWorker, ABC):
     """Abstract class that contains the neural network model."""
