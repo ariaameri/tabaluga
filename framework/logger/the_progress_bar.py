@@ -390,15 +390,15 @@ class TheProgressBarBase(ABC, BaseWorker):
         # set and run the running daemon thread
         self.run()
 
-        # If not in single mode, no need to print, thus return now
-        if self._check_action() is False:
-            return self
-
         # Redirect stdout just in case there is no stdout handler from outside
         if self.state_info.get('external_stdout_handler') is False:
             sys.stdout = self
         else:
             self._activate_external_stdout_handler()
+
+        # If not in single mode, no need to print, thus return now
+        if self._check_action() is False:
+            return self
 
         # Hide cursor
         self._direct_write(self.cursor_modifier.get("hide"))
@@ -414,18 +414,18 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Stop the run thread
         self.run_thread_info = self.run_thread_info.update({}, {'print.main': None})
 
+        # Revert stdout back to its original place
+        if self.state_info.get('external_stdout_handler') is False:
+            sys.stdout = self.original_sysout
+        else:
+            self._deactivate_external_stdout_handler()
+
         # if we are not printing at all, skip
         if self._check_action() is False:
             return
 
         # Show cursor
         self._direct_write(self.cursor_modifier.get("show"))
-
-        # Revert stdout back to its original place
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self.original_sysout
-        else:
-            self._deactivate_external_stdout_handler()
 
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_line_number=-1)
@@ -448,7 +448,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # if pause_print_control is None, set based on whether we are in distributed mode
         if pause_print_control is None:
-            pause_print_control = False if mpi.mpi_communicator.is_distributed() is True else True
+            pause_print_control = False if self.state_info.get('parallel.is_distributed') is True else True
 
         # If the instance is already paused, skip
         if self.state_info.get('paused') is True:
@@ -494,15 +494,15 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the state to know we are not paused
         self.state_info = self.state_info.update({}, {'paused': False})
 
-        # if we are not printing at all, skip
-        if self._check_action() is False:
-            return self
-
         # Revert stdout back to its original place
         if self.state_info.get('external_stdout_handler') is False:
             sys.stdout = self
         else:
             self._resume_external_stdout_handler()
+
+        # if we are not printing at all, skip
+        if self._check_action() is False:
+            return self
 
         # Hide cursor
         self._direct_write(self.cursor_modifier.get("hide"))
