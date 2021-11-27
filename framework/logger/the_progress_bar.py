@@ -2555,6 +2555,7 @@ class TheProgressBar(TheProgressBarBase):
         exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
             name=rabbit_data.get('gather_info.exchange.name'),
             type=rabbit_data.get('gather_info.exchange.type'),
+            return_on_exist=True,
             durable=rabbit_data.get('gather_info.exchange.durable'),
             auto_delete=rabbit_data.get('gather_info.exchange.auto_delete'),
             delivery_mode=rabbit_data.get('gather_info.exchange.delivery_mode'),
@@ -2565,6 +2566,7 @@ class TheProgressBar(TheProgressBarBase):
             name=rabbit_data.get('gather_info.queue.name'),
             exchange_name=rabbit_data.get('gather_info.exchange.name'),
             routing_key=rabbit_data.get('gather_info.message.routing_key'),
+            return_on_exist=True,
             max_length=rabbit_data.get('gather_info.queue.max_length'),
             durable=rabbit_data.get('gather_info.queue.durable'),
             auto_delete=rabbit_data.get('gather_info.queue.auto_delete'),
@@ -2731,7 +2733,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         return self
 
     def run_gather_info(self) -> None:
-        """Publish the information to the broker for communication."""
+        """Consumes the information from the broker for communication."""
 
         consumer: rabbitmq.RabbitMQConsumer = self.communication_info.get('gather_info.consumer.consumer')
         consumer.run()
@@ -3071,6 +3073,8 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         # do nothing for now!
         return
 
+    ## 'gather info' communication methods
+
     def _init_communication_gather_info(self) -> None:
         """Initializes everything related to gathering update to the manager."""
 
@@ -3184,7 +3188,6 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         #
         # return columns, lines
 
-
     def _make_isatty(self) -> Callable:
         """Makes the new atty function."""
 
@@ -3232,19 +3235,3 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             return False
 
         return super()._check_if_should_print()
-
-
-
-
-
-    # utility methods
-
-    def _notify_sleep(self):
-        """Figure out if it is a good time to wake the sleeping time up!"""
-
-        super()._notify_sleep()
-
-        return
-
-        raise NotImplementedError
-
