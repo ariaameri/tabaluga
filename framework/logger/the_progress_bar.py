@@ -430,16 +430,25 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_line_number=-1)
 
-    def pause(self) -> TheProgressBarBase:
+    def pause(self, pause_print_control: bool = None) -> TheProgressBarBase:
         """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
 
         This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
+
+        Parameters
+        ----------
+        pause_print_control : bool, optional
+            whether to let go the control of printing or not; if set to None, will be automatic
 
         Returns
         -------
         This instance
 
         """
+
+        # if pause_print_control is None, set based on whether we are in distributed mode
+        if pause_print_control is None:
+            pause_print_control = False if mpi.mpi_communicator.is_distributed() is True else True
 
         # If the instance is already paused, skip
         if self.state_info.get('paused') is True:
@@ -448,15 +457,17 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the state to know we are paused
         self.state_info = self.state_info.update({}, {'paused': True})
 
+        # Revert stdout back to its original place
+        # do this only if necessary
+        if pause_print_control is True:
+            if self.state_info.get('external_stdout_handler') is False:
+                sys.stdout = self.original_sysout
+            else:
+                self._pause_external_stdout_handler()
+
         # if we are not printing at all, skip
         if self._check_action() is False:
             return self
-
-        # Revert stdout back to its original place
-        if self.state_info.get('external_stdout_handler') is False:
-            sys.stdout = self.original_sysout
-        else:
-            self._pause_external_stdout_handler()
 
         # Show cursor
         sys.stdout.write(self.cursor_modifier.get("show"))
