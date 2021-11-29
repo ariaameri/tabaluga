@@ -71,6 +71,14 @@ class TheProgressBarLogger(Logger):
 
         self.close()
 
+    def terminate(self):
+        """Method to get called upon termination."""
+
+        # if we are terminating, we just want to pause the printing and all but not let go of the console
+        self._the_progress_bar.pause()
+        if self._the_progress_bar_manager is not None:
+            self._the_progress_bar_manager.pause()
+
     def activate(self) -> TheProgressBarLogger:
         """Activates the TheProgressBar instance.
 
