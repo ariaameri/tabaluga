@@ -163,6 +163,16 @@ class BaseWorker:
 
         self._universal_logger_shared.append(logger)
 
+    def close(self):
+        """method to "close" this instance."""
+
+        pass
+
+    def terminate(self):
+        """method to "terminate" this instance."""
+
+        pass
+
 
 class BaseManager(BaseWorker, ABC):
     """Class to server as the base of all managers."""
@@ -214,6 +224,22 @@ class BaseManager(BaseWorker, ABC):
         """Creates and initializes workers."""
 
         raise NotImplementedError
+
+    def close(self):
+        """method to propagate "close" to the workers."""
+
+        # propagate the delete to all workers
+        for worker in self.workers:
+            if issubclass(type(worker), BaseWorker):
+                worker.close()
+
+    def terminate(self):
+        """method to propagate "terminate" to the workers."""
+
+        # propagate the delete to all workers
+        for worker in self.workers:
+            if issubclass(type(worker), BaseWorker):
+                worker.terminate()
 
 
 class BaseEventWorker(BaseWorker):
