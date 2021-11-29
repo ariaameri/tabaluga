@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 import signal
 import sys
 import os
+import traceback
 
 
 class Trainer(base.BaseEventManager, ABC):
@@ -42,9 +43,6 @@ class Trainer(base.BaseEventManager, ABC):
         # Set placeholders for the train and validation data
         self.data: DataMuncher = DataMuncher()
 
-        # Set placeholder for callbacks
-        self.callback: CallbackManager = self.create_callback()
-
         # Set placeholder for model
         self.model: ModelManager = self.create_model()
 
@@ -62,10 +60,8 @@ class Trainer(base.BaseEventManager, ABC):
         # Register OS signals to be caught
         self._register_signal_catch()
 
-    def create_callback(self) -> Union[CallbackManager, Callback]:
-        """Creates an instance of the callback and returns it."""
-
-        pass
+        # Register exception hook to be caught
+        self._register_exception_hook()
 
     def create_model(self) -> Union[ModelManager, Model]:
         """Creates an instance of the model and returns it."""
@@ -270,6 +266,24 @@ class Trainer(base.BaseEventManager, ABC):
         signal.signal(signal.SIGTERM, self.signal_catcher)
         signal.signal(signal.SIGTSTP, self.signal_catcher)
         signal.signal(signal.SIGCONT, self.signal_catcher)
+
+    def exception_hook(self, type, value, tracebacks: traceback):
+        """Method to be called when exception happens"""
+
+        # assuming the error does not happen in universal log!!!
+        self._universal_log("Received an exception", level='error')
+        self._universal_log(f"Exception type: {type}", level='error')
+        self._universal_log(f"Exception value: {value}", level='error')
+        exception = "".join(traceback.format_tb(tracebacks))
+        self._universal_log(f"Exception traceback: \n{exception}", level='error')
+
+        # now, terminate ourselves!
+        self.terminate()
+
+    def _register_exception_hook(self):
+        """Registers the global exception hook."""
+
+        sys.excepthook = self.exception_hook
 
     def __del__(self):
         """Method to be called when the object is being deleted."""
