@@ -6,6 +6,14 @@ from typing import List
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
+from enum import Enum
+
+
+# an enum to hold the content type of data to be loaded
+class ContentTypes(Enum):
+
+    FILE = 'file'
+    MONGO = 'mongo'
 
 
 # a mapping between the column concepts and their names
@@ -15,6 +23,7 @@ metadata_columns = {
     'file_name': 'file_name',
     'file_extension': 'file_extension',
     'path': 'path',
+    'content_type': 'content_type',
 }
 
 
@@ -280,7 +289,8 @@ class FolderReader(base.BaseWorker):
             metadata_columns['folder_name']: folder_names,
             metadata_columns['file_name']: file_names,
             metadata_columns['file_extension']: file_extensions,
-            metadata_columns['path']: [str(item) for item in file_paths]
+            metadata_columns['path']: [str(item) for item in file_paths],
+            metadata_columns['content_type']: ContentTypes.FILE.value,
         })
 
         return metadata
