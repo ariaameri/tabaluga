@@ -24,6 +24,7 @@ metadata_columns = {
     'file_extension': 'file_extension',
     'path': 'path',
     'content_type': 'content_type',
+    'original_index': 'original_index',
 }
 
 
