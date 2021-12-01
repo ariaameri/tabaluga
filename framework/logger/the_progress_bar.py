@@ -2090,7 +2090,11 @@ class TheProgressBarBase(ABC, BaseWorker):
         """
 
         # The percentage of the progress
-        percent: float = data.get('item.current_item_index') / data.get('item.total_items_count')
+        if data.get('item.total_items_count') != 0:
+            percent: float = data.get('item.current_item_index') / data.get('item.total_items_count')
+        # if the total number of items is 0, then we are done however!
+        else:
+            percent: float = 1.
         percent = float(np.clip(percent, 0., 1.))
 
         return percent
