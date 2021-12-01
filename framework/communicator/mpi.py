@@ -5,7 +5,7 @@ from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Option
-from typing import Optional
+from typing import Optional, Any, Sequence, List
 from mpi4py import MPI
 import os
 from readerwriterlock import rwlock
@@ -232,6 +232,65 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return comm
 
+    # point to point communication
+
+    def p2p_send(self, data: Any, destination, tag: int = 0, name: str = None) -> None:
+        """
+        point-to-point communication for sending data
+
+        Parameters
+        ----------
+        data : Any
+            the data that has to be sent
+        destination : int
+            the rank to which the data should be sent
+        tag : int, optional
+            the tag corresponding to the data
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        communicator.send(obj=data, dest=destination, tag=tag)
+
+    def p2p_receive(
+            self,
+            buffer: Optional[memoryview] = None,
+            source: int = MPI.ANY_SOURCE,
+            tag: int = MPI.ANY_TAG,
+            status: Optional[MPI.Status] = None,
+            name: str = None
+    ) -> Any:
+        """
+        point-to-point communication for receiving data
+
+        Parameters
+        ----------
+        buffer : Optional[MPI.Buffer], optional
+            the buffer to be used
+        source : int, optional
+            the rank to which the data should be sent, defaults to any source
+        tag : int, optional
+            the tag corresponding to the data, defaults to any tag
+        status
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        Returns
+        -------
+        Any
+            the received data
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        return communicator.recv(buf=buffer, source=source, tag=tag, status=status)
+
+    # collective communications
+
     def barrier(self, name: str = None) -> None:
         """
         implements the call to the barrier method to wait for synchronization.
@@ -246,6 +305,78 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
         communicator.barrier()
+
+    def collective_bcast(self, data: Any, root_rank: int = 0, name: str = None) -> Any:
+        """
+        collective communication for broadcasting
+
+        Parameters
+        ----------
+        data : Any
+            the data that has to be sent
+        root_rank : int
+            the rank of the broadcaster
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        Returns
+        -------
+        Any
+            the received data, used for non-root ranks
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        return communicator.bcast(obj=data, root=root_rank)
+
+    def collective_scatter(self, data: Sequence[Any], root_rank: int = 0, name: str = None) -> Any:
+        """
+        collective communication for scattering
+
+        Parameters
+        ----------
+        data : Sequence[Any]
+            the data that has to be sent. It has to be sequential for scattering
+        root_rank : int
+            the rank of the scatterer
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        Returns
+        -------
+        Any
+            the received data, used for non-root ranks
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        return communicator.scatter(sendobj=data, root=root_rank)
+
+    def collective_gather(self, data: Any, root_rank: int = 0, name: str = None) -> Optional[List[Any]]:
+        """
+        collective communication for gathering
+
+        Parameters
+        ----------
+        data : Any
+            the data that has to be sent for gathering
+        root_rank : int
+            the rank of the gatherer
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        Returns
+        -------
+        Optional[List[Any]]
+            the received data, used for the root rank
+
+        """
+
+        communicator: MPI.Comm = self._communicators.get(name or 'world')
+
+        return communicator.gather(sendobj=data, root=root_rank)
 
     @staticmethod
     def get_rank_size(communicator: MPI.Comm) -> (int, int):
