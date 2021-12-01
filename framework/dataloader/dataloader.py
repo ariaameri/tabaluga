@@ -139,6 +139,7 @@ class DataManager(base.BaseEventManager, ABC):
         self.train_metadata = self.metadata.loc[train_indices]
 
         # Update the column names of the data frames
+        assert(metadata_columns['original_index'] == 'original_index')  # this is because df.assign can only get kwargs
         [self.train_metadata, self.val_metadata, self.test_metadata] = \
             [
                 df
