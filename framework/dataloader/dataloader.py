@@ -24,6 +24,7 @@ metadata_columns = {
     'file_extension': 'file_extension',
     'path': 'path',
     'content_type': 'content_type',
+    'syncable': 'syncable',
     'original_index': 'original_index',
 }
 
@@ -292,6 +293,7 @@ class FolderReader(base.BaseWorker):
             metadata_columns['file_extension']: file_extensions,
             metadata_columns['path']: [str(item) for item in file_paths],
             metadata_columns['content_type']: ContentTypes.FILE.value,
+            metadata_columns['syncable']: True,
         })
 
         return metadata
