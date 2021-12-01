@@ -223,12 +223,33 @@ class MetadataManipulator(base.BaseWorker):
 
         # Rename the indices to be range
         # Also rename the index level 0 name to be 'index' (instead of `criterion`)
-        metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
-        )
+        metadata = self.reset_level_0_indices(metadata)
         metadata.index.names = [None, *metadata.index.names[1:]]
 
         self.metadata = metadata
+
+        return metadata
+
+    @staticmethod
+    def reset_level_0_indices(metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Resets the level 0 indices to start from 0 and returns the result.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the data frame to reset the indices
+
+        Returns
+        -------
+        pd.DataFrame
+            the result
+
+        """
+
+        metadata = metadata.rename(
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+        )
 
         return metadata
 
