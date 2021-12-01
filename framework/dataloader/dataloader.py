@@ -76,13 +76,75 @@ class DataManager(base.BaseEventManager, ABC):
         self.workers['validation']: DataLoaderManager
         self.workers['test']: DataLoaderManager
 
-        # Create and modify general and train, val, test metadata
-        self.create_metadata()
-        self.modify_metadata()
-        self._generate_train_val_test_metadata()
+        # if we are the main rank, we always want to create a metadata
+        if mpi.mpi_communicator.is_main_rank():
+            # Create and modify general and train, val, test metadata
+            self.create_metadata()
+            self.modify_metadata()
+            self._generate_train_val_test_metadata()
+
+        # if in distributed mode, do the initial setup
+        self.syncer: Optional[Syncer] = None
+        if mpi.mpi_communicator.is_distributed():
+
+            # make a syncer to sync metadata and data among processes
+            self.syncer: Syncer = Syncer(self._config.get_or_empty('syncer'))
+
+            if mpi.mpi_communicator.is_main_rank():
+                # if we are the main rank, keep a copy of the original metadata
+                self.metadata_original = self.metadata
+                self.test_metadata_original = self.test_metadata
+                self.val_metadata_original = self.val_metadata
+                self.train_metadata_original = self.train_metadata
+
+                # also, set the metadata for the syncer
+                self.syncer.set_metadata(
+                    metadata=self.metadata_original,
+                )
+
+            # first, run the initial synchronization between processes
+            self.syncer.sync_initial()
+
+            # now, sync the train/val/test metadata
+            self.sync_train_val_test_metadata()
 
         # Create workers
         self.create_workers()
+
+    def get_syncer(self):
+
+        return self.syncer
+
+    def sync_train_val_test_metadata(self):
+        """Syncs the metadata across processes."""
+
+        if mpi.mpi_communicator.is_distributed() is False:
+            raise RuntimeError("not in distributed mode to sync train/val/test metadata.")
+
+        if self.syncer.is_distributor():
+
+            # if we have to shuffle, shuffle
+            if self._shuffle is True:
+                self.shuffle_each_original_metadata()
+
+            # now pass the metadata to the syncer
+            self.syncer.set_train_val_test_metadata(
+                train_metadata=self.train_metadata_original,
+                validation_metadata=self.val_metadata_original,
+                test_metadata=self.test_metadata_original,
+            )
+
+        # get the metadata from the syncer
+        train_metadata, val_metadata, test_metadata = self.syncer.sync_train_val_test_metadata()
+
+        # reset the indices
+        train_metadata = MetadataManipulator.reset_level_0_indices(train_metadata)
+        val_metadata = MetadataManipulator.reset_level_0_indices(val_metadata)
+        test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
+
+        self.train_metadata = train_metadata
+        self.val_metadata = val_metadata
+        self.test_metadata = test_metadata
 
     def _check_process_config(self) -> None:
         """Reconfigures the config file for this class."""
@@ -158,6 +220,74 @@ class DataManager(base.BaseEventManager, ABC):
                 for df
                 in [self.train_metadata, self.val_metadata, self.test_metadata]
             ]
+
+    def shuffle_each_metadata(self) -> None:
+        """Shuffles each of the metadata separately."""
+
+        # set the seed
+        np.random.seed(self._seed)
+
+        # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
+        # each metadata separately
+
+        # shuffle train_metadata
+        metadata_count = self.train_metadata.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        self.train_metadata = self.train_metadata[indices]
+
+        # shuffle val_metadata
+        metadata_count = self.val_metadata.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        if len(indices) > 0:
+            self.val_metadata = self.val_metadata[indices]
+
+        # shuffle val_metadata
+        metadata_count = self.test_metadata.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        if len(indices) > 0:
+            self.test_metadata = self.test_metadata[indices]
+
+    def shuffle_each_original_metadata(self) -> None:
+        """Shuffles each of the metadata separately."""
+
+        # only shuffle if we are distributed and we are the main rank
+        if mpi.mpi_communicator.is_distributed() is False or mpi.mpi_communicator.is_main_rank() is False:
+            return
+
+        # set the seed
+        np.random.seed(self._seed)
+
+        # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
+        # each metadata separately
+
+        # shuffle train_metadata_original
+        metadata_count = self.train_metadata_original.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        self.train_metadata_original = self.train_metadata_original[indices]
+
+        # shuffle val_metadata_original
+        metadata_count = self.val_metadata_original.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        if len(indices) > 0:
+            self.val_metadata_original = self.val_metadata_original[indices]
+
+        # shuffle val_metadata_original
+        metadata_count = self.test_metadata_original.index.get_level_values(0).unique().size
+        indices = np.arange(metadata_count) \
+            if self._shuffle is False \
+            else np.random.permutation(metadata_count)
+        if len(indices) > 0:
+            self.test_metadata_original = self.test_metadata_original[indices]
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
