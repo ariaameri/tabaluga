@@ -517,7 +517,15 @@ class Syncer(base.BaseWorker):
 
         # get a new mpi communicator
         self.mpi_comm_name = 'data_manager'
-        self.mpi_comm = mpi.mpi_communicator.get_or_create_communicator('data_manager')
+        mpi_comm = mpi.mpi_communicator.get_or_create_communicator('data_manager')
+
+        # make a new communicator for broadcasting
+        self.mpi_comm_main_local_name = 'data_manager_main_local'
+        self.mpi_comm_main_local = mpi.mpi_communicator.split(
+            communicator=mpi_comm,
+            color=0 if mpi.mpi_communicator.is_main_local_rank() is True else 1
+        )
+        mpi.mpi_communicator.register_communicator(self.mpi_comm_main_local, name=self.mpi_comm_main_local_name)
 
     def set_metadata(self, metadata: pd.DataFrame):
         """
@@ -651,9 +659,17 @@ class Syncer(base.BaseWorker):
 
         """
 
+        # we should not continue if we are the main local rank
+        if mpi.mpi_communicator.is_main_local_rank() is False:
+            return
+
+        # get the rank and size
+        rank, size = \
+            mpi.mpi_communicator.get_rank_size(mpi.mpi_communicator.get_communicator(self.mpi_comm_main_local_name))
+
         # log
         if self.is_distributor():
-            self._log.info(f"syncing {len(metadata)} local data via force broadcasting")
+            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
         # make a thread pool ot be used for loading the data
         thread_pool = ThreadPoolExecutor(self.thread_count)
@@ -677,7 +693,7 @@ class Syncer(base.BaseWorker):
                 mpi.mpi_communicator.collective_bcast(
                     data=metadata_updated,
                     root_rank=0,
-                    name=self.mpi_comm_name,
+                    name=self.mpi_comm_main_local_name,
                 )
 
             # save only if we are not the main rank
@@ -686,7 +702,7 @@ class Syncer(base.BaseWorker):
 
         # log
         if self.is_distributor():
-            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting")
+            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
     def _check_local_data(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor):
         """
