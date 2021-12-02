@@ -324,7 +324,7 @@ class Logger:
         """
 
         from ..communicator import mpi
-        if mpi.mpi_communicator.is_mpi_run is True:
+        if mpi.mpi_communicator.is_distributed() is True:
             name_suffix = f' ' \
                            f'{colored.fg("dodger_blue_3")}at rank ' \
                            f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_rank()}' \

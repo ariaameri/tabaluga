@@ -149,7 +149,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
     def is_distributed(self) -> bool:
         """Returns true if we are in distributed mode."""
 
-        return self.is_mpi_run is True and self.get_size() > 1
+        return self.get_size() > 1
 
     def is_main_rank(self) -> bool:
         """Returns true if we are the main rank."""
