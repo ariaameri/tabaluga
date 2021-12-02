@@ -651,6 +651,10 @@ class Syncer(base.BaseWorker):
 
         """
 
+        # log
+        if self.is_distributor():
+            self._log.info("syncing local data via force broadcasting")
+
         # make a thread pool ot be used for loading the data
         thread_pool = ThreadPoolExecutor(self.thread_count)
 
@@ -679,6 +683,10 @@ class Syncer(base.BaseWorker):
             # save only if we are not the main rank
             if self.receiver:
                 self._save_local_data_raw(metadata_updated, thread_pool)
+
+        # log
+        if self.is_distributor():
+            self._log.info("done syncing local data via force broadcasting")
 
     def _check_local_data(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor):
         """
@@ -843,8 +851,15 @@ class Syncer(base.BaseWorker):
         else:
             raise RuntimeError("we should not have ended up here!")
 
+        # get the chunk count that needs to be synced
+        chunk_count = math.ceil(len(metadata_missing_files) / self.batch_size)
+
+        # log
+        if self.is_distributor() and chunk_count > 0:
+            self._log.info(f"syncing local data selectively with rank {rank}")
+
         # go over the data in batch_size chunks
-        for start_idx in range(math.ceil(len(metadata_missing_files) / self.batch_size)):
+        for start_idx in range(chunk_count):
 
             # load if we are the distributor
             if self.distributor:
@@ -870,6 +885,10 @@ class Syncer(base.BaseWorker):
                         name=self.mpi_comm_name,
                     )
                 self._save_local_data_raw(metadata_updated, thread_pool)
+
+        # log
+        if self.is_distributor() and chunk_count > 0:
+            self._log.info(f"done with syncing local data selectively with rank {rank}")
 
     def sync_train_val_test_metadata(self) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """
