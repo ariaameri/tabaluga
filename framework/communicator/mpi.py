@@ -219,12 +219,12 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
-        comm = self._communicators.get_option(name)
+        comm = self._communicators.get_value_option(name)
 
         if comm.is_empty():
             raise ValueError(f"communicator with name of {name} does not exist to get")
 
-        return comm.get().get()
+        return comm.get()
 
     def get_or_create_communicator(self, name: str) -> MPI.Comm:
         """
