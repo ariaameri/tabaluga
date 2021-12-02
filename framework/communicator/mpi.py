@@ -200,7 +200,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         """
 
         with self._lock_read:
-            comm = self._communicators.get_option(name)
+            comm = self._communicators.get_value_option(name)
 
         return comm
 
