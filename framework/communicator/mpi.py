@@ -116,6 +116,29 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return communicator.Clone()
 
+    def split(self,  communicator: MPI.Comm = None, color: int = 0, key: int = 0) -> MPI.Comm:
+        """
+        Splits a communicator and returns it.
+
+        Parameters
+        ----------
+        communicator : MPI.Comm, optional
+            The communicator to clone, if not given, world will be used
+        color : int, optional
+            the color for this instance
+        key : int, optional
+            the new key rank for this instance
+
+        Returns
+        -------
+        MPI.Comm
+            The cloned communicator
+        """
+
+        communicator = communicator if communicator is not None else MPI.COMM_WORLD
+
+        return communicator.Split(color=color, key=key)
+
     def register_communicator(self, communicator: MPI.Comm, name: str) -> bool:
         """
         Saves the given communicator with the name provided.
