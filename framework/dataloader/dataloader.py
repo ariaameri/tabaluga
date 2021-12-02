@@ -659,7 +659,7 @@ class Syncer(base.BaseWorker):
         thread_pool = ThreadPoolExecutor(self.thread_count)
 
         # go over the data in batch_size chunks
-        for start_idx in range(math.ceil(len(metadata) / self.batch_size)):
+        for start_idx in range(0, len(metadata), self.batch_size):
 
             # load if we are the distributor
             if self.distributor:
@@ -859,7 +859,7 @@ class Syncer(base.BaseWorker):
             self._log.info(f"syncing local data selectively with rank {rank}")
 
         # go over the data in batch_size chunks
-        for start_idx in range(chunk_count):
+        for start_idx in range(0, len(metadata_missing_files), self.batch_size):
 
             # load if we are the distributor
             if self.distributor:
