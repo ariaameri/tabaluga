@@ -2,7 +2,7 @@ from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Option
-from typing import Optional, Callable, Union
+from typing import Optional, Callable, Union, List
 import kombu
 import kombu.pools
 from kombu import mixins
@@ -50,10 +50,10 @@ class RabbitMQConsumer(mixins.ConsumerMixin, BaseWorker):
         self.name = name
 
         # callbacks for when a message is received
-        self.callbacks: list[Callable] = []
+        self.callbacks: List[Callable] = []
 
         # queues to listen to
-        self.queues: list[kombu.Queue] = []
+        self.queues: List[kombu.Queue] = []
 
         # book keeping
         self.no_ack = no_ack
@@ -61,7 +61,7 @@ class RabbitMQConsumer(mixins.ConsumerMixin, BaseWorker):
         self.on_decode_error = on_decode_error
         self.prefetch_count = prefetch_count
 
-    def add_callback(self, funcs: list[Callable]):
+    def add_callback(self, funcs: List[Callable]):
         """
         Adds callbacks to the list of callbacks to be called upon new message
 
@@ -80,7 +80,7 @@ class RabbitMQConsumer(mixins.ConsumerMixin, BaseWorker):
 
         return self
 
-    def add_queue(self, queues: list[kombu.Queue]):
+    def add_queue(self, queues: List[kombu.Queue]):
         """
         Adds queues to the list of queues to be listened to
 
@@ -419,7 +419,7 @@ class _RabbitMQCommunicator(BaseWorker):
             body,
             routing_key: str,
             exchange: [kombu.Exchange, str] = None,
-            extra_declare: list[Union[kombu.Exchange, kombu.Queue]] = None,
+            extra_declare: List[Union[kombu.Exchange, kombu.Queue]] = None,
             block: bool = True,
             delivery_mode=None,
             mandatory: bool = False,
@@ -509,7 +509,7 @@ class _RabbitMQCommunicator(BaseWorker):
     def consume(
             self,
             name: str,
-            queue_names: list[str] = None,
+            queue_names: List[str] = None,
             no_ack: bool = True,
             auto_declare: bool = True,
             on_decode_error=None,

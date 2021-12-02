@@ -2008,7 +2008,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         self.progress_bar_info = self.progress_bar_info.update({}, {'aggregation_data.aggregation_data': data})
 
-    def set_aggregator_function_full(self, func: Callable[[list], str]):
+    def set_aggregator_function_full(self, func: Callable[[List], str]):
         """
         Sets the aggregator function that is used to process the aggregated data and give full output.
 
@@ -2021,7 +2021,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         self.actions = self.actions.update({}, {'aggregator.full': func})
 
-    def set_aggregator_function_short(self, func: Callable[[list], str]):
+    def set_aggregator_function_short(self, func: Callable[[List], str]):
         """
         Sets the aggregator function that is used to process the aggregated data and give short output.
 
@@ -3122,7 +3122,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         attr_reset = colored.attr("reset")
 
         # construct the progress bar for each worker
-        worker_progress_bars: list[str] = []
+        worker_progress_bars: List[str] = []
         for rank in range(mpi.mpi_communicator.get_size()):
             progress_bar = \
                 self._make_and_get_progress_bar(

@@ -1,6 +1,7 @@
 from . import dataloader
 from ..util.config import ConfigParser
 import pandas as pd
+from typing import List
 import json
 
 
@@ -42,7 +43,7 @@ class JSONLoader(dataloader.DataLoader):
 
         return the_json
 
-    def load_data_post(self, data: list) -> list:
+    def load_data_post(self, data: List) -> List:
         """Reforms the json data already loaded into a list.
 
         Parameters

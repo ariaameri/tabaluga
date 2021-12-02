@@ -2,7 +2,7 @@ from ..util.config import ConfigParser
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import logging
 from collections import OrderedDict
-from typing import Union, Any
+from typing import Union, Any, List
 import threading
 from datetime import datetime
 import sys
@@ -222,7 +222,7 @@ class Logger:
     """An abstract base/parent class for all logger classes."""
 
     # Keep track of how many logger instances we have
-    _counter: list[int] = [0]
+    _counter: List[int] = [0]
     _rwlock = rwlock.RWLockRead()
 
     # Keep track of supported logger functionality/abilities
@@ -335,7 +335,7 @@ class Logger:
 
         self._logger.name = name
 
-    def get_abilities(self) -> list[str]:
+    def get_abilities(self) -> List[str]:
         """Method to return the list of abilities for the logger.
 
         Returns

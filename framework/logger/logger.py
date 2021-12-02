@@ -7,7 +7,7 @@ from .the_progress_bar import TheProgressBar, TheProgressBarParallelManager
 from ..communicator import mpi
 from .logger_sole import Logger
 from abc import ABC
-from typing import Dict, Callable
+from typing import Dict, Callable, List
 import numpy as np
 
 
@@ -240,7 +240,7 @@ class TheProgressBarLogger(Logger):
 
         self._the_progress_bar.set_aggregation_data(data)
 
-    def set_aggregator_function_full(self, func: Callable[[list[Panacea]], str]):
+    def set_aggregator_function_full(self, func: Callable[[List[Panacea]], str]):
         """
         Sets the aggregator function that is used to process the aggregated data and give full output.
 
@@ -255,7 +255,7 @@ class TheProgressBarLogger(Logger):
         if mpi.mpi_communicator.is_distributed():
             self._the_progress_bar_manager.set_aggregator_function_full(func)
 
-    def set_aggregator_function_short(self, func: Callable[[list[Panacea]], str]):
+    def set_aggregator_function_short(self, func: Callable[[List[Panacea]], str]):
         """
         Sets the aggregator function that is used to process the aggregated data and give short output.
 

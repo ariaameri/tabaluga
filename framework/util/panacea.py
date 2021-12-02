@@ -1459,7 +1459,7 @@ class Modification:
             # Parse the query and get the list of functions corresponding to the queries
             self._function_list = self._parser(self.query)
 
-        def _parser(self, query: Dict) -> list:
+        def _parser(self, query: Dict) -> List:
             """Method to parse the query given and turn it into actions or a list of functions to be called.
 
             Parameters
