@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
+from ..util.option import Option, Some, nothing
 from typing import List, Dict, Union
 from abc import ABC, abstractmethod
 import numpy as np
@@ -970,11 +971,9 @@ class Workers:
 
         # Check if the name of the workers are unique, conforming, and a subclass of BaseWorker
         if name in self._workers_name_order:
-            raise Exception('Worker name exists! Please choose another name.')
+            raise ValueError(f"Worker name '{name}' exists! Please choose another name.")
         if re.match(r'^[a-zA-Z](\w|\d)+$', name) is None:
-            raise Exception('Worker name should only consist of alphanumeric values starting with a letter.')
-        # if inspect.isclass(worker) is False or issubclass(type(worker), BaseWorker) is False:
-        #     raise Exception('Worker has to be an instance of the BaseWorker class.')
+            raise ValueError('Worker name should only consist of alphanumeric values starting with a letter.')
 
         # Add the worker as attribute and add it in the order list
         if rank == -1:
@@ -1114,6 +1113,29 @@ class Workers:
         out_string = self.str_representation(depth=1)
 
         return out_string
+
+    def get_worker_option(self, name: Union[str, int]) -> Option:
+        """
+        Returns the worker specified by `name` in an Option-wrapped value.
+
+        Parameters
+        ----------
+        name : Union[str, int]
+            name or rank of the worker
+
+        Returns
+        -------
+        Option
+            worker wrapped in an Option
+
+        """
+
+        worker = self.__getitem__(name)
+
+        if worker is not None:
+            return Some(worker)
+        else:
+            return nothing
 
     def print(self, depth: int = -1) -> None:
         """Prints the workers and goes in depth.
