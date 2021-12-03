@@ -2126,8 +2126,12 @@ class TheProgressBarBase(ABC, BaseWorker):
         """
 
         # Get the length of chars of total number of items for better formatting
-        length_items = int(np.ceil(np.log10(data.get('item.total_items_count')))) if data.get(
-            'item.total_items_count') > 0 else 5
+        if data.get('item.total_items_count') > 0:
+            length_items = int(np.ceil(np.log10(data.get('item.total_items_count') + 1)))
+        elif data.get('item.total_items_count') == 0:
+            length_items = 1
+        else:
+            length_items = 5
 
         # Create the string
         fractional_progress = f'{colored.fg("gold_3b")}' \
@@ -2136,7 +2140,7 @@ class TheProgressBarBase(ABC, BaseWorker):
                               f'/'
         fractional_progress += f'{colored.fg("orange_4b")}' \
                                f'{data.get("item.total_items_count")}' \
-            if data.get('item.total_items_count') > 0 else '?'
+            if data.get('item.total_items_count') >= 0 else '?'
         fractional_progress += f'{colored.attr("reset")}'
 
         # update the output data
