@@ -26,7 +26,7 @@ class Trainer(base.BaseEventManager, ABC):
         # initialize rabbitmq if exist
         if mpi.mpi_communicator.is_distributed() is True:
             from ..communicator import rabbitmq
-            rabbitmq.init(config.get_or_empty("rabbitmq"))
+            rabbitmq.init(config.get_or_else("rabbitmq", ConfigParser()))
 
         super().__init__(config)
 
