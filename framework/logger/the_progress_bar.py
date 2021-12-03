@@ -83,6 +83,9 @@ rabbit_data: Optional[ConfigParser] = None
 # global variables definitions
 REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 REGEX_INDENTATION = re.compile(r'(^|\n)')
+ENV_VARS = ConfigParser({
+    'tty_size': 'TTY_SIZE'
+})
 
 
 # function to initialize rabbit data
@@ -3207,11 +3210,20 @@ class TheProgressBarParallelManager(TheProgressBarBase):
                     ['stty',
                      '-F', stdout_fd,
                      'size'])\
-                    .decode('utf-8').strip().split()
+                .decode('utf-8').strip().split()
             out = [int(item) for item in out]
             lines, columns = out
         except:
             lines = columns = -1
+
+        # if we get a zero, look for the env variable for tty size
+        if lines == columns == 0:
+            if ENV_VARS.get('tty_size') in os.environ.keys():
+                tty_size = os.environ[ENV_VARS.get('tty_size')]
+                try:
+                    lines, columns = [int(item) for item in tty_size.split()]
+                except:
+                    self._log.warning(f"failed getting terminal size from {ENV_VARS.get('tty_size')} environmental var")
 
         data = DataMuncher({
             'mpirun': {
