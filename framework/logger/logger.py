@@ -54,7 +54,7 @@ class TheProgressBarLogger(Logger):
         self._the_progress_bar = TheProgressBar(self.console_file, self._config)
         self._the_progress_bar_manager = \
             TheProgressBarParallelManager(self.console_file, self._config) \
-            if mpi.mpi_communicator.is_distributed() \
+            if mpi.mpi_communicator.is_distributed() and mpi.mpi_communicator.is_main_rank() \
             else None
 
         # The number of total items and epochs
@@ -87,7 +87,7 @@ class TheProgressBarLogger(Logger):
         """
 
         self._the_progress_bar.activate()
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.activate()
 
         return self
@@ -138,8 +138,9 @@ class TheProgressBarLogger(Logger):
             mpi.mpi_communicator.barrier()
             # wait a random time, just to be sure :D
             time.sleep(1)
-            # now, reset the manager
-            self._the_progress_bar_manager.reset(return_to_line_number=return_to_line_number)
+            if self._the_progress_bar_manager is not None:
+                # now, reset the manager
+                self._the_progress_bar_manager.reset(return_to_line_number=return_to_line_number)
 
         self._total = total
 
@@ -185,21 +186,21 @@ class TheProgressBarLogger(Logger):
         """Finishes and closes the TheProgressBar instance."""
 
         self._the_progress_bar.deactivate()
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.deactivate()
 
     def pause(self) -> None:
         """Pauses the TheProgressBar instance."""
 
         self._the_progress_bar.pause()
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.pause()
 
     def resume(self) -> None:
         """Resumes the TheProgressBar instance."""
 
         self._the_progress_bar.resume()
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.resume()
 
     def update(self, update_count: int, msg_dict: Dict = None) -> None:
@@ -252,7 +253,7 @@ class TheProgressBarLogger(Logger):
         """
 
         self._the_progress_bar.set_aggregator_function_full(func)
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.set_aggregator_function_full(func)
 
     def set_aggregator_function_short(self, func: Callable[[List[Panacea]], str]):
@@ -267,5 +268,5 @@ class TheProgressBarLogger(Logger):
         """
 
         self._the_progress_bar.set_aggregator_function_short(func)
-        if mpi.mpi_communicator.is_distributed():
+        if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.set_aggregator_function_short(func)
