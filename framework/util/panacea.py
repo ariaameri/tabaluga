@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Type, Union, Callable
+from typing import Dict, Any, List, Type, Union, Callable, Generator
 from types import FunctionType
 import yaml
 from enum import Enum
@@ -307,6 +307,31 @@ class PanaceaBase(ABC):
 
         # Return
         return found_one
+
+    def find_all(self, filter_dict: Dict = None) -> Generator[Any]:
+        """Method to find the first item based on the criteria given and return an Option value of it.
+
+        Parameters
+        ----------
+        filter_dict : dict
+            Dictionary containing the filtering criteria.
+                Refer to Modification class for more info.
+
+        Returns
+        -------
+        An Option value of the first element found that satisfies the given criteria.
+
+        """
+
+        # Make the Modification instance
+        modifier = Modification(filter_dict=filter_dict)
+
+        # Perform the finding
+        found_all: Generator[Option[Any]] = modifier.find_all(panacea=self)
+
+        # Return
+        for item in found_all:
+            yield item.get()
 
     def update(self, filter_dict: Dict = None, update_dict: Dict = None, condition_dict: Dict = None) -> PanaceaBase:
         """Update an entry in the config and return a new Panacea.
@@ -2695,11 +2720,13 @@ class Modification:
 
     # General traversals
 
+    # TODO: Correct the type hints
+
     def traverse(self,
                  panacea: PanaceaBase,
                  bc: str,
                  do_after_satisfied: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]],
-                 propagate: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+                 propagate: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]],
                  ) \
             -> Option[(str, PanaceaBase)]:
         """Traverses the tree of panacea, checks if it meets the criteria and does operations after that, or propagates
@@ -2733,6 +2760,45 @@ class Modification:
         # If self is not satisfied, propagate
         else:
             return propagate(key, panacea)
+
+    def traverse_generator(self,
+                 panacea: PanaceaBase,
+                 bc: str,
+                 do_after_satisfied: Callable[[str, PanaceaBase], Option[PanaceaBase]],
+                 propagate: Callable[[str, PanaceaBase], Generator[Option[PanaceaBase]]],
+                 ) \
+            -> Generator[Option[PanaceaBase]]:
+        """Traverses the tree of panacea, checks if it meets the criteria and does operations after that, or propagates
+        the operation to its children.
+
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to traverse through
+        bc : str
+            The breadcrumb so far
+        do_after_satisfied : : Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            The function to be called if panacea meets the filtering criteria
+        propagate: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
+            The function to be called if panacea did not meet the filtering criteria.
+            This function should propagate the desired operation to the children of the instance or return
+
+        Returns
+        -------
+        An Option value of type Option[(str, PanaceaBase)] where (str, PanaceaBase) is the key/value pair of the result.
+
+        """
+
+        # Get the current instance key
+        key = bc.split('.')[-1]
+
+        # Check if self is satisfied
+        if self.filter_check_self(panacea, bc) is True:
+            yield do_after_satisfied(key, panacea)  # Provide (key, value) pair as input
+            return
+
+        # again, propagate
+        yield from propagate(key, panacea)
 
     def propagate_all(self,
                       function_to_call_for_each_element: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]) \
@@ -2847,6 +2913,58 @@ class Modification:
 
             # If none of the children matches, return nothing
             return nothing
+
+        return helper
+
+    def propagate_generator(
+            self,
+            function_to_call_for_each_element: Callable[[str, PanaceaBase], Generator[Option[PanaceaBase]]]
+    ) -> Callable[[str, PanaceaBase], Generator[Option[PanaceaBase]]]:
+        """Propagation function that goes through the children of the panacea instance and returns the ones that
+        matches function_to_call_for_each_element via a generator.
+
+        Parameters
+        ----------
+        function_to_call_for_each_element : Callable[[str, PanaceaBase], Generator[Option[PanaceaBase]]]
+            A function to be called on each of the children elements during the propagation
+
+        Returns
+        -------
+        A function of type Callable[[str, PanaceaBase], Generator[Option[PanaceaBase]]] that can be called to propagate
+        the operation through the children of the panacea instance to return the a generator for the children that
+        match according to function_to_call_for_each_element.
+
+        """
+
+        def helper(key: str, panacea: PanaceaBase) -> Generator[Option[PanaceaBase]]:
+            """Helper method to do the propagation and takes care of closure of function_to_call_for_each_element.
+
+            It calls function_to_call_for_each_element on the (key, panacea) pair given and returns a generator over the
+            results found
+
+            Parameters
+            ----------
+            key : str
+                The name of the key of the given panacea, not currently used
+            panacea : PanaceaBase
+                The panacea element
+
+            Returns
+            -------
+            A generator containing Option value of the type Generator[Option[PanaceaBase]] containing the propagation
+            result of the children that match according to function_to_call_for_each_element.
+
+            """
+
+            # Go over each children of the panacea instance and return the result as soon as it is a match
+            for key, value in panacea.get_parameters().items():
+
+                # Get the results of finding in the current parameter
+                result: Generator[Option[PanaceaBase]] = function_to_call_for_each_element(key, value)
+
+                for item in result:
+                    if item.is_defined():
+                        yield item
 
         return helper
 
@@ -3045,6 +3163,50 @@ class Modification:
 
         # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
+
+    def find_all(self, panacea: PanaceaBase, bc: str = '') -> Generator[Option[Any]]:
+        """Method to find the very first single element on `panacea` that satisfies the filtering criteria and returns
+        it.
+
+        Parameters
+        ----------
+        panacea : PanaceaBase
+            The PanaceaBase instance to search for
+        bc : str, optional
+            The breadcrumb so far
+
+        Returns
+        -------
+        The result of finding the very single element that satisfies the filtering criteria in form of Option value.
+
+        """
+
+        # For each of the elements in the propagation, we should do the finding one again with updated bc
+        for_each_element = \
+            lambda key, value: self.find_all(panacea=value, bc=f'{bc}.{key}')
+
+        # For propagation
+        # Remember that propagation happens when the instance panacea did not meet the filtering criteria
+        # If the given `panacea` is a branch node, propagate again
+        # If the given `panacea` is a leaf node, return nothing, as there is no more children to propagate and
+        # the `panacea` instance did not meet the filtering criteria
+        if issubclass(type(panacea), Panacea):
+            propagate = self.propagate_generator(for_each_element)
+        elif issubclass(type(panacea), PanaceaLeaf):
+            def helper(x, key):
+                yield nothing
+            propagate = helper
+        else:
+            raise AttributeError(f"What just happened?! got of type {type(panacea)}")
+
+        # If the `panacea` instance met the filtering criteria
+        # After that, if it is a branch node, return it as Option value, and if it is a leaf node, return its value
+        # as Option value
+        do_after_satisfied = lambda key, x: Some(x) if issubclass(type(x), Panacea) else Some(x.get())
+
+        # Do the traversing with the correct functions
+        return \
+            self.traverse_generator(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
     # Update
 
