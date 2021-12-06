@@ -12,8 +12,11 @@ class CUDAInformation(Process):
 
         super().__init__(config)
 
-        # initialize the cuda nvml library
-        pynvml.nvmlInit()
+        try:
+            # initialize the cuda nvml library
+            pynvml.nvmlInit()
+        except:
+            self._log.warning("could not initialize the pynvml library.")
 
     def process(self, data=None):
         """
@@ -34,8 +37,12 @@ class CUDAInformation(Process):
         if not mpi.mpi_communicator.is_main_local_rank():
             return
 
-        # initialize the cuda nvml library
-        pynvml.nvmlInit()
+        try:
+            # initialize the cuda nvml library
+            pynvml.nvmlInit()
+        except:
+            self._log.warning("could not initialize the pynvml library to report CUDA information.")
+            return
 
         import re
 
