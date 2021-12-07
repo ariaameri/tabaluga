@@ -906,6 +906,7 @@ class Syncer(base.BaseWorker):
     def sync_train_val_test_metadata(self) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """
         Splits the train/val/test metadata into chunks for each process, scatters them, and returns each chunk.
+        It should be noted that after this operation, all nodes will have exactly the same amount of data.
 
         Returns
         -------
@@ -921,7 +922,9 @@ class Syncer(base.BaseWorker):
 
             # split the training metadata
             train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
-            chunk_size = math.ceil(train_zero_level_indices.size / self.dist_size)
+            chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
+            # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped and
+            # not synced
             train_split_indices = \
                 [
                     train_zero_level_indices[start_idx:(start_idx+chunk_size)]
@@ -934,6 +937,8 @@ class Syncer(base.BaseWorker):
                     for chunk_indices
                     in train_split_indices
                 ]
+            # remove the extra training data
+            train_split_metadata = train_split_metadata[:self.dist_size]
 
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
