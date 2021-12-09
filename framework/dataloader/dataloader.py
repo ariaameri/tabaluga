@@ -164,7 +164,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Read and create the data metadata
         if self._input_type == 'folder_path':
-            metadata_generator = FolderReader(self._config)
+            metadata_generator = FolderReader(self._config.get_or_empty('folder_reader'))
         elif self._input_type == 'mongo':
             raise NotImplementedError
         else:
@@ -405,7 +405,7 @@ class FolderReader(base.BaseWorker):
         """Checks given folders for sanity and existence."""
 
         # Folders containing the data
-        self._folders: List[str] = self._config.get_or_else('folders', None)
+        self._folders: List[str] = self._config.get('folders')
 
         # Check if folder list is given
         if self._folders is None:
@@ -426,8 +426,12 @@ class FolderReader(base.BaseWorker):
         """
 
         # File names in nested lists
-        # only one level deep
-        file_nested_paths = [list(Path(folder).iterdir()) for folder in self._folders]
+        if self._config.get_or_else('deep', False) is False:
+            # only one level deep
+            file_nested_paths = [list(Path(folder).iterdir()) for folder in self._folders]
+        else:
+            # grab everything!
+            file_nested_paths = [list(Path(folder).glob('**/*')) for folder in self._folders]
 
         # Flatten the file names and make absolute paths
         file_paths = [file_path
