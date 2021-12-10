@@ -242,6 +242,27 @@ class Option(Generic[T], ABC):
 
         pass
 
+    def expect(self, msg: str) -> Any:
+        """
+        Returns the value in case of some or raise an error with the given message in case of nothing.
+
+        Parameters
+        ----------
+        msg : str
+            the error message to use
+
+        Returns
+        -------
+        Any
+            the wrapped value
+
+        """
+
+        if self.is_empty():
+            raise ValueError(msg)
+
+        return self.get()
+
 
 class Some(Option):
     """A subclass of the Option class that holds a value."""
