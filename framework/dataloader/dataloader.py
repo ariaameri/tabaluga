@@ -151,7 +151,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Spread multithreading one level down
         # Didn't choose only one level down because 'train' and 'val' entries might not exist
-        if self._config.get_option('multithreading').is_defined():
+        if self._config.get_or_else('multithreading', False) is True:
             self._config = self._config.update(
                 {},
                 {'$set_on_insert': {
