@@ -84,7 +84,8 @@ rabbit_data: Optional[ConfigParser] = None
 REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 REGEX_INDENTATION = re.compile(r'(^|\n)')
 ENV_VARS = ConfigParser({
-    'tty_size': 'TTY_SIZE'
+    'tty_size': 'TTY_SIZE',
+    'force_tty': 'FORCE_TTY',
 })
 
 
@@ -2522,6 +2523,18 @@ class TheProgressBar(TheProgressBarBase):
     def _make_isatty(self) -> Callable:
         """Makes the new atty function."""
 
+        if ENV_VARS.get('force_tty') in os.environ.keys():
+            force_tty = os.environ[ENV_VARS.get('force_tty')]
+            if force_tty == '1':
+                return lambda: True
+            elif force_tty == '0':
+                return lambda: False
+            else:
+                raise ValueError(
+                    f"cannot understand the '{ENV_VARS.get('force_tty')}' environmental variable. accepted"
+                    f"values are '0' and '1'."
+                )
+
         return sys.stdout.isatty
 
     def _check_if_foreground(self) -> bool:
@@ -3416,6 +3429,18 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
     def _make_isatty(self) -> Callable:
         """Makes the new atty function."""
+
+        if ENV_VARS.get('force_tty') in os.environ.keys():
+            force_tty = os.environ[ENV_VARS.get('force_tty')]
+            if force_tty == '1':
+                return lambda: True
+            elif force_tty == '0':
+                return lambda: False
+            else:
+                raise ValueError(
+                    f"cannot understand the '{ENV_VARS.get('force_tty')}' environmental variable. accepted"
+                    f"values are '0' and '1'."
+                )
 
         if mpi.mpi_communicator.is_distributed() is False:
             return sys.stdout.isatty
