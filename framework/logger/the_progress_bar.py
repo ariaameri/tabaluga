@@ -338,6 +338,11 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         return self.deactivate()
 
+    def __del__(self):
+        """Called when being deleted."""
+
+        self.deactivate()
+
     class CursorModifier:
 
         def __init__(self):
@@ -506,7 +511,7 @@ class TheProgressBarBase(ABC, BaseWorker):
             return self
 
         # Show cursor
-        sys.stdout.write(self.cursor_modifier.get("show"))
+        sys.stdout.write(self.cursor_modifier.get("show") + self.cursor_modifier.get("clear_until_end"))
         sys.stdout.flush()
 
         # Pause printing
