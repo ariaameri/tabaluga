@@ -12,6 +12,10 @@ class CUDAInformation(Process):
 
         super().__init__(config)
 
+        # skip if not enabled
+        if self._config.get_or_else('enabled', True) is False:
+            return
+
         try:
             # initialize the cuda nvml library
             pynvml.nvmlInit()
@@ -32,6 +36,10 @@ class CUDAInformation(Process):
         * Nothing *
 
         """
+
+        # skip if not enabled
+        if self._config.get_or_else('enabled', True) is False:
+            return
 
         # skip if not the main local rank
         if not mpi.mpi_communicator.is_main_local_rank():
