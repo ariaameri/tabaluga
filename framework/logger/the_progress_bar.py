@@ -84,8 +84,8 @@ rabbit_data: Optional[ConfigParser] = None
 REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 REGEX_INDENTATION = re.compile(r'(^|\n)')
 ENV_VARS = ConfigParser({
-    'tty_size': 'TTY_SIZE',
-    'force_tty': 'FORCE_TTY',
+    'tty_size': 'TPB_TTY_SIZE',
+    'force_tty': 'TPB_FORCE_TTY',
 })
 
 
