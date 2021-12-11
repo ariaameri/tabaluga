@@ -2531,7 +2531,7 @@ class TheProgressBar(TheProgressBarBase):
                 return lambda: False
             else:
                 raise ValueError(
-                    f"cannot understand the '{ENV_VARS.get('force_tty')}' environmental variable. accepted"
+                    f"cannot understand the '{ENV_VARS.get('force_tty')}' environmental variable. accepted "
                     f"values are '0' and '1'."
                 )
 
@@ -2933,6 +2933,17 @@ class TheProgressBarParallelManager(TheProgressBarBase):
     def _act_on_gather_info_update(self, data: DataMuncher):
         """Update this instance counter based on the received data in gather info process."""
 
+        # update the total count
+        if self.worker_gather_info.get(
+                f'worker.{data.get("rank")}.progress_bar.prefix.state.item.total_items_count') == -np.inf \
+                and data.get('progress_bar.prefix.state.item.total_items_count') != -np.inf:
+            new_total = data.get('progress_bar.prefix.state.item.total_items_count')
+            updated_total = self.state_info.get_value_option('item.total_items_count') \
+                .filter(lambda x: x != -np.inf) \
+                .or_else(Some(0)) \
+                .map(lambda x: x + new_total).get()
+            self._set_number_items(updated_total)
+
         # update myself!
         # first, extract current item index from somewhere!
         # then find the difference of the current version we have of it and the new version we received to update myself
@@ -2943,16 +2954,6 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         delta_item_count = \
             updated_item_index - current_item_index
         self.update(count=delta_item_count)
-
-        # update the total count
-        if self.worker_gather_info.get(f'worker.{data.get("rank")}.progress_bar.prefix.state.item.total_items_count') == -np.inf \
-                and data.get('progress_bar.prefix.state.item.total_items_count') != -np.inf:
-            new_total = data.get('progress_bar.prefix.state.item.total_items_count')
-            updated_total = self.state_info.get_value_option('item.total_items_count') \
-                .filter(lambda x: x != -np.inf) \
-                .or_else(Some(0)) \
-                .map(lambda x: x + new_total).get()
-            self._set_number_items(updated_total)
 
     def run_printer_gatherer(self) -> None:
         """Consumes the broker information.."""
@@ -3022,6 +3023,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
                 'get_bar': get_bar_curry,
             })
 
+        # TODO: FIX THIS!
         elif self.state_info.get('mode') == self.Modes.NOTTY:
             def get_bar_curry(return_to_line_number: int = 0):
                 out = self._get_progress_bar_with_spaces(
