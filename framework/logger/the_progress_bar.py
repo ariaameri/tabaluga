@@ -2310,6 +2310,8 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Also, if we are on pause, update with frequency 1
         if self.state_info.get('paused') is True:
             freq = 1.0
+        elif self.state_info.get('mode') == self.Modes.NOTTY and self.state_info.get('role') == self.Roles.WORKER:
+            freq = 1.0
         elif self.state_info.get('mode') == self.Modes.NOTTY:
             freq = 1 / 60  # if we do not have a tty, print every minute
         else:
