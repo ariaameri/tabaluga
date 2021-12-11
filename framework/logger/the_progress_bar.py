@@ -3490,3 +3490,16 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             return False
 
         return super()._check_if_should_print()
+
+    # utility methods
+
+    def _notify_sleep(self):
+        """Figure out if it is a good time to wake the sleeping time up!"""
+
+        # check if we have received data from all workers, then proceed
+        for rank in range(self.state_info.get('parallel.size')):
+            if self.worker_gather_info.get(
+                    f'worker.{rank}.progress_bar.prefix.state.item.total_items_count') == -np.inf:
+                return
+
+        return super()._notify_sleep()
