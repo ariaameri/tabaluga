@@ -420,6 +420,9 @@ class TheProgressBarBase(ABC, BaseWorker):
         # first, reset so that everything is set
         self.reset()
 
+        # now, try to get the information regarding the terminal
+        self._update_terminal_size()
+
         # Set the initial time
         current_time = time.time()
         self.statistics_info = \
@@ -774,11 +777,21 @@ class TheProgressBarBase(ABC, BaseWorker):
         if data is not None:
             return data.get('columns'), data.get('rows')
 
+        # if we are not at tty
         if self._check_if_atty() is False:
             return -1, -1
 
+        # at this point, we should have a tty
+        # try to get the terminal size.
+        # if we get a terminal size of 0, 0, for example when piped in some way, read the already found size
         out = os.get_terminal_size()
-        return out.columns, out.lines
+        columns = out.columns
+        lines = out.lines
+        # if we get a zero, get the already found terminal size
+        if lines == columns == 0:
+            columns, lines = self._get_terminal_size()
+
+        return columns, lines
 
         # env = os.environ
         #
@@ -823,16 +836,41 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
-        if terminal_size is None:
-            columns, rows = self._make_and_get_terminal_size()
+        # if we are not at tty
+        if self._check_if_atty() is False:
+            columns = lines = -1
+        # if we are at tty
         else:
-            columns, rows = terminal_size
+            # at this point, we should have a tty
+            # try to get the terminal size.
+            # if we get a terminal size of 0, 0, for example when piped in some way, read the already found
+            out = os.get_terminal_size()
+            columns = out.columns
+            lines = out.lines
+            # if we get a zero, look for the env variable for tty size
+            if lines == columns == 0:
+                if ENV_VARS.get('tty_size') in os.environ.keys():
+                    tty_size = os.environ[ENV_VARS.get('tty_size')]
+                    try:
+                        lines, columns = [int(item) for item in tty_size.split()]
+                    except:
+                        self._log.error(
+                            f"failed getting terminal size from {ENV_VARS.get('tty_size')} environmental variable"
+                        )
+                        raise RuntimeError(
+                            f"failed getting terminal size from {ENV_VARS.get('tty_size')} environmental variable"
+                        )
+                else:
+                    raise RuntimeError(
+                        f"cannot infer the terminal size and {ENV_VARS.get('tty_size')} environmental variable "
+                        f"is not set"
+                    )
 
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
                 {'_bc': {'$regex': 'console$'}},
-                {'rows': rows, 'columns': columns}
+                {'rows': lines, 'columns': columns}
             )
 
     def _run_check_for_resume(self) -> None:
@@ -3403,17 +3441,20 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             terminal size in form of (columns, rows)
         """
 
-        if data is not None:
-            return data.get('columns'), data.get('rows')
+        # for now, just do what the super does
+        return super()._make_and_get_terminal_size(data)
 
-        if self._check_if_atty() is False:
-            return -1, -1
-
-        # THE FOLLOWING SUBPROCESS TASK IS RATHER HEAVY, SO FOR NOW, WE IGNORE IT AND GO WITH THE INITIAL TERMINAL SIZE
-        lines = self.mpirun_process_info.get('terminal.size.lines')
-        columns = self.mpirun_process_info.get('terminal.size.columns')
-
-        return columns, lines
+        # if data is not None:
+        #     return data.get('columns'), data.get('rows')
+        #
+        # if self._check_if_atty() is False:
+        #     return -1, -1
+        #
+        # # THE FOLLOWING SUBPROCESS TASK IS RATHER HEAVY, SO FOR NOW, WE IGNORE IT AND GO WITH THE INITIAL TERMINAL SIZE
+        # lines = self.mpirun_process_info.get('terminal.size.lines')
+        # columns = self.mpirun_process_info.get('terminal.size.columns')
+        #
+        # return columns, lines
 
         # we are in distributed mode which means the actual terminal belongs to mpirun, our parent process
         # therefore, we read the parent process's terminal size
