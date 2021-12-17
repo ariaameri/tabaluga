@@ -51,10 +51,13 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         self._node_rank: int = int(os.getenv("OMPI_COMM_WORLD_NODE_RANK") or 0)
 
         # check if we have run by mpirun and get real tty
-        parent_command = \
-            subprocess.check_output(
-                ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
-            ).decode('utf-8').strip().split()[0]
+        try:
+            parent_command = \
+                subprocess.check_output(
+                    ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
+                ).decode('utf-8').strip().split()[0]
+        except:
+            parent_command = ''
         self.is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
         self.mpi_tty_fd: pathlib.Path = \
             pathlib.Path(subprocess.check_output(
