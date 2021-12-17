@@ -446,7 +446,8 @@ class TheProgressBarBase(ABC, BaseWorker):
             return self
 
         # Hide cursor
-        self._direct_write(self.cursor_modifier.get("hide"))
+        if self._config.get_or_else("hide_cursor", False) is True:
+            self._direct_write(self.cursor_modifier.get("hide"))
 
         # Set the printing event on to start with the printing of the progress bar
         self.event_print.set()
@@ -470,7 +471,8 @@ class TheProgressBarBase(ABC, BaseWorker):
             return
 
         # Show cursor
-        self._direct_write(self.cursor_modifier.get("show"))
+        if self._config.get_or_else("hide_cursor", False) is True:
+            self._direct_write(self.cursor_modifier.get("show"))
 
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_line_number=-1)
@@ -515,7 +517,9 @@ class TheProgressBarBase(ABC, BaseWorker):
             return self
 
         # Show cursor
-        sys.stdout.write(self.cursor_modifier.get("show") + self.cursor_modifier.get("clear_until_end"))
+        if self._config.get_or_else("hide_cursor", False) is True:
+            sys.stdout.write(self.cursor_modifier.get("show"))
+        sys.stdout.write(self.cursor_modifier.get("clear_until_end"))
         sys.stdout.flush()
 
         # Pause printing
@@ -550,7 +554,8 @@ class TheProgressBarBase(ABC, BaseWorker):
             return self
 
         # Hide cursor
-        self._direct_write(self.cursor_modifier.get("hide"))
+        if self._config.get_or_else("hide_cursor", False) is True:
+            self._direct_write(self.cursor_modifier.get("hide"))
 
         # No longer look if we should resume
         self.check_for_resume_thread = None
