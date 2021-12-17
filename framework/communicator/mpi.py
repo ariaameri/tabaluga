@@ -52,10 +52,13 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         # check if we have run by mpirun and get real tty
         try:
-            parent_command = \
-                subprocess.check_output(
-                    ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
-                ).decode('utf-8').strip().split()[0]
+            if os.getppid() > 0:
+                parent_command = \
+                    subprocess.check_output(
+                        ['ps', '-p', f'{os.getppid()}', '-o', 'cmd', '--no-headers']
+                    ).decode('utf-8').strip().split()[0]
+            else:
+                parent_command = ''
         except:
             parent_command = ''
         self.is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
