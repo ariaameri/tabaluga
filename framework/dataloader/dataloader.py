@@ -1106,7 +1106,16 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Check if all the returned number of iterations are the same
         assert all([no == number_of_iterations_workers[0] for no in number_of_iterations_workers]) is True, \
-            'Returned number_of_iterations from all DataLoader\'s must be the same.'
+            (
+                f'Returned number_of_iterations from all DataLoader\'s must be the same.\n'
+                f'I received number of iterations from the workers as follows:\n'
+                f'\t- ' +
+                "\n\t- ".join(
+                    [f"{name}: {no}" for name, no in zip(self.workers.get_names(), number_of_iterations_workers)]
+                ) +
+                f"\n\n"
+                f"Possibly, the amount of data you have is not the same across different parent folders.\n"
+            )
 
         # Set the number of iterations
         self.number_of_iterations = number_of_iterations_workers[0]
