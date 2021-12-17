@@ -1091,6 +1091,11 @@ class Workers:
         else:
             return -1
 
+    def get_names(self) -> List[str]:
+        """Returns the name of the workers in order as a list."""
+
+        return self._workers_name_order
+
     def __setattr__(self, key, value) -> None:
         """Set a new worker."""
 
