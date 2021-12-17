@@ -781,12 +781,15 @@ class TheProgressBarBase(ABC, BaseWorker):
         if self._check_if_atty() is False:
             return -1, -1
 
-        # at this point, we should have a tty
+        # at this point, we should have a tty, or we are forced to have a tty
         # try to get the terminal size.
         # if we get a terminal size of 0, 0, for example when piped in some way, read the already found size
-        out = os.get_terminal_size()
-        columns = out.columns
-        lines = out.lines
+        try:
+            out = os.get_terminal_size()
+            columns = out.columns
+            lines = out.lines
+        except:
+            columns = lines = 0
         # if we get a zero, get the already found terminal size
         if lines == columns == 0:
             columns, lines = self._get_terminal_size()
@@ -841,12 +844,15 @@ class TheProgressBarBase(ABC, BaseWorker):
             columns = lines = -1
         # if we are at tty
         else:
-            # at this point, we should have a tty
+            # at this point, we should have a tty, or we are forced to have one
             # try to get the terminal size.
-            # if we get a terminal size of 0, 0, for example when piped in some way, read the already found
-            out = os.get_terminal_size()
-            columns = out.columns
-            lines = out.lines
+            # if we get a terminal size of 0, 0, for example when piped in some way, read from the env var
+            try:
+                out = os.get_terminal_size()
+                columns = out.columns
+                lines = out.lines
+            except:
+                columns = lines = 0
             # if we get a zero, look for the env variable for tty size
             if lines == columns == 0:
                 if ENV_VARS.get('tty_size') in os.environ.keys():
