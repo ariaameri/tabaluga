@@ -28,11 +28,11 @@ class BaseWorker:
         # Set the configuration
         self._config = config if config is not None else ConfigParser({})
 
-        # check and process the config
-        self._check_process_config()
-
         # make logger for this instance
         self._log = self._create_logger()
+
+        # check and process the config
+        self._check_process_config()
 
     def print_config(self, depth: int = -1) -> None:
         """Prints the configuration of the instance.
