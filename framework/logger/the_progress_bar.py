@@ -275,6 +275,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Book keeping for the state of the instance
         initial_state_info = {
+            'enabled': self._config.get_or_else('enabled', True),
             'activated': False,  # Whether the instance has been activated---it can be activated only once
             'paused': False,  # Whether we are on pause mode
             'mode': self.Modes.NORMAL,
@@ -401,6 +402,10 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
+
         # If the instance is already activated, skip
         if self.state_info.get('activated') is True:
             return self
@@ -457,6 +462,10 @@ class TheProgressBarBase(ABC, BaseWorker):
     def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
+
         # Stop the run thread
         self.run_thread_info = self.run_thread_info.update({}, {'print.main': None})
 
@@ -492,6 +501,10 @@ class TheProgressBarBase(ABC, BaseWorker):
         This instance
 
         """
+
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
 
         # if pause_print_control is None, set based on whether we are in distributed mode
         if pause_print_control is None:
@@ -536,6 +549,10 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
+
         # If the instance is not paused, skip
         if self.state_info.get('paused') is False:
             return self
@@ -578,6 +595,10 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
+
         if count > 0:
             # Update current item
             self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
@@ -614,6 +635,10 @@ class TheProgressBarBase(ABC, BaseWorker):
         This instance
 
         """
+
+        # if disabled, skip
+        if self.state_info.get('enabled') is False:
+            return self
 
         # reset the communication tasks
         self._reset_communication()
