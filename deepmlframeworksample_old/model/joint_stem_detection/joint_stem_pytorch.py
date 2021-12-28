@@ -332,8 +332,8 @@ class CropWeed(ModelPyTorch):
         name="cropweed_model", 
         input_shape=(3, 384, 512), 
         n_classes=3, 
-        use_semantic_segmentation=True, 
-        use_stem_detection=False,
+        use_plant_segmentation=True,
+        use_stem_center_segmentation=False,
         dropout_p=0.25, 
         filter_multiple_encoder=2, 
         filter_multiple_decoder_semantic=2, 
@@ -375,10 +375,8 @@ class CropWeed(ModelPyTorch):
 
     super(CropWeed, self).__init__(**kwargs) # set name=name
 
-    self.use_semantic_segmentation = use_semantic_segmentation
-    # self.use_instance_segmentation = use_instance_segmentation
-    self.use_stem_detection = use_stem_detection
-    # self.use_coordinate_conv_layer=use_coordinate_conv_layer
+    self.use_plant_segmentation = use_plant_segmentation
+    self.use_stem_center_segmentation = use_stem_center_segmentation
 
     self.encoder = VisualEncoder(
       feature_map_size=(input_shape[1],input_shape[2]), 
@@ -393,19 +391,8 @@ class CropWeed(ModelPyTorch):
       dropout=dropout_p, 
       name="encoder"
       )
-    
-    # if self.use_coordinate_conv_layer:
-    # 	if self.use_coordinate_conv_layer == 1.0:
-    # 		with_r = True
-    # 	else:
-    # 		with_r = False
-      
-    # 	self.encoded_coord_conv = CoordConv(x_dim=int(input_shape[1]/8), y_dim=int(input_shape[2]/8), with_r=with_r, out_channels=filter_multiple_encoder*6, kernel_size=(encoder_kernel_dense_block_width, encoder_kernel_dense_block_height), padding="same", kernel_initializer='he_uniform', data_format='channels_first', name='encoded_coord_conv2d')
-    # 	self.l1_coord_conv = CoordConv(x_dim=int(input_shape[1]/4), y_dim=int(input_shape[2]/4), with_r=with_r, out_channels=filter_multiple_encoder*7, kernel_size=(encoder_kernel_dense_block_width, encoder_kernel_dense_block_height), padding="same", kernel_initializer='he_uniform', data_format='channels_first', name='skip3_coord_conv2d')
-    # 	self.l2_coord_conv = CoordConv(x_dim=int(input_shape[1]/2), y_dim=int(input_shape[2]/2), with_r=with_r, out_channels=filter_multiple_encoder*8+1, kernel_size=(encoder_kernel_dense_block_width, encoder_kernel_dense_block_height), padding="same", kernel_initializer='he_uniform', data_format='channels_first', name='skip2_coord_conv2d')
-    # 	self.l3_coord_conv = CoordConv(x_dim=int(input_shape[1]), y_dim=int(input_shape[2]), with_r=with_r, out_channels=filter_multiple_encoder*11, kernel_size=(encoder_kernel_dense_block_width, encoder_kernel_dense_block_height), padding="same", kernel_initializer='he_uniform', data_format='channels_first', name='skip1_coord_conv2d')
 
-    if self.use_semantic_segmentation:
+    if self.use_plant_segmentation:
       self.semantic_decoder = VisualDecoder(
           in_channels_from_encoder=[3*2*filter_multiple_encoder, (filter_multiple_encoder*8)+1+3*2*filter_multiple_encoder, filter_multiple_encoder*11+3*2*filter_multiple_encoder, filter_multiple_encoder*16+3*2*filter_multiple_encoder],
           prefix="semantic", 
@@ -427,29 +414,7 @@ class CropWeed(ModelPyTorch):
           name="semantic_softmax"
           )
 
-    # if self.use_instance_segmentation:
-    # 	self.instance_decoder = VisualDecoder(prefix="instance", 
-    # 										filter_multiple=filter_multiple_decoder_instance, 
-    # 										kernel_width_dense_block=inst_decoder_kernel_dense_block_width, 
-    # 										kernel_height_dense_block=inst_decoder_kernel_dense_block_height, 
-    # 										kernel_width_upsample=inst_decoder_kernel_upsample_width, 
-    # 										kernel_height_upsample=inst_decoder_kernel_upsample_height, 
-    # 										dropout=dropout_p, 
-    # 										name="instance_decoder")
-    # 	if instance_loss == "VECTOR_LOSS":
-    # 		self.instance_softmax = SoftMaxLayer(n_classes=2, 
-    # 											filter_multiple=filter_multiple_decoder_instance, 
-    # 											kernel_width=kernel_softmax_layer_instance, 
-    # 											kernel_height=kernel_softmax_layer_instance, 
-    # 											name="instance_softmax")
-    # 	elif instance_loss == "DL":
-    # 		self.instance_softmax = SoftMaxLayer(n_classes=feature_space, 
-    # 											filter_multiple=filter_multiple_decoder_instance, 
-    # 											kernel_width=kernel_softmax_layer_instance, 
-    # 											kernel_height=kernel_softmax_layer_instance, 
-    # 											name="instance_softmax")
-      
-    if self.use_stem_detection:
+    if self.use_stem_center_segmentation:
       self.stem_decoder = VisualDecoder(
           in_channels_from_encoder=[3*2*filter_multiple_encoder, (filter_multiple_encoder*8)+1+3*2*filter_multiple_encoder, filter_multiple_encoder*11+3*2*filter_multiple_encoder, filter_multiple_encoder*16+3*2*filter_multiple_encoder],
           prefix="stem", 
@@ -475,26 +440,15 @@ class CropWeed(ModelPyTorch):
     
     encoded, l1, l2, l3 = self.encoder(inputs)
 
-    # if self.use_coordinate_conv_layer:
-    # 	encoded = self.encoded_coord_conv(encoded)
-    # 	l1 = self.l1_coord_conv(l1)
-    # 	l2 = self.l2_coord_conv(l2)
-    # 	l3 = self.l3_coord_conv(l3)
-
     outputs=[]
 
-    if self.use_semantic_segmentation: 
+    if self.use_plant_segmentation:
       self.semantic_features = self.semantic_decoder(encoded, l1=l1, l2=l2, l3=l3)
       self.semantic_features = self.semantic_softmax(self.semantic_features)
       outputs.append(self.semantic_features)
-    
-    # if self.use_instance_segmentation: 
-    #   self.instance_features = self.instance_decoder(encoded, l1=l1, l2=l2, l3=l3)
-    #   self.instance_features = self.instance_softmax(self.instance_features)
-    #   outputs.append(self.instance_features)
 
     
-    if self.use_stem_detection: 
+    if self.use_stem_center_segmentation:
       self.stem_features = self.stem_decoder(encoded, l1=l1, l2=l2, l3=l3)
       self.stem_features = self.stem_softmax(self.stem_features)
       outputs.append(self.stem_features)
