@@ -787,6 +787,32 @@ class Panacea(PanaceaBase):
 
         return check
 
+    def get_keys(self) -> List[str]:
+        """
+        Returns the keys in this instance.
+
+        Returns
+        -------
+        List[str]
+            list of all the keys
+
+        """
+
+        return list(self._parameters.keys())
+
+    def get_values(self) -> List[Any]:
+        """
+        Returns the values in this instance.
+
+        Returns
+        -------
+        List[Any]
+            list of all the values
+
+        """
+
+        return list(self._parameters.values())
+
     # Modifications
 
     def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
