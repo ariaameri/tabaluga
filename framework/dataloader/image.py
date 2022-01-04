@@ -75,6 +75,6 @@ class ImageLoader(dataloader.DataLoader):
         """
 
         extension = file_name.split('.')[-1].lower()
-        accepted_extension = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'eps']
+        accepted_extension = ['jpg', 'jpeg', 'png', 'gif', 'tif', 'tiff', 'eps', 'webp']
 
         return True if extension in accepted_extension else False
