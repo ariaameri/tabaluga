@@ -3098,7 +3098,7 @@ class Modification:
             filter_dict \
                 .get('_special') \
                 .get('_value') \
-                .filter(panacea.get_option('_value').filter(lambda x: issubclass(type(panacea), PanaceaLeaf))) \
+                .filter(panacea.get_value_option('_value').filter(lambda x: issubclass(type(panacea), PanaceaLeaf))) \
                 if filter_dict.get('_special').get('_value') is not None \
                 else True
 
