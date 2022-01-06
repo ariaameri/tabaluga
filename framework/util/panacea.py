@@ -9,7 +9,7 @@ from .option import Some, nothing, Option
 from abc import ABC, abstractmethod
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
-
+import json
 
 # a list of restricted names that are used and a key name should not collide with these
 _restricted_names = ['_value', '_self', '_bc', '_key_name']
@@ -595,6 +595,19 @@ class Panacea(PanaceaBase):
         out = {key: item.dict_representation() for key, item in self._parameters.items()}
 
         return out
+
+    def save_map(self,
+                 location:str):
+        try:
+            file = open(location, "w+")
+            file.write(
+                json.dumps(self.dict_representation())
+            )
+            file.close()
+
+        except Exception as e:
+
+            raise AttributeError(f'save_map failed {self.__class__.__name__}!')
 
     def str_representation(self, name: str, depth: int = -1) -> str:
         """Helper function to create a string representation of the instance.

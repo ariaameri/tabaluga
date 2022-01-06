@@ -28,6 +28,26 @@ class Evaluation(BaseWorker, ABC):
 
         pass
 
+    @abstractmethod
+    def __init_metric__(self, x: dict):
+        pass
+
+    @abstractmethod
+    def __update_metric__(self, x: dict):
+        pass
+
+    @abstractmethod
+    def __reset_metric__(self, x: dict):
+        pass
+
+    @abstractmethod
+    def save_metric(self, location: str):
+        pass
+
+    @abstractmethod
+    def __compute_metric__(self):
+        pass
+
 
 class EvaluationManager(BaseEventManager, ABC):
     """Abstract class to manage instances of Eval class."""
