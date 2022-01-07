@@ -1465,6 +1465,13 @@ class Modification:
             OR = '$or'
             AND = '$and'
 
+        # List of special modifiers
+        class Modifiers(Enum):
+            VALUE = '_value'
+            SELF = '_self'
+            BC = '_bc'
+            KEYNAME = '_key_name'
+
         def __init__(self, query: Dict):
             """Initializer to the class which will parse the query and create the corresponding actions.
 
@@ -1864,6 +1871,12 @@ class Modification:
             THREAD_MAX_COUNT = 'thread_max_count'
             PROCESS_MAX_COUNT = 'process_max_count'
             RECURSIVE = 'recursive'
+
+        # List of special modifiers
+        class Modifiers(Enum):
+            VALUE = '_value'
+            SELF = '_self'
+            KEYNAME = '_key_name'
 
         def __init__(self, query: Dict, condition_dict: Dict = None):
             """Initializer to the class which will parse the update rule/query and create the corresponding actions.
@@ -3502,5 +3515,7 @@ class Modification:
 
 # constants
 FILTER_OPERATIONS = Modification.Filter.Operations
+FILTER_MODIFIERS = Modification.Filter.Modifiers
 UPDATE_OPERATIONS = Modification.Update.Operations
+UPDATE_MODIFIERS = Modification.Update.Modifiers
 UPDATE_CONDITIONALS = Modification.Update.Conditionals
