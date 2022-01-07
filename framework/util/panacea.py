@@ -12,7 +12,12 @@ from concurrent.futures import ThreadPoolExecutor
 
 
 # a list of restricted names that are used and a key name should not collide with these
-_restricted_names = ['_value', '_self', '_bc', '_key_name']
+_restricted_filter_names = {'_value', '_self', '_bc', '_key_name'}
+_restricted_update_names = {'_value', '_self', '_bc', '_key_name', '_recursive'}
+# total restricted names is a collection of the filter and update restricted names and other name
+_restricted_names = \
+    _restricted_filter_names.union(_restricted_update_names)\
+        .union({})  # other names
 
 
 class PanaceaBase(ABC):
@@ -3034,8 +3039,18 @@ class Modification:
         # The `_special` key contains all the special selectors that start with '_'
         processed_filter_dict = \
             {
-                'field': {key: value for key, value in processed_filter_dict.items() if not key.startswith('_')},
-                '_special': {key: value for key, value in processed_filter_dict.items() if key.startswith('_')}
+                'field': {
+                    key: value
+                    for key, value
+                    in processed_filter_dict.items()
+                    if key not in _restricted_filter_names
+                },
+                '_special': {
+                    key: value
+                    for key, value
+                    in processed_filter_dict.items()
+                    if key in _restricted_filter_names
+                }
             }
 
         return processed_filter_dict
@@ -3294,8 +3309,18 @@ class Modification:
         # The `_special` key contains all the special selectors that start with '_'
         processed_update_dict = \
             {
-                'field': {key: value for key, value in processed_update_dict.items() if not key.startswith('_')},
-                '_special': {key: value for key, value in processed_update_dict.items() if key.startswith('_')}
+                'field': {
+                    key: value
+                    for key, value
+                    in processed_update_dict.items()
+                    if key not in _restricted_update_names
+                },
+                '_special': {
+                    key: value
+                    for key, value
+                    in processed_update_dict.items()
+                    if key in _restricted_update_names
+                }
             }
 
         return processed_update_dict
