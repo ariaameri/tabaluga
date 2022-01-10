@@ -1,9 +1,9 @@
-from ..base.base import BaseWorker, BaseEventManager
+from ..loss.loss import Loss, LossManager
 from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 
 
-class Evaluation(BaseWorker, ABC):
+class Evaluation(Loss):
     """Abstract class to calculate the loss function value."""
 
     def __init__(self, config: ConfigParser = None):
@@ -29,15 +29,15 @@ class Evaluation(BaseWorker, ABC):
         pass
 
     @abstractmethod
-    def __init_metric__(self, x: dict):
+    def _init_metric(self, x: dict):
         pass
 
     @abstractmethod
-    def __update_metric__(self, x: dict):
+    def _update_metric(self, x: dict):
         pass
 
     @abstractmethod
-    def __reset_metric__(self, x: dict):
+    def _reset_metric(self, x: dict):
         pass
 
     @abstractmethod
@@ -45,11 +45,11 @@ class Evaluation(BaseWorker, ABC):
         pass
 
     @abstractmethod
-    def __compute_metric__(self):
+    def _compute_metric(self):
         pass
 
 
-class EvaluationManager(BaseEventManager, ABC):
+class EvaluationManager(LossManager):
     """Abstract class to manage instances of Eval class."""
 
     def __init__(self, config: ConfigParser = None):

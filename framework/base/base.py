@@ -382,6 +382,18 @@ class BaseEventWorker(BaseWorker):
 
         pass
 
+    def on_predict_batch_end(self, info: Dict = None):
+        """Method to be called at the event of end of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
     def on_train_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.
 
@@ -745,6 +757,20 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         for worker in self.workers:
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_batch_end(info)
+
+    def on_predict_batch_end(self, info: Dict = None):
+        """Method to be called at the event of end of each training batch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_predict_batch_end(info)
 
     def on_train_batch_begin(self, info: Dict = None):
         """Method to be called at the event of beginning of each training batch.

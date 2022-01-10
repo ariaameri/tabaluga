@@ -2,6 +2,7 @@ from ..base.base import BaseWorker, BaseEventManager
 from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 
+_total_string: str = 'total'
 
 class Loss(BaseWorker, ABC):
     """Abstract class to calculate the loss function value."""
@@ -9,6 +10,8 @@ class Loss(BaseWorker, ABC):
     def __init__(self, config: ConfigParser = None):
 
         super().__init__(config)
+        self._total_string: str = _total_string
+
 
     @abstractmethod
     def calculate(self, x: dict):
@@ -35,3 +38,4 @@ class LossManager(BaseEventManager, ABC):
     def __init__(self, config: ConfigParser = None):
 
         super().__init__(config)
+        self._total_string: str = _total_string

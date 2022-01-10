@@ -1,37 +1,16 @@
-from ..base import base
+from ..trainer.trainer import Trainer
 from ..util.config import ConfigParser
-from ..util.data_muncher import DataMuncher
-from ..callback.callback import CallbackManager, Callback
-from ..model.model import ModelManager, Model
-from ..logger.logger import Logger
+from typing import List, Dict
 from ..logger.log_hug import LogHug
-from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
-import signal
-import sys
-import os
-import traceback
 
 
-class Predictor(base.BaseEventManager, ABC):
-    """A class to help with training a neural network."""
+class Predictor(Trainer, ABC):
+    """A class to help with prediction of neural network."""
 
     def __init__(self, config: ConfigParser = None):
-        """Initializer for the this instance of the class"""
-
-        # initialize mpi
-        from ..communicator import mpi
-        mpi.init(config.get_or_empty("mpi"))
-
-        # initialize rabbitmq if exist
-        if mpi.mpi_communicator.is_distributed() is True:
-            from ..communicator import rabbitmq
-            rabbitmq.init(config.get_or_else("rabbitmq", ConfigParser()))
 
         super().__init__(config)
-
-        # initialize the console handler
-        self._console_handler.activate()
 
         # Total number of epochs, total batch count, batch size, current epoch, and current batch number
         self.epochs: int = 1
@@ -40,21 +19,8 @@ class Predictor(base.BaseEventManager, ABC):
         self.epoch: int = 0
         self.batch: int = 0
 
-        # Set placeholders for the train and validation data
-        self.data: DataMuncher = DataMuncher()
-
-        # Set placeholder for model
-        self.model: ModelManager = self.create_model()
-
-        # Create history list for keeping the history of the net
-        self.history = []
-        # Make dummy variables
+        self.train_info_dict = None
         self.val_info_dict = {}
-        self.train_statistics = LogHug()
-
-        # Set the universal logger
-        self._universal_logger = self._create_universal_logger()
-        self.set_universal_logger(self._universal_logger)
 
         # Register OS signals to be caught
         self._register_signal_catch()
@@ -62,17 +28,8 @@ class Predictor(base.BaseEventManager, ABC):
         # Register exception hook to be caught
         self._register_exception_hook()
 
-    def create_model(self) -> Union[ModelManager, Model]:
-        """Creates an instance of the model and returns it."""
-
+    def train(self) -> List[Dict]:
         pass
-
-    def _create_universal_logger(self) -> Logger:
-        """Creates a universal logger instance and returns it."""
-
-        logger = Logger(self._config.get('universal_logger'))
-
-        return logger
 
     def prediction(self) -> List[Dict]:
         """Performs the prediction.
@@ -154,6 +111,7 @@ class Predictor(base.BaseEventManager, ABC):
             self.on_val_batch_begin()
 
             self.val_info_dict = self.val_one_batch()
+
             self.train_statistics = \
                 self.train_statistics.update(
                     {'_bc': {'$regex': 'Validation'}},
@@ -162,6 +120,7 @@ class Predictor(base.BaseEventManager, ABC):
                 )
 
             self.on_val_batch_end()
+            self.on_predict_batch_end()
 
         return self.val_info_dict
 
@@ -176,60 +135,3 @@ class Predictor(base.BaseEventManager, ABC):
         """
 
         raise NotImplementedError
-
-    def signal_catcher(self, os_signal, frame):
-        """Catches an OS signal and calls it on its workers."""
-
-        # Take care of signals
-        if os_signal == signal.SIGINT:
-            info = {'signal': os_signal}
-            self.on_os_signal(info)
-            self._universal_log('Interrupt signal received, exiting...', 'error')
-            sys.exit(1)
-        elif os_signal == signal.SIGTERM:
-            info = {'signal': os_signal}
-            self.on_os_signal(info)
-            self._universal_log('Termination signal received, exiting...', 'error')
-            sys.exit(0)
-        elif os_signal == signal.SIGTSTP:
-            info = {'signal': os_signal}
-            self.on_os_signal(info)
-            self._universal_log('Terminal stop signal received.', 'warning')
-            signal.signal(os_signal, signal.SIG_DFL)
-            os.kill(os.getpid(), os_signal)
-        elif os_signal == signal.SIGCONT:
-            info = {'signal': os_signal}
-            self.on_os_signal(info)
-            self._universal_log('Continue signal received.', 'info')
-
-    def _register_signal_catch(self):
-        """Registers what signals should be caught by this instance."""
-
-        signal.signal(signal.SIGINT, self.signal_catcher)
-        signal.signal(signal.SIGTERM, self.signal_catcher)
-        signal.signal(signal.SIGTSTP, self.signal_catcher)
-        signal.signal(signal.SIGCONT, self.signal_catcher)
-
-    def exception_hook(self, type, value, tracebacks: traceback):
-        """Method to be called when exception happens"""
-
-        # assuming the error does not happen in universal log!!!
-        self._universal_log("Received an exception", level='error')
-        self._universal_log(f"Exception type: {type}", level='error')
-        self._universal_log(f"Exception value: {value}", level='error')
-        exception = "".join(traceback.format_tb(tracebacks))
-        self._universal_log(f"Exception traceback: \n{exception}", level='error')
-
-        # now, terminate ourselves!
-        self.terminate()
-
-    def _register_exception_hook(self):
-        """Registers the global exception hook."""
-
-        sys.excepthook = self.exception_hook
-
-    def __del__(self):
-        """Method to be called when the object is being deleted."""
-
-        # deactivate the console handler
-        self._console_handler.deactivate()
