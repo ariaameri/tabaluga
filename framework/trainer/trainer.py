@@ -4,7 +4,6 @@ from ..util.data_muncher import DataMuncher
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
 from ..logger.logger import Logger
-from ..logger.log_hug import LogHug
 from typing import Union, List, Dict, Type
 from abc import ABC, abstractmethod
 import signal
@@ -52,16 +51,16 @@ class Trainer(base.BaseEventManager, ABC):
         # Create history list for keeping the history of the net
         self.history = []  # do not use this! the content of this variable can change in the future
         # Make dummy variables
-        self.train_batch_info: LogHug = LogHug()  # keep the current batch info
-        self.val_batch_info: LogHug = LogHug()  # keep the current batch info
-        self.test_batch_info: LogHug = LogHug()  # keep the current batch info
-        self.train_epoch_info: List[LogHug] = []  # keep the current epoch info
-        self.val_epoch_info: List[LogHug] = []  # keep the current epoch info
-        self.test_epoch_info: List[LogHug] = []  # keep the current epoch info
-        self.train_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
-        self.val_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
-        self.test_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
-        self.train_current_statistics = LogHug()  # current statistics/info
+        self.train_batch_info: DataMuncher = DataMuncher()  # keep the current batch info
+        self.val_batch_info: DataMuncher = DataMuncher()  # keep the current batch info
+        self.test_batch_info: DataMuncher = DataMuncher()  # keep the current batch info
+        self.train_epoch_info: List[DataMuncher] = []  # keep the current epoch info
+        self.val_epoch_info: List[DataMuncher] = []  # keep the current epoch info
+        self.test_epoch_info: List[DataMuncher] = []  # keep the current epoch info
+        self.train_life_info: List[List[DataMuncher]] = []  # keep info across epochs for the whole thing
+        self.val_life_info: List[List[DataMuncher]] = []  # keep info across epochs for the whole thing
+        self.test_life_info: List[List[DataMuncher]] = []  # keep info across epochs for the whole thing
+        self.train_current_statistics = DataMuncher()  # current statistics/info
 
         # Set the universal logger
         self._universal_logger = self._create_universal_logger()
@@ -85,12 +84,12 @@ class Trainer(base.BaseEventManager, ABC):
 
         return logger
 
-    def train(self) -> List[Dict]:
+    def train(self) -> List[DataMuncher]:
         """Performs the training and validation.
 
         Returns
         -------
-        A List[Dict] containing the history of the train/validation process
+        A List[DataMuncher] containing the history of the train/validation process
 
         """
 
@@ -121,24 +120,24 @@ class Trainer(base.BaseEventManager, ABC):
 
         return self.history
 
-    def one_epoch(self) -> LogHug:
+    def one_epoch(self) -> DataMuncher:
         """Performs the training and validation for one epoch.
 
         Returns
         -------
-        A LogHug containing the history of the process
+        A DataMuncher containing the history of the process
 
         """
 
         # Empty out the train statistics
-        self.train_current_statistics = LogHug()
+        self.train_current_statistics = DataMuncher()
 
         # Training
         if self.epoch == 0:
             self.on_train_begin()
 
         self.on_train_epoch_begin()
-        self.train_epoch_info: List[LogHug] = self.train_one_epoch()
+        self.train_epoch_info: List[DataMuncher] = self.train_one_epoch()
         # bookkeeping
         self.train_life_info.append(self.train_epoch_info)
         self.on_train_epoch_end()
@@ -151,7 +150,7 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_begin()
 
         self.on_val_epoch_begin()
-        self.val_epoch_info: List[LogHug] = self.val_one_epoch()
+        self.val_epoch_info: List[DataMuncher] = self.val_one_epoch()
         # bookkeeping
         self.val_life_info.append(self.val_epoch_info)
         self.on_val_epoch_end()
@@ -159,7 +158,7 @@ class Trainer(base.BaseEventManager, ABC):
         if self.epoch == (self.epochs - 1):
             self.on_val_end()
 
-        epoch_info = LogHug({
+        epoch_info = DataMuncher({
             'epoch': self.epoch,
             'train': self.train_epoch_info,
             'validation': self.val_epoch_info,
@@ -167,12 +166,12 @@ class Trainer(base.BaseEventManager, ABC):
 
         return epoch_info
 
-    def train_one_epoch(self) -> List[LogHug]:
+    def train_one_epoch(self) -> List[DataMuncher]:
         """Trains the neural network for one epoch.
 
         Returns
         -------
-        A list of LogHug containing the history of the process
+        A list of DataMuncher containing the history of the process
 
         """
 
@@ -185,7 +184,7 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_train_batch_begin()
 
             # train on batch
-            self.train_batch_info: LogHug = self.train_one_batch()
+            self.train_batch_info: DataMuncher = self.train_one_batch()
 
             # keep the result
             # decided to update the train epoch info incrementally in case it was needed
@@ -212,12 +211,12 @@ class Trainer(base.BaseEventManager, ABC):
 
         return self.train_epoch_info
 
-    def val_one_epoch(self) -> List[LogHug]:
+    def val_one_epoch(self) -> List[DataMuncher]:
         """Performs validation for the neural network for one epoch.
 
         Returns
         -------
-        A list of LogHug containing the history of the process
+        A list of DataMuncher containing the history of the process
 
         """
 
@@ -229,7 +228,7 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_batch_begin()
 
             # validate on batch
-            self.val_batch_info: LogHug = self.val_one_batch()
+            self.val_batch_info: DataMuncher = self.val_one_batch()
 
             # keep the result
             # decided to update the validation epoch info incrementally in case it was needed
@@ -256,24 +255,24 @@ class Trainer(base.BaseEventManager, ABC):
         return self.val_epoch_info
 
     @abstractmethod
-    def train_one_batch(self) -> LogHug:
+    def train_one_batch(self) -> DataMuncher:
         """Trains the neural network for one batch.
 
         Returns
         -------
-        A LogHug containing the history of the process
+        A DataMuncher containing the history of the process
 
         """
 
         raise NotImplementedError
 
     @abstractmethod
-    def val_one_batch(self) -> LogHug:
+    def val_one_batch(self) -> DataMuncher:
         """Performs validation for the neural network for one batch.
 
         Returns
         -------
-        A LogHug containing the history of the process
+        A DataMuncher containing the history of the process
 
         """
 
