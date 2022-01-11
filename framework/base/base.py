@@ -530,6 +530,30 @@ class BaseEventWorker(BaseWorker):
 
         pass
 
+    def on_test_epoch_begin(self, info: Dict = None):
+        """Method to be called at the event of beginning of each test epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
+    def on_test_epoch_end(self, info: Dict = None):
+        """Method to be called at the event of end of each test epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        pass
+
     # Exception event methods
 
     def on_os_signal(self, info: Dict = None):
@@ -917,6 +941,34 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         for worker in self.workers:
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_batch_end(info)
+
+    def on_test_epoch_begin(self, info: Dict = None):
+        """Method to be called at the event of beginning of each test epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_epoch_begin(info)
+
+    def on_test_epoch_end(self, info: Dict = None):
+        """Method to be called at the event of end of each test epoch.
+
+        Parameters
+        ----------
+        info : dict
+            The information needed
+
+        """
+
+        for worker in self.workers:
+            if issubclass(type(worker), BaseEventWorker):
+                worker.on_test_epoch_end(info)
 
     # Exception event methods
 
