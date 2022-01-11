@@ -190,7 +190,7 @@ class SampleLoggerCallback(ManagerCallback):
 
         info = {
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics,
+            'stat': self.trainer.train_current_statistics,
         }
 
         self.workers['logger'].on_batch_end({
@@ -203,14 +203,14 @@ class SampleLoggerCallback(ManagerCallback):
         self.workers['logger'].on_val_epoch_begin({
             'number_of_iterations': self.trainer.number_of_iterations,
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics,
+            'stat': self.trainer.train_current_statistics,
         })
 
     def on_val_batch_end(self, info: Dict = None):
 
         info = {
             'epoch': self.trainer.epoch,
-            'stat': self.trainer.train_statistics
+            'stat': self.trainer.train_current_statistics
         }
 
         self.workers['logger'].on_val_batch_end({
