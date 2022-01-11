@@ -115,7 +115,7 @@ class TrainStatExpAverage(Callback):
     def on_batch_end(self, info: Dict = None):
 
         # Get the train statistics
-        train_stat = self.trainer.train_statistics.find_one({'_bc': {'$regex': 'Train$'}})
+        train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Train$'}})
 
         if train_stat.is_empty():
             return
@@ -123,8 +123,8 @@ class TrainStatExpAverage(Callback):
         train_stat = train_stat.get()
 
         # Update the train statistics
-        self.trainer.train_statistics = \
-            self.trainer.train_statistics.update(
+        self.trainer.train_current_statistics = \
+            self.trainer.train_current_statistics.update(
                 {'Train': {'$exists': 1}},
                 {'Train': self.get_exp_average(train_stat)}
             )
@@ -132,7 +132,7 @@ class TrainStatExpAverage(Callback):
     def on_val_batch_end(self, info: Dict = None):
 
         # Get the train statistics
-        train_stat = self.trainer.train_statistics.find_one({'_bc': {'$regex': 'Validation$'}})
+        train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Validation$'}})
 
         if train_stat.is_empty():
             return
@@ -140,8 +140,8 @@ class TrainStatExpAverage(Callback):
         train_stat = train_stat.get()
 
         # Update the train statistics
-        self.trainer.train_statistics = \
-            self.trainer.train_statistics.update(
+        self.trainer.train_current_statistics = \
+            self.trainer.train_current_statistics.update(
                 {'Validation': {'$exists': 1}},
                 {'Validation': self.get_exp_average(train_stat)}
             )

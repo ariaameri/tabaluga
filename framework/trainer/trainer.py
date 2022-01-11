@@ -12,6 +12,9 @@ import sys
 import os
 import traceback
 
+BATCH_STRING = 'batch'
+EPOCH_STRING = 'batch'
+
 
 class Trainer(base.BaseEventManager, ABC):
     """A class to help with training a neural network."""
@@ -47,11 +50,18 @@ class Trainer(base.BaseEventManager, ABC):
         self.model: ModelManager = self.create_model()
 
         # Create history list for keeping the history of the net
-        self.history = []
+        self.history = []  # do not use this! the content of this variable can change in the future
         # Make dummy variables
-        self.train_info_dict = {}
-        self.val_info_dict = {}
-        self.train_statistics = LogHug()
+        self.train_batch_info: LogHug = LogHug()  # keep the current batch info
+        self.val_batch_info: LogHug = LogHug()  # keep the current batch info
+        self.test_batch_info: LogHug = LogHug()  # keep the current batch info
+        self.train_epoch_info: List[LogHug] = []  # keep the current epoch info
+        self.val_epoch_info: List[LogHug] = []  # keep the current epoch info
+        self.test_epoch_info: List[LogHug] = []  # keep the current epoch info
+        self.train_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
+        self.val_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
+        self.test_life_info: List[List[LogHug]] = []  # keep info across epochs for the whole thing
+        self.train_current_statistics = LogHug()  # current statistics/info
 
         # Set the universal logger
         self._universal_logger = self._create_universal_logger()
@@ -101,8 +111,9 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_epoch_end()
 
             # This is the end of the epoch, so, epoch number is incremented
-            # Also, history is recorder
             self.epoch += 1
+
+            # Bookkeeping
             self.history.append(epoch_history)
 
         # Everything is finished
@@ -110,24 +121,26 @@ class Trainer(base.BaseEventManager, ABC):
 
         return self.history
 
-    def one_epoch(self) -> Dict:
+    def one_epoch(self) -> LogHug:
         """Performs the training and validation for one epoch.
 
         Returns
         -------
-        A dictionary containing the history of the process
+        A LogHug containing the history of the process
 
         """
 
         # Empty out the train statistics
-        self.train_statistics = LogHug()
+        self.train_current_statistics = LogHug()
 
         # Training
         if self.epoch == 0:
             self.on_train_begin()
 
         self.on_train_epoch_begin()
-        train_info_dict = self.train_one_epoch()
+        self.train_epoch_info: List[LogHug] = self.train_one_epoch()
+        # bookkeeping
+        self.train_life_info.append(self.train_epoch_info)
         self.on_train_epoch_end()
 
         if self.epoch == (self.epochs - 1):
@@ -138,97 +151,129 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_begin()
 
         self.on_val_epoch_begin()
-        val_info_dict = self.val_one_epoch()
+        self.val_epoch_info: List[LogHug] = self.val_one_epoch()
+        # bookkeeping
+        self.val_life_info.append(self.val_epoch_info)
         self.on_val_epoch_end()
 
         if self.epoch == (self.epochs - 1):
             self.on_val_end()
 
-        epoch_dict = {
+        epoch_info = LogHug({
             'epoch': self.epoch,
-            **train_info_dict,
-            **val_info_dict
-        }
+            'train': self.train_epoch_info,
+            'validation': self.val_epoch_info,
+        })
 
-        return epoch_dict
+        return epoch_info
 
-    def train_one_epoch(self) -> Dict:
+    def train_one_epoch(self) -> List[LogHug]:
         """Trains the neural network for one epoch.
 
         Returns
         -------
-        A dictionary containing the history of the process
+        A list of LogHug containing the history of the process
 
         """
 
         # Make Train entry
-        self.train_statistics = self.train_statistics.update({}, {'$set': {'Train': {}}})
+        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Train': {}}})
 
         for self.batch in range(self.number_of_iterations):
 
             self.on_batch_begin()
             self.on_train_batch_begin()
 
-            self.train_info_dict = self.train_one_batch()
-            self.train_statistics = \
-                self.train_statistics.update(
-                    {'_bc': {'$regex': 'Train'}},
-                    {'$set': self.train_info_dict},
-                    {'recursive': True}
+            # train on batch
+            self.train_batch_info: LogHug = self.train_one_batch()
+
+            # keep the result
+            # decided to update the train epoch info incrementally in case it was needed
+            self.train_epoch_info.append(
+                # add additional info
+                self.train_batch_info.update(
+                    {},
+                    {
+                        '$set_only': {
+                            EPOCH_STRING: self.epoch,
+                            BATCH_STRING: self.batch,
+                        }
+                    }
+                )
+            )
+            self.train_current_statistics = \
+                self.train_current_statistics.update(
+                    {'Train': {'$exists': 1}},
+                    {'$set': {'Train': self.train_batch_info}},
                 )
 
             self.on_train_batch_end()
             self.on_batch_end()
 
-        return self.train_info_dict
+        return self.train_epoch_info
 
-    def val_one_epoch(self) -> Dict:
+    def val_one_epoch(self) -> List[LogHug]:
         """Performs validation for the neural network for one epoch.
 
         Returns
         -------
-        A dictionary containing the history of the process
+        A list of LogHug containing the history of the process
 
         """
 
         # Make Validation entry
-        self.train_statistics = self.train_statistics.update({}, {'$set': {'Validation': {}}})
+        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Validation': {}}})
 
         for self.batch in range(self.number_of_iterations):
 
             self.on_val_batch_begin()
 
-            self.val_info_dict = self.val_one_batch()
-            self.train_statistics = \
-                self.train_statistics.update(
-                    {'_bc': {'$regex': 'Validation'}},
-                    {'$set': self.val_info_dict},
-                    {'recursive': True}
+            # validate on batch
+            self.val_batch_info: LogHug = self.val_one_batch()
+
+            # keep the result
+            # decided to update the validation epoch info incrementally in case it was needed
+            self.val_epoch_info.append(
+                # add additional info
+                self.val_batch_info.update(
+                    {},
+                    {
+                        '$set_only': {
+                            EPOCH_STRING: self.epoch,
+                            BATCH_STRING: self.batch,
+                        }
+                    }
+                )
+            )
+            self.train_current_statistics = \
+                self.train_current_statistics.update(
+                    {'Validation': {'$exists': 1}},
+                    {'$set': {'Validation': self.train_batch_info}},
                 )
 
             self.on_val_batch_end()
 
-        return self.val_info_dict
+        return self.val_epoch_info
 
     @abstractmethod
-    def train_one_batch(self) -> Dict:
+    def train_one_batch(self) -> LogHug:
         """Trains the neural network for one batch.
 
         Returns
         -------
-        A dictionary containing the history of the process
+        A LogHug containing the history of the process
 
         """
 
         raise NotImplementedError
 
     @abstractmethod
-    def val_one_batch(self) -> Dict:
+    def val_one_batch(self) -> LogHug:
         """Performs validation for the neural network for one batch.
 
         Returns
         -------
-        A dictionary containing the history of the process
+        A LogHug containing the history of the process
 
         """
 
