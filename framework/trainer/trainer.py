@@ -84,6 +84,31 @@ class Trainer(base.BaseEventManager, ABC):
 
         return logger
 
+    def train_and_test(self) -> List[DataMuncher]:
+        """Performs the training, validation, and testing.
+
+        Returns
+        -------
+        A List[DataMuncher] containing the history of the train/validation/testing process
+
+        """
+
+        self.epoch = 0
+
+        # Everything is beginning
+        self.on_begin()
+
+        # do the training
+        self.train()
+
+        # do the testing
+        self.test()
+
+        # Everything is finished
+        self.on_end()
+
+        return self.history
+
     def train(self) -> List[DataMuncher]:
         """Performs the training and validation.
 
@@ -92,11 +117,6 @@ class Trainer(base.BaseEventManager, ABC):
         A List[DataMuncher] containing the history of the train/validation process
 
         """
-
-        self.epoch = 0
-
-        # Everything is beginning
-        self.on_begin()
 
         while self.epoch < self.epochs:
 
@@ -114,9 +134,6 @@ class Trainer(base.BaseEventManager, ABC):
 
             # Bookkeeping
             self.history.append(epoch_history)
-
-        # Everything is finished
-        self.on_end()
 
         return self.history
 
@@ -254,6 +271,77 @@ class Trainer(base.BaseEventManager, ABC):
 
         return self.val_epoch_info
 
+    def test(self) -> List[DataMuncher]:
+        """ Performs the testing.
+
+        Returns
+        -------
+        A list of DataMuncher containing the history of the process
+
+        """
+
+        # test is beginning
+        self.on_test_begin()
+
+        # the only test epoch is beginning
+        self.on_test_epoch_begin()
+
+        # do one epoch of test
+        epoch_history = self.test_one_epoch()
+
+        # Bookkeeping
+        self.history.append(epoch_history)
+
+        # the only test epoch is beginning
+        self.on_test_epoch_end()
+
+        # test is done
+        self.on_test_end()
+
+        return self.history
+
+    def test_one_epoch(self) -> List[DataMuncher]:
+        """Tests the neural network for one epoch.
+
+        Returns
+        -------
+        A list of DataMuncher containing the history of the process
+
+        """
+
+        # Make Test entry
+        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Test': {}}})
+
+        for self.batch in range(self.number_of_iterations):
+
+            self.on_test_batch_begin()
+
+            # test on batch
+            self.test_batch_info: DataMuncher = self.test_one_batch()
+
+            # keep the result
+            # decided to update the train epoch info incrementally in case it was needed
+            self.test_epoch_info.append(
+                # add additional info
+                self.test_batch_info.update(
+                    {},
+                    {
+                        '$set_only': {
+                            BATCH_STRING: self.batch,
+                        }
+                    }
+                )
+            )
+            self.train_current_statistics = \
+                self.train_current_statistics.update(
+                    {'Test': {'$exists': 1}},
+                    {'$set': {'Test': self.test_batch_info}},
+                )
+
+            self.on_test_batch_end()
+
+        return self.test_epoch_info
+
     @abstractmethod
     def train_one_batch(self) -> DataMuncher:
         """Trains the neural network for one batch.
@@ -269,6 +357,18 @@ class Trainer(base.BaseEventManager, ABC):
     @abstractmethod
     def val_one_batch(self) -> DataMuncher:
         """Performs validation for the neural network for one batch.
+
+        Returns
+        -------
+        A DataMuncher containing the history of the process
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def test_one_batch(self) -> DataMuncher:
+        """Performs test for the neural network for one batch.
 
         Returns
         -------
