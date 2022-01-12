@@ -5,11 +5,14 @@ errors.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Type, Callable, TypeVar, Generic
 from .option import Some, nothing, Option
 
+T = TypeVar('T')  # Ok type
+S = TypeVar('S')  # Err type
 
-class Result(ABC):
+
+class Result(Generic[T, S], ABC):
     """Abstract Result class. It represents the result of an operation that can either succeed and have a value or
     can fail and have an error. it is abstract and its has two subclasses, OK and Err, to represent the two states."""
 
