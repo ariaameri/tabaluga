@@ -1193,6 +1193,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Flag for if we should load the data with multithreading
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
         self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
+        if self.multithreading is True:
+            self.thread_pool = ThreadPoolExecutor(self.thread_count)
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1
@@ -1268,9 +1270,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Load data with multithreading
         if self.multithreading is True:
             # Load the data with threads
-            thread_pool = ThreadPoolExecutor(self.thread_count)
             data = list(
-                    thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
+                    self.thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
                 )
         else:
             data = [
