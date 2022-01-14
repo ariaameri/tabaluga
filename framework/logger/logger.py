@@ -228,6 +228,50 @@ class TheProgressBarLogger(Logger):
         # self._the_progress_bar.set_description_short_after("yellow")
         # self._the_progress_bar.set_description_short_before(f'At epoch {msg_dict["epoch"]}/{self._n_epochs} of {msg_dict["mode"]}:')
 
+    def set_description(
+            self,
+            description_after: str = None,
+            description_before: str = None,
+            description_short_after: str = None,
+            description_short_before: str = None,
+    ):
+        """
+        Sets the descriptions of the bar.
+
+        Parameters
+        ----------
+        description_after: str, optional
+            the description after, if not provided, will not be set
+        description_before: str, optional
+            the description before, if not provided, will not be set
+        description_short_after: str, optional
+            the description short after, if not provided, will not be set
+        description_short_before: str, optional
+            the description short before, if not provided, will not be set
+
+        Returns
+        -------
+
+        """
+
+        # check which description is provided and set it
+        if description_after is not None:
+            self._the_progress_bar.set_description_after(description_after)
+            if self._the_progress_bar_manager is not None:
+                self._the_progress_bar_manager.set_description_after(description_after)
+        if description_before is not None:
+            self._the_progress_bar.set_description_before(description_before)
+            if self._the_progress_bar_manager is not None:
+                self._the_progress_bar_manager.set_description_before(description_before)
+        if description_short_after is not None:
+            self._the_progress_bar.set_description_short_after(description_short_after)
+            if self._the_progress_bar_manager is not None:
+                self._the_progress_bar_manager.set_description_short_after(description_short_after)
+        if description_short_before is not None:
+            self._the_progress_bar.set_description_short_before(description_short_before)
+            if self._the_progress_bar_manager is not None:
+                self._the_progress_bar_manager.set_description_short_before(description_short_before)
+
     def set_aggregator_function_data(self, data: Panacea):
         """
         Sets the aggregator data that is used to process the aggregated string.
