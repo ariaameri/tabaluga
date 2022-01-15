@@ -261,6 +261,13 @@ class SendGatherInfo(Command):
     """Sends the gather info."""
 
 
+@dataclass
+class ReceiveGatherInfo(Command):
+    """Receives and acts upon the gather info."""
+
+    data: DataMuncher
+
+
 class TheProgressBarBase(ABC, BaseWorker):
 
     class Modes(Enum):
@@ -291,9 +298,6 @@ class TheProgressBarBase(ABC, BaseWorker):
                 'main': None,  # daemon thread placeholder for running the update of the progress bar
                 'resume': None,  # daemon thread placeholder for when on pause
             },
-            'gather_info_timer': {
-                'main': None,
-            }
         }
         self.run_thread_info = DataMuncher(initial_run_threads_info)
 
@@ -329,7 +333,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # keep info regarding the sleep times
         # create a channel to talk to the sleep notifier, this is to notify the sleeper to wake up
         r_notifier, w_notifier = multiprocessing.Pipe(duplex=False)
-        r_timer, w_timer = multiprocessing.Pipe(duplex=False) 
+        r_timer, w_timer = multiprocessing.Pipe(duplex=False)
         initial_sleep_timer_info = {
             # channel to talk to the timer
             'notifier': {
@@ -2971,6 +2975,15 @@ class TheProgressBar(TheProgressBarBase):
             }
         })
 
+        # set the gather info timer thread
+        self.run_thread_info = self.run_thread_info.update({}, {
+            '$set': {
+                'gather_info_timer': {
+                    'main': None,
+                }
+            }
+        })
+
         # book keeping for aggregation data in case of distributed run
         self.gather_info_aggregation_data: Any = None
 
@@ -3387,6 +3400,15 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         super().__init__(stdout_handler=stdout_handler, config=config)
 
+        # set the gather info thread
+        self.run_thread_info = self.run_thread_info.update({}, {
+            '$set': {
+                'gather_info': {
+                    'main': None,
+                }
+            }
+        })
+
         # keep worker info
         initial_worker_gather_info = {
             'worker': {
@@ -3400,6 +3422,24 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         self.mpirun_process_info = self._init_mpi_process_info()
 
     # action methods
+
+    def _receive_command(self, command: Command) -> ReceiveResult:
+        """
+        Processes the given command and acts upon it.
+
+        Parameters
+        ----------
+        command : Command
+            received command
+
+        """
+
+        if isinstance(command, ReceiveGatherInfo):
+            self._act_on_gather_info(command.data)
+        else:
+            return super()._receive_command(command)
+
+        return SameReceive()
 
     def activate(self) -> 'TheProgressBarParallelManager':
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
@@ -3422,18 +3462,15 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         if self.state_info.get('role') == self.Roles.MANAGER and mpi.mpi_communicator.is_main_rank():
 
             # run the gather info thread
-            self._make_run_gather_info_timer_thread()
-            self.run_thread_info.get('gather_info.main').start()
+            self._make_run_gather_info_thread()
 
             # run the printer-gatherer thread
-            self._make_printer_gatherer_thread()
-            self.run_thread_info.get('printer_gatherer.main').start()
+            self._make_run_printer_gatherer_thread()
 
             # run the print thread
             self._make_run_print_timer_thread()
-            self.run_thread_info.get('print_timer.main').start()
 
-    def reset(self, return_to_line_number: int = -1) -> 'TheProgressBarParallelManager':
+    def _reset(self, return_to_line_number: int = -1) -> 'TheProgressBarParallelManager':
         """Resets the progress bar and returns its instance.
 
         Parameters
@@ -3448,7 +3485,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         """
 
         # do the resetting
-        super().reset(return_to_line_number=return_to_line_number)
+        super()._reset(return_to_line_number=return_to_line_number)
 
         # reset the worker info
         initial_worker_gather_info = {
@@ -3492,18 +3529,41 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         """
 
-        super().set_number_items(number_of_items)
+        super()._set_number_items(number_of_items)
 
         return self
 
-    def run_gather_info(self) -> None:
+    ## gather info methods
+
+    def _make_run_gather_info_thread(self) -> None:
+        """Makes and run the gather info thread"""
+
+        # now, create the thread object
+        gather_info_thread = threading.Thread(
+            name='gather_info_daemon_thread',
+            target=self._run_gather_info_THREAD,
+            args=(),
+            daemon=True
+        )
+        self.run_thread_info = self.run_thread_info.update({}, {'gather_info.main': gather_info_thread})
+
+        # run the thread
+        self.run_thread_info.get('gather_info.main').start()
+
+    def _run_gather_info_THREAD(self) -> None:
         """Consumes the information from the broker for communication."""
+
+        # NOTE: this method will run in a thread that is not the main thread.
+        # it should only use variables that are NOT subject to change
 
         consumer: rabbitmq.RabbitMQConsumer = self.communication_info.get('gather_info.consumer.consumer')
         consumer.run()
 
-    def _act_on_gather_info(self, body, message: kombu.Message):
+    def _receive_gather_info_THREAD(self, body, message: kombu.Message):
         """Callback handler for when a new message arrives for gather info operation."""
+
+        # NOTE: this method will run in a thread that is not the main thread.
+        # it should only use variables that are NOT subject to change
 
         # we only accept jsons!
         if message.content_type != "application/json":
@@ -3512,11 +3572,25 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         # turn the body, which is json to a data muncher
         data: DataMuncher = DataMuncher(body)
 
+        # send message to self
+        self._send_message_to_self(ReceiveGatherInfo(data))
+
+    def _act_on_gather_info(self, data: DataMuncher) -> None:
+        """
+        Acts on the received data for gather info.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            received data
+
+        """
+
         # only accept the info if it is in the same iteration, i.e. has the same current_iteration_index
         current_iteration_index = self.state_info.get('item.current_iteration_index')
         if \
-                data.get_value_option('current_iteration_index')\
-                .filter(lambda x: x == current_iteration_index)\
+                data.get_value_option('current_iteration_index') \
+                .filter(lambda x: x == current_iteration_index) \
                 .is_empty():
             return
 
@@ -3528,11 +3602,6 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             {},
             {f'worker.{data.get("rank")}': data}
         )
-
-        # if data.get('current_iteration_index') == 3:
-        #     data.print()
-
-        # self._direct_write(self._get_progress_bar_with_spaces())
 
     def _act_on_gather_info_update(self, data: DataMuncher):
         """Update this instance counter based on the received data in gather info process."""
@@ -3559,26 +3628,37 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             updated_item_index - current_item_index
         self.update(count=delta_item_count)
 
-    def run_printer_gatherer(self) -> None:
-        """Consumes the broker information.."""
+    ## printer gatherer methods
+
+    def _make_run_printer_gatherer_thread(self) -> None:
+        """Makes and run the gather info thread"""
+
+        # now, create the thread object
+        gather_info_thread = threading.Thread(
+            name='printer_gatherer_daemon_thread',
+            target=self._run_printer_gatherer_THREAD,
+            args=(),
+            daemon=True
+        )
+        self.run_thread_info = self.run_thread_info.update({}, {'printer_gatherer.main': gather_info_thread})
+
+        # run the thread
+        self.run_thread_info.get('printer_gatherer.main').start()
+
+    def _run_printer_gatherer_THREAD(self) -> None:
+        """Consumes the broker information."""
+
+        # NOTE: this method will run in a thread that is not the main thread.
+        # it should only use variables that are NOT subject to change
 
         consumer: rabbitmq.RabbitMQConsumer = self.communication_info.get('printer_gatherer.consumer.consumer')
         consumer.run()
 
-    def _make_printer_gatherer_thread(self) -> None:
-        """Makes and sets the printer_gatherer thread"""
-
-        # now, create the thread object
-        printer_gatherer_thread = threading.Thread(
-            name='printer_gatherer_daemon_thread',
-            target=self.run_printer_gatherer,
-            args=(),
-            daemon=True
-        )
-        self.run_thread_info = self.run_thread_info.update({}, {'printer_gatherer.main': printer_gatherer_thread})
-
-    def _act_on_printer_gatherer(self, body, message: kombu.Message):
+    def _receive_printer_gatherer_THREAD(self, body, message: kombu.Message):
         """Callback handler for when a new message arrives for printer gatherer operation."""
+
+        # NOTE: this method will run in a thread that is not the main thread.
+        # it should only use variables that are NOT subject to change
 
         # we only accept strings!
         # if message.content_type != "application/json":
@@ -3692,32 +3772,6 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
     # description methods
 
-    def set_description_after(self, description: str) -> None:
-        """Sets the description that comes after the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the description that comes after the progress bar
-
-        """
-
-        # do nothing
-        return
-
-    def set_description_short_after(self, description: str) -> None:
-        """Sets the short description that comes after the progress bar.
-
-        Parameters
-        ----------
-        description : str
-            String to update the short description that comes after the progress bar
-
-        """
-
-        # do nothing
-        return
-
     def _make_and_get_description_after(self, data: DataMuncher = None) -> (str, DataMuncher):
         """Returns the full description that comes after the bar.
 
@@ -3792,6 +3846,11 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             f'\n{prefix}{border_color}\u251C{attr_reset} '.join(worker_progress_bars[:-1]) + \
             f'\n{prefix}{border_color}\u2514{attr_reset} {worker_progress_bars[-1]}'
 
+        # get the description
+        description_after = self._get_bar_description_after()
+        if description_after != '':
+            description_after += '\n\n'
+
         # get the aggregation
         # first, gather all aggregation data
         aggregation_data = \
@@ -3810,6 +3869,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             f'\n' \
             f'{prefix}{border_color}\u25CD{attr_reset}\n' \
             f'{final_bars}\n\n' \
+            f'{description_after}' \
             f'{aggregation_str}'
 
         # construct the data that has to be outputted
@@ -3928,7 +3988,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             rabbitmq.rabbitmq_communicator.consume(
                 name=rabbit_data.get('gather_info.consumer.name'),
                 queue_names=queue_names,
-            ).add_callback([self._act_on_gather_info])
+            ).add_callback([self._receive_gather_info_THREAD])
         self.communication_info = self.communication_info.update(
             {'_bc': {'$regex': r'gather_info$'}},
             {
@@ -3966,7 +4026,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             rabbitmq.rabbitmq_communicator.consume(
                 name=rabbit_data.get('printer_gatherer.consumer.name'),
                 queue_names=[rabbit_data.get('printer_gatherer.queue.name')],
-            ).add_callback([self._act_on_printer_gatherer])
+            ).add_callback([self._receive_printer_gatherer_THREAD])
 
         # update the info
         self.communication_info = self.communication_info.update(
