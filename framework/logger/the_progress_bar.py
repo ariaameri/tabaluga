@@ -58,6 +58,7 @@ gather_info_data_msg_template: DataMuncher = DataMuncher({
                         "average_time_per_update": -np.inf,
                     },
                     "time": {
+                        "initial_run_time": -np.inf,
                         "last_update_time": -np.inf,
                         "initial_progress_bar_time": -np.inf,
                     }
@@ -2068,10 +2069,26 @@ class TheProgressBarBase(ABC, BaseWorker):
         else:
             delta_time_str_since_iteration_beginning = '?'
 
+        # Time elapsed since the beginning of the activation
+        hours = minutes = seconds = np.nan
+        init_activation_time = data.get('statistics.time.initial_run_time')
+        if math.isfinite(init_activation_time):
+            init_time = datetime.datetime.fromtimestamp(init_activation_time)
+            delta_time = now - init_time
+            hours, remainder = divmod(delta_time.seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            delta_time_str_since_activation_beginning = f'{hours:02d}' \
+                                                       f':' \
+                                                       f'{minutes:02d}' \
+                                                       f':' \
+                                                       f'{seconds:02d}'
+        else:
+            delta_time_str_since_activation_beginning = '?'
+
         # update the output
         output_data = output_data.update({}, {
             '$set': {
-                "time_since_beginning_iteration": {
+                "time_since_beginning_activation": {
                     "hours": hours,
                     "minutes": minutes,
                     "seconds": seconds,
@@ -2082,7 +2099,9 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Add the elapsed time to the bar_suffix
         bar_suffix += f' {colored.fg("grey_39")}{delta_time_str_last_update}' \
                       f'{colored.fg("grey_74")} - ' \
-                      f'{delta_time_str_since_iteration_beginning}{colored.attr("reset")}'
+                      f'{delta_time_str_since_iteration_beginning} / ' \
+                      f'{colored.fg("dark_gray")}{delta_time_str_since_activation_beginning}' \
+                      f'{colored.attr("reset")}'
 
         return bar_suffix, output_data
 
@@ -2122,6 +2141,7 @@ class TheProgressBarBase(ABC, BaseWorker):
                         "average_time_per_update": self.statistics_info.get("average.average_time_per_update"),
                     },
                     "time": {
+                        "initial_run_time": self.statistics_info.get("time.initial_run_time"),
                         "last_update_time": self.statistics_info.get("time.last_update_time"),
                         "initial_progress_bar_time": self.statistics_info.get("time.initial_progress_bar_time"),
                     }
