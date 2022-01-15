@@ -2244,8 +2244,8 @@ class TheProgressBarBase(ABC, BaseWorker):
         """
 
         # make sure the short description is single line
-        if len(description.split('\n')) != 1:
-            raise ValueError("short description can only have a single line")
+        # if len(description.split('\n')) != 1:
+        #     raise ValueError("short description can only have a single line")
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
@@ -2277,8 +2277,8 @@ class TheProgressBarBase(ABC, BaseWorker):
         """
 
         # make sure the short description is single line
-        if len(description.split('\n')) != 1:
-            raise ValueError("short description can only have a single line")
+        # if len(description.split('\n')) != 1:
+        #     raise ValueError("short description can only have a single line")
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
