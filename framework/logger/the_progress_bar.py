@@ -151,6 +151,23 @@ def make_rabbit_data():
     })
 
 
+class ReceiveResult:
+    """Base class for all the receive results."""
+    pass
+
+
+class SameReceive(ReceiveResult):
+    """Indicating the same behavior for receiving"""
+
+    pass
+
+
+class EndReceive(ReceiveResult):
+    """Indicating end of receiving"""
+
+    pass
+
+
 class Command:
     """Base class for all the commands."""
     pass
@@ -522,37 +539,64 @@ class TheProgressBarBase(ABC, BaseWorker):
             command: Command = queue.get()
 
             # process the command
-            if isinstance(command, Activate):
-                self._activate()
-            elif isinstance(command, Deactivate):
-                self._deactivate()
+            result: ReceiveResult = self._receive_command(command)
+
+            if isinstance(result, SameReceive):
+                pass
+            elif isinstance(result, EndReceive):
                 break
-            elif isinstance(command, Reset):
-                self._reset(command.return_to_line_number)
-            elif isinstance(command, PrintProgressBar):
-                self._print_progress_bar_timer()
-            elif isinstance(command, BufferAppend):
-                # in this case, we just call the following method that takes care of adding to the buffer and possibly
-                # printing it
-                self._write(command.message)
-            elif isinstance(command, Pause):
-                self._pause(command.pause_print_control)
-            elif isinstance(command, Resume):
-                self._resume()
-            elif isinstance(command, Update):
-                self._update(command.count)
-            elif isinstance(command, SetNumberItems):
-                self._set_number_items(command.number_of_items)
-            elif isinstance(command, SetDescriptionAfter):
-                self._set_description_after(command.description)
-            elif isinstance(command, SetDescriptionBefore):
-                self._set_description_before(command.description)
-            elif isinstance(command, SetDescriptionShortAfter):
-                self._set_description_short_after(command.description)
-            elif isinstance(command, SetDescriptionShortBefore):
-                self._set_description_short_before(command.description)
             else:
-                self._direct_write(f"received unknown command of '{command}' of type '{type(command)}'")
+                self._direct_write(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
+
+    def _receive_command(self, command: Command) -> ReceiveResult:
+        """
+        Processes the given command and acts upon it.
+
+        Parameters
+        ----------
+        command : Command
+            received command
+
+        Returns
+        -------
+        ReceiveResult
+            subclass of ReceiveResult inidcating the next action
+
+        """
+
+        if isinstance(command, Activate):
+            self._activate()
+        elif isinstance(command, Deactivate):
+            self._deactivate()
+            return EndReceive()
+        elif isinstance(command, Reset):
+            self._reset(command.return_to_line_number)
+        elif isinstance(command, PrintProgressBar):
+            self._print_progress_bar_timer()
+        elif isinstance(command, BufferAppend):
+            # in this case, we just call the following method that takes care of adding to the buffer and possibly
+            # printing it
+            self._write(command.message)
+        elif isinstance(command, Pause):
+            self._pause(command.pause_print_control)
+        elif isinstance(command, Resume):
+            self._resume()
+        elif isinstance(command, Update):
+            self._update(command.count)
+        elif isinstance(command, SetNumberItems):
+            self._set_number_items(command.number_of_items)
+        elif isinstance(command, SetDescriptionAfter):
+            self._set_description_after(command.description)
+        elif isinstance(command, SetDescriptionBefore):
+            self._set_description_before(command.description)
+        elif isinstance(command, SetDescriptionShortAfter):
+            self._set_description_short_after(command.description)
+        elif isinstance(command, SetDescriptionShortBefore):
+            self._set_description_short_before(command.description)
+        else:
+            self._direct_write(f"received unknown command of '{command}' of type '{type(command)}'")
+
+        return SameReceive()
 
     def activate(self) -> 'TheProgressBarBase':
         """
