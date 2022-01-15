@@ -954,39 +954,54 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         raise NotImplementedError
 
-    def _print_timer_THREAD(self) -> None:
-        """Prints the progress bar and takes care of other controls.
+    ## print timer methods
 
-        Method to be run by the daemon progress bar thread.
+    def _timer_THREAD(self, pipe_read, message: Command) -> Callable[[], None]:
+        """
+        Returns a function that can be called as a timer.
+
+        Parameters
+        ----------
+        pipe_read
+            pipe to read the information from
+        message : Command
+            message to be sent to self upon timer finish
+
+        Returns
+        -------
+        Callable[[], None]
+            function to be called to act as timer
+
         """
 
-        # this function has to be called from a different thread
-        # this function will sleep and then notify and then will wait for the next amount of time to sleep
-        # this seems redundant but is because there is no execution context and a timer has to be handled manually
-        # it can be that a thread is spawn each time we want to perform a sleep; but, it seems wasteful
-        # so, this is an attempt to reuse the thread, which makes the implementation rather ugly and strange
-        # NOTE: this method has to be treated with care
-        # this method will be executed in a thread that is not the main thread and should not consume/change any
-        # class variable that is subject to any change
-        # this is signified by _THREAD at the end of name of the method
+        def _timer_internal_THREAD() -> None:
+            """Function to perform the timer duties and send a message in the end."""
 
-        # get the pipe to get info from
-        # this variable will not change and is safe to use
-        pipe_read = self.sleep_timer_info.get('print_timer.pipe.read')
+            # this function has to be called from a different thread
+            # this function will sleep and then notify and then will wait for the next amount of time to sleep
+            # this seems redundant but is because there is no execution context and a timer has to be handled manually
+            # it can be that a thread is spawn each time we want to perform a sleep; but, it seems wasteful
+            # so, this is an attempt to reuse the thread, which makes the implementation rather ugly and strange
+            # NOTE: this method has to be treated with care
+            # this method will be executed in a thread that is not the main thread and should not consume/change any
+            # class variable that is subject to any change
+            # this is signified by _THREAD at the end of name of the method
 
-        while self.run_thread_info.get('print_timer.main'):
+            while True:
 
-            # get the amount of time to sleep for
-            sleep_amount: float = pipe_read.recv()
+                # get the amount of time to sleep for
+                sleep_amount: float = pipe_read.recv()
 
-            # exit in special case
-            if sleep_amount == -1:
-                break
+                # exit in special case
+                if sleep_amount == -1:
+                    break
 
-            self._sleep_THREAD(sleep_amount)
+                self._sleep_THREAD(sleep_amount)
 
-            # send message to self to print
-            self._send_message_to_self(PrintProgressBar())
+                # send message to self to print
+                self._send_message_to_self(message)
+
+        return _timer_internal_THREAD
 
     def _make_run_print_timer_thread(self) -> None:
         """Makes and sets the print timer thread"""
@@ -994,7 +1009,10 @@ class TheProgressBarBase(ABC, BaseWorker):
         # now, create the thread object
         run_print_timer_thread = threading.Thread(
             name='print_timer_daemon_thread',
-            target=self._print_timer_THREAD,
+            target=self._timer_THREAD(
+                pipe_read=self.sleep_timer_info.get('print_timer.pipe.read'),
+                message=PrintProgressBar(),
+            ),
             args=(),
             daemon=True
         )
