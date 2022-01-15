@@ -256,6 +256,11 @@ class SetDescriptionShortAfter(Command):
     description: str
 
 
+@dataclass
+class SendGatherInfo(Command):
+    """Sends the gather info."""
+
+
 class TheProgressBarBase(ABC, BaseWorker):
 
     class Modes(Enum):
@@ -286,7 +291,7 @@ class TheProgressBarBase(ABC, BaseWorker):
                 'main': None,  # daemon thread placeholder for running the update of the progress bar
                 'resume': None,  # daemon thread placeholder for when on pause
             },
-            'gather_info': {
+            'gather_info_timer': {
                 'main': None,
             }
         }
@@ -1101,24 +1106,6 @@ class TheProgressBarBase(ABC, BaseWorker):
         sleep_time = 1 / self._get_update_frequency()
 
         pipe_write.send(sleep_time)
-
-    @abstractmethod
-    def run_gather_info(self) -> None:
-        """Publish the information to the broker for communication."""
-
-        raise NotImplementedError
-
-    def _make_gather_info_thread(self) -> None:
-        """Makes and sets the gather info thread"""
-
-        # now, create the thread object
-        gather_info_thread = threading.Thread(
-            name='gather_info_daemon_thread',
-            target=self.run_gather_info,
-            args=(),
-            daemon=True
-        )
-        self.run_thread_info = self.run_thread_info.update({}, {'gather_info.main': gather_info_thread})
 
     def set_number_items(self, number_of_items: int) -> 'TheProgressBarBase':
         """Set the total number of the items.
@@ -2970,10 +2957,42 @@ class TheProgressBar(TheProgressBarBase):
 
         super().__init__(stdout_handler=stdout_handler, config=config)
 
+        # create a channel to talk to the gather info timer
+        r_timer, w_timer = multiprocessing.Pipe(duplex=False)
+        self.sleep_timer_info = self.sleep_timer_info.update({}, {
+            '$set': {
+                'gather_info_timer': {
+                    # pipe to talk with the gather info timer, should not be changed
+                    'pipe': {
+                        'read': r_timer,
+                        'write': w_timer,
+                    }
+                },
+            }
+        })
+
         # book keeping for aggregation data in case of distributed run
         self.gather_info_aggregation_data: Any = None
 
     # action methods
+
+    def _receive_command(self, command: Command) -> ReceiveResult:
+        """
+        Processes the given command and acts upon it.
+
+        Parameters
+        ----------
+        command : Command
+            received command
+
+        """
+
+        if isinstance(command, SendGatherInfo):
+            self._gather_info_timer()
+        else:
+            return super()._receive_command(command)
+
+        return SameReceive()
 
     def _check_action(self) -> bool:
         """Method to return conditional on whether we should perform the action methods."""
@@ -3045,19 +3064,63 @@ class TheProgressBar(TheProgressBarBase):
 
         # if we are in a distributed mode, just publish
         elif self.state_info.get('role') == self.Roles.WORKER:
-            self._make_gather_info_thread()
-            self.run_thread_info.get('gather_info.main').start()
+            self._make_run_gather_info_timer_thread()
 
-    def run_gather_info(self) -> None:
-        """Publish the information to the broker for communication."""
+    ## gather info timer methods
 
-        while self.run_thread_info.get('gather_info.main'):
+    def _make_run_gather_info_timer_thread(self) -> None:
+        """Makes and run the gather info thread"""
 
-            # do the communication tasks
-            self._send_gather_info_broker_info()
+        # now, create the thread object
+        gather_info_thread = threading.Thread(
+            name='gather_info_timer_daemon_thread',
+            target=self._timer_THREAD(
+                pipe_read=self.sleep_timer_info.get('gather_info_timer.pipe.read'),
+                message=SendGatherInfo(),
+            ),
+            args=(),
+            daemon=True
+        )
+        self.run_thread_info = self.run_thread_info.update({}, {'gather_info_timer.main': gather_info_thread})
 
-            # sleep :D
-            self._sleep_THREAD()
+        # run the thread
+        self.run_thread_info.get('gather_info_timer.main').start()
+
+        # start the initial timer
+        self._tell_gather_info_timer()
+
+    def _gather_info_timer(self) -> None:
+        """Method to be called when the gather info timer is up! Performs the actions and starts the next timer."""
+
+        # send the gather info
+        self._send_gather_info_broker_info()
+
+        # start next timer
+        self._tell_gather_info_timer()
+
+    def _tell_gather_info_timer(self, stop: bool = False) -> None:
+        """
+        Method to let the timer know of the new amount of time to wait.
+
+        Parameters
+        ----------
+        stop : bool, optional
+            whether to tell the timer to stop working
+
+        """
+
+        # get pipe to talk to the timer
+        pipe_write = self.sleep_timer_info.get('gather_info_timer.pipe.write')
+
+        # if we have to stop
+        if stop is True:
+            pipe_write.send(-1)
+            return
+
+        # get the amount of time we have to sleep
+        sleep_time = 1 / self._get_update_frequency()
+
+        pipe_write.send(sleep_time)
 
     # terminal related methods
 
@@ -3359,7 +3422,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         if self.state_info.get('role') == self.Roles.MANAGER and mpi.mpi_communicator.is_main_rank():
 
             # run the gather info thread
-            self._make_gather_info_thread()
+            self._make_run_gather_info_timer_thread()
             self.run_thread_info.get('gather_info.main').start()
 
             # run the printer-gatherer thread
