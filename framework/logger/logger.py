@@ -130,6 +130,10 @@ class TheProgressBarLogger(Logger):
 
         """
 
+        # wait for all workers to be here before resetting
+        if mpi.mpi_communicator.is_distributed():
+            mpi.mpi_communicator.barrier()
+
         self._the_progress_bar.reset(return_to_line_number=return_to_line_number)
         self._the_progress_bar.set_number_items(total)
 
