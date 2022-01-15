@@ -118,7 +118,12 @@ class TheProgressBarLogger(Logger):
         # set it!
         self._the_progress_bar.set_number_items(items)
 
-    def _custom_reset(self, total: int = -np.inf, return_to_line_number: int = 0) -> TheProgressBarLogger:
+    def _custom_reset(
+            self,
+            total: int = -np.inf,
+            return_to_line_number: int = 0,
+            sync: bool = True
+    ) -> TheProgressBarLogger:
         """Set the total number of iterations and resets the the_progress_bar.
 
         Parameters
@@ -127,11 +132,13 @@ class TheProgressBarLogger(Logger):
             the total number of items expected. if not set, will be set to the default value.
         return_to_line_number: int, optional
             The number of the line to return to the beginning of, after the progress bar
+        sync : bool, optional
+            Whether to sync the workers before resetting
 
         """
 
         # wait for all workers to be here before resetting
-        if mpi.mpi_communicator.is_distributed():
+        if mpi.mpi_communicator.is_distributed() and sync is True:
             mpi.mpi_communicator.barrier()
 
         self._the_progress_bar.reset(return_to_line_number=return_to_line_number)
@@ -139,9 +146,10 @@ class TheProgressBarLogger(Logger):
 
         # wait for all workers to be reset
         if mpi.mpi_communicator.is_distributed():
-            mpi.mpi_communicator.barrier()
-            # wait a random time, just to be sure :D
-            time.sleep(1)
+            if sync is True:
+                mpi.mpi_communicator.barrier()
+                # wait a random time, just to be sure :D
+                time.sleep(1)
             if self._the_progress_bar_manager is not None:
                 # now, reset the manager
                 self._the_progress_bar_manager.reset(return_to_line_number=return_to_line_number)
@@ -150,41 +158,47 @@ class TheProgressBarLogger(Logger):
 
         return self
 
-    def reset(self, total: int = -np.inf) -> TheProgressBarLogger:
+    def reset(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and prints and resets the the_progress_bar.
 
         Parameters
         ----------
         total : int, optional
             the total number of items expected. if not set, will be set to the default value.
+        sync : bool, optional
+            Whether to sync the workers before resetting
 
         """
 
-        return self._custom_reset(total=total, return_to_line_number=-1)
+        return self._custom_reset(total=total, return_to_line_number=-1, sync=sync)
 
-    def reset_bar_only(self, total: int = -np.inf) -> TheProgressBarLogger:
+    def reset_bar_only(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and resets only the bar of the the_progress_bar.
 
         Parameters
         ----------
         total : int, optional
             the total number of items expected. if not set, will be set to the default value.
+        sync : bool, optional
+            Whether to sync the workers before resetting
 
         """
 
-        return self._custom_reset(total=total, return_to_line_number=0)
+        return self._custom_reset(total=total, return_to_line_number=0, sync=sync)
 
-    def reset_to_next_line(self, total: int = -np.inf) -> TheProgressBarLogger:
+    def reset_to_next_line(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and resets only the bar of the the_progress_bar.
 
         Parameters
         ----------
         total : int, optional
             the total number of items expected. if not set, will be set to the default value.
+        sync : bool, optional
+            Whether to sync the workers before resetting
 
         """
 
-        return self._custom_reset(total=total, return_to_line_number=1)
+        return self._custom_reset(total=total, return_to_line_number=1, sync=sync)
 
     def close(self) -> None:
         """Finishes and closes the TheProgressBar instance."""
