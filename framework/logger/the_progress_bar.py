@@ -912,8 +912,8 @@ class TheProgressBarBase(ABC, BaseWorker):
             # Update the time
             self._update_time_counter()
 
-            # notify the sleeping timer
-            self._notify_sleep()
+        # notify the sleeping timer
+        self._notify_sleep()
 
     def reset(self, return_to_line_number: int = -1) -> 'TheProgressBarBase':
         """Resets the progress bar and returns its instance.
