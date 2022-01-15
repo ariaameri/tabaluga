@@ -980,6 +980,10 @@ class TheProgressBarBase(ABC, BaseWorker):
                 .update(
                     {'_bc': {'$regex': 'time$'}},
                     {'initial_progress_bar_time': current_time, 'last_update_time': current_time}
+                )\
+                .update(
+                    {'_bc': {'$regex': 'average$'}},
+                    {'average_time_per_update': -np.inf, 'average_item_per_update': -np.inf}
                 )
 
         # Reset the current item counter
