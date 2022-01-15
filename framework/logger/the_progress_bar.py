@@ -678,6 +678,9 @@ class TheProgressBarBase(ABC, BaseWorker):
         else:
             self._activate_external_stdout_handler()
 
+        # set and run the timer thread
+        self._run()
+
         # If not in single mode, no need to print, thus return now
         if self._check_action() is False:
             return self
@@ -685,9 +688,6 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Hide cursor
         if self._config.get_or_else("hide_cursor", False) is True:
             self._direct_write(self.cursor_modifier.get("hide"))
-
-        # set and run the timer thread
-        self._run()
 
         return self
 
