@@ -1,4 +1,3 @@
-from __future__ import annotations
 import math
 import multiprocessing
 import pathlib
@@ -25,6 +24,8 @@ import re
 import fcntl
 import termios
 from enum import Enum
+from queue import Queue
+from dataclasses import dataclass
 
 # message template to use
 # keep in mind that this has to be exactly the same as the default values set in the classes below
@@ -150,6 +151,94 @@ def make_rabbit_data():
     })
 
 
+class Command:
+    """Base class for all the commands."""
+    pass
+
+
+@dataclass
+class Activate(Command):
+    """Activate the instance."""
+
+
+@dataclass
+class Deactivate(Command):
+    """Deactivate the instance."""
+
+
+@dataclass
+class Reset(Command):
+    """Resets."""
+
+    return_to_line_number: int
+
+
+@dataclass
+class PrintProgressBar(Command):
+    """Prints the progress bar."""
+
+
+@dataclass
+class BufferAppend(Command):
+    """Appends the given message to the internal buffer."""
+
+    message: str
+
+
+@dataclass
+class Pause(Command):
+    """Pauses the instance."""
+
+    pause_print_control: bool
+
+
+@dataclass
+class Resume(Command):
+    """Resumes the instance."""
+
+
+@dataclass
+class Update(Command):
+    """Performs the update action."""
+
+    count: int
+
+
+@dataclass
+class SetNumberItems(Command):
+    """Sets the number of items."""
+
+    number_of_items: int
+
+
+@dataclass
+class SetDescriptionBefore(Command):
+    """Sets the description before the bar."""
+
+    description: str
+
+
+@dataclass
+class SetDescriptionAfter(Command):
+    """Sets the description after the bar."""
+
+    description: str
+
+
+@dataclass
+class SetDescriptionShortBefore(Command):
+    """Sets the short description before the bar."""
+
+    description: str
+
+
+@dataclass
+class SetDescriptionShortAfter(Command):
+    """Sets the short description after the bar."""
+
+    description: str
+
+
 class TheProgressBarBase(ABC, BaseWorker):
 
     class Modes(Enum):
@@ -173,16 +262,10 @@ class TheProgressBarBase(ABC, BaseWorker):
         # set rabbit data
         make_rabbit_data()
 
-        # Create a lock so that one thread at a time can use the console to write
-        self.print_lock = threading.Lock()
-
-        # Create a threading.Event for knowing when to write the progress bar
-        self.event_print = threading.Event()
-
         # A daemon thread placeholder for running the update of the progress bar and other stuff
         # Also, a daemon thread placeholder for when on pause
         initial_run_threads_info = {
-            'print': {
+            'print_timer': {
                 'main': None,  # daemon thread placeholder for running the update of the progress bar
                 'resume': None,  # daemon thread placeholder for when on pause
             },
@@ -212,13 +295,34 @@ class TheProgressBarBase(ABC, BaseWorker):
         }
         self.actions = DataMuncher(initial_actions)
 
+        # bookkeeping for the data needed for internal message passing
+        initial_message_passing_info = {
+            # the queue to be used as mailbox
+            'queue': Queue(),
+            # thread to receive the messages
+            'receiver_thread': None,
+        }
+        self.message_passing_info = DataMuncher(initial_message_passing_info)
+
         # keep info regarding the sleep times
-        r, w = multiprocessing.Pipe(duplex=False)  # create a channel to talk to the sleeper
+        # create a channel to talk to the sleep notifier, this is to notify the sleeper to wake up
+        r_notifier, w_notifier = multiprocessing.Pipe(duplex=False)
+        r_timer, w_timer = multiprocessing.Pipe(duplex=False) 
         initial_sleep_timer_info = {
             # channel to talk to the timer
-            'pipe': {
-                'read': r,
-                'write': w,
+            'notifier': {
+                # pipe to talk with the notifier, should not be changed
+                'pipe': {
+                    'read': r_notifier,
+                    'write': w_notifier,
+                }
+            },
+            'print_timer': {
+                # pipe to talk with the timer, should not be changed
+                'pipe': {
+                    'read': r_timer,
+                    'write': w_timer,
+                }
             },
             # the amount of update we should see before we do an update
             'update_interval': self._config.get_or_else('sleep_timer.update_interval', -1),
@@ -263,7 +367,7 @@ class TheProgressBarBase(ABC, BaseWorker):
             'time': {
                 'initial_run_time': -np.inf,  # The time when this instance is first activated
                 'initial_progress_bar_time': -np.inf,  # The time when this instance is activated or reset,
-                                                       # i.e. the time when this current, specific progress bar started
+                # i.e. the time when this current, specific progress bar started
                 'last_update_time': -np.inf  # The time when the latest update to this instance happened
             },
             'average': {
@@ -332,7 +436,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Set of characters to be used for filling the bar
         self.bar_chars: str = '▏▎▍▌▋▊▉█'
 
-    def __enter__(self) -> TheProgressBarBase:
+    def __enter__(self) -> 'TheProgressBarBase':
 
         return self.activate()
 
@@ -393,7 +497,94 @@ class TheProgressBarBase(ABC, BaseWorker):
 
     # action methods
 
-    def activate(self) -> TheProgressBarBase:
+    def _send_message_to_self(self, message: Command) -> None:
+        """
+        Sends the message to self for later processing.
+
+        Parameters
+        ----------
+        message : Command
+            the message to be sent for later processing
+
+        """
+
+        self.message_passing_info.get('queue').put(message)
+
+    def _receive(self) -> None:
+        """Main method. Receives the messages sent and acts upon them."""
+
+        # get the queue
+        queue: Queue = self.message_passing_info.get('queue')
+
+        while True:
+
+            # get the command
+            command: Command = queue.get()
+
+            # process the command
+            if isinstance(command, Activate):
+                self._activate()
+            elif isinstance(command, Deactivate):
+                self._deactivate()
+                break
+            elif isinstance(command, Reset):
+                self._reset(command.return_to_line_number)
+            elif isinstance(command, PrintProgressBar):
+                self._print_progress_bar_timer()
+            elif isinstance(command, BufferAppend):
+                # in this case, we just call the following method that takes care of adding to the buffer and possibly
+                # printing it
+                self._write(command.message)
+            elif isinstance(command, Pause):
+                self._pause(command.pause_print_control)
+            elif isinstance(command, Resume):
+                self._resume()
+            elif isinstance(command, Update):
+                self._update(command.count)
+            elif isinstance(command, SetNumberItems):
+                self._set_number_items(command.number_of_items)
+            elif isinstance(command, SetDescriptionAfter):
+                self._set_description_after(command.description)
+            elif isinstance(command, SetDescriptionBefore):
+                self._set_description_before(command.description)
+            elif isinstance(command, SetDescriptionShortAfter):
+                self._set_description_short_after(command.description)
+            elif isinstance(command, SetDescriptionShortBefore):
+                self._set_description_short_before(command.description)
+            else:
+                self._direct_write(f"received unknown command of '{command}' of type '{type(command)}'")
+
+    def activate(self) -> 'TheProgressBarBase':
+        """
+        Activates the progress bar: redirected stdout to this class and prints the progress bar
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # if we do not have a receiver, make one and run it
+        if self.message_passing_info.get('receiver_thread') is None:
+            self.message_passing_info = self.message_passing_info.update(
+                {},
+                {
+                    'receiver_thread': threading.Thread(
+                        name='message_processor',
+                        target=self._receive,
+                        args=(),
+                        daemon=True
+                    )
+                }
+            )
+            self.message_passing_info.get('receiver_thread').start()
+
+        # send a message to self
+        self._send_message_to_self(Activate())
+
+        return self
+
+    def _activate(self) -> 'TheProgressBarBase':
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
 
         Returns
@@ -423,7 +614,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         self._set_actions()
 
         # first, reset so that everything is set
-        self.reset()
+        self._reset()
 
         # now, try to get the information regarding the terminal
         self._update_terminal_size()
@@ -433,12 +624,9 @@ class TheProgressBarBase(ABC, BaseWorker):
         self.statistics_info = \
             self.statistics_info \
                 .update(
-                    {'_bc': '.time'},
-                    {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
-                )
-
-        # set and run the running daemon thread
-        self.run()
+                {'_bc': '.time'},
+                {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
+            )
 
         # Redirect stdout just in case there is no stdout handler from outside
         if self.state_info.get('external_stdout_handler') is False:
@@ -454,19 +642,29 @@ class TheProgressBarBase(ABC, BaseWorker):
         if self._config.get_or_else("hide_cursor", False) is True:
             self._direct_write(self.cursor_modifier.get("hide"))
 
-        # Set the printing event on to start with the printing of the progress bar
-        self.event_print.set()
+        # set and run the timer thread
+        self._run()
 
         return self
 
     def deactivate(self) -> None:
         """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
 
+        # send a message to self
+        self._send_message_to_self(Deactivate())
+
+    def _deactivate(self) -> 'TheProgressBarBase':
+        """Deactivates the progress bar: redirected stdout to itself and closes the progress bar"""
+
         # if disabled, skip
         if self.state_info.get('enabled') is False:
             return self
 
-        # Stop the run thread
+        # update that we are no longer enabled
+        self.state_info = self.state_info.update({}, {'enabled': False})
+
+        # Stop the print timer thread
+        self._tell_print_timer(stop=True)
         self.run_thread_info = self.run_thread_info.update({}, {'print.main': None})
 
         # Revert stdout back to its original place
@@ -477,7 +675,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # if we are not printing at all, skip
         if self._check_action() is False:
-            return
+            return self
 
         # Show cursor
         if self._config.get_or_else("hide_cursor", False) is True:
@@ -486,7 +684,28 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Print the progress bar and leave it
         self._print_progress_bar(return_to_line_number=-1)
 
-    def pause(self, pause_print_control: bool = None) -> TheProgressBarBase:
+    def pause(self, pause_print_control: bool = None) -> 'TheProgressBarBase':
+        """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
+
+        This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
+
+        Parameters
+        ----------
+        pause_print_control : bool, optional
+            whether to let go the control of printing or not; if set to None, will be automatic
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # send a message to self
+        self._send_message_to_self(Pause(pause_print_control=pause_print_control))
+
+        return self
+
+    def _pause(self, pause_print_control: bool = None) -> 'TheProgressBarBase':
         """Pauses the progress bar: redirected stdout to itself and stops prints the progress bar.
 
         This method permanently paused the instance. To resume run either the `resume` or `_look_to_resume` method.
@@ -531,16 +750,26 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Show cursor
         if self._config.get_or_else("hide_cursor", False) is True:
-            sys.stdout.write(self.cursor_modifier.get("show"))
-        sys.stdout.write(self.cursor_modifier.get("clear_until_end"))
-        sys.stdout.flush()
-
-        # Pause printing
-        self.event_print.clear()
+            self._direct_write(self.cursor_modifier.get("show"))
+        self._direct_write(self.cursor_modifier.get("clear_until_end"))
 
         return self
 
-    def resume(self) -> TheProgressBarBase:
+    def resume(self) -> 'TheProgressBarBase':
+        """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # send a message to self
+        self._send_message_to_self(Resume())
+
+        return self
+
+    def _resume(self) -> 'TheProgressBarBase':
         """Resumes the progress bar: redirected stdout to this instance and starts printing the progress bar.
 
         Returns
@@ -577,15 +806,30 @@ class TheProgressBarBase(ABC, BaseWorker):
         # No longer look if we should resume
         self.check_for_resume_thread = None
 
-        # Start printing
-        self.event_print.set()
+        # start the timer
+        self._tell_print_timer()
 
         # notify the sleeper as well!
         self._notify_sleep()
 
         return self
 
-    def update(self, count: int) -> None:
+    def update(self, count: int) -> 'TheProgressBarBase':
+        """Updates the progress bar by adding 'count' to the number of items.
+
+        Parameter
+        ---------
+        count : int
+            The count at which the progress items should be increased. It has to be non-negative
+
+        """
+
+        # send a message to self
+        self._send_message_to_self(Update(count=count))
+
+        return self
+
+    def _update(self, count: int) -> 'TheProgressBarBase':
         """Updates the progress bar by adding 'count' to the number of items.
 
         Parameter
@@ -622,7 +866,26 @@ class TheProgressBarBase(ABC, BaseWorker):
             # notify the sleeping timer
             self._notify_sleep()
 
-    def reset(self, return_to_line_number: int = -1) -> TheProgressBarBase:
+    def reset(self, return_to_line_number: int = -1) -> 'TheProgressBarBase':
+        """Resets the progress bar and returns its instance.
+
+        Parameters
+        ----------
+        return_to_line_number: int, optional
+            The line number to return to
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # send message to do the reset
+        self._send_message_to_self(Reset(return_to_line_number=return_to_line_number))
+
+        return self
+
+    def _reset(self, return_to_line_number: int = -1) -> 'TheProgressBarBase':
         """Resets the progress bar and returns its instance.
 
         Parameters
@@ -678,50 +941,104 @@ class TheProgressBarBase(ABC, BaseWorker):
         )
 
         # Reset the descriptions
-        self.set_description_after('')
-        self.set_description_before('')
-        self.set_description_short_after('')
-        self.set_description_short_before('')
+        self._set_description_after('')
+        self._set_description_before('')
+        self._set_description_short_after('')
+        self._set_description_short_before('')
 
         return self
 
     @abstractmethod
-    def run(self):
+    def _run(self):
         """Method to run the threads needed, unblockingly."""
 
         raise NotImplementedError
 
-    def run_print(self) -> None:
+    def _print_timer_THREAD(self) -> None:
         """Prints the progress bar and takes care of other controls.
 
         Method to be run by the daemon progress bar thread.
         """
 
-        while self.run_thread_info.get('print.main'):
+        # this function has to be called from a different thread
+        # this function will sleep and then notify and then will wait for the next amount of time to sleep
+        # this seems redundant but is because there is no execution context and a timer has to be handled manually
+        # it can be that a thread is spawn each time we want to perform a sleep; but, it seems wasteful
+        # so, this is an attempt to reuse the thread, which makes the implementation rather ugly and strange
+        # NOTE: this method has to be treated with care
+        # this method will be executed in a thread that is not the main thread and should not consume/change any
+        # class variable that is subject to any change
+        # this is signified by _THREAD at the end of name of the method
 
-            # Wait for the event to write
-            self.event_print.wait()
-            # Print the progress bar only if it is focused on
-            # If we are not focused, pause
-            if self._check_if_should_print():
-                self._print_progress_bar()
-            else:
-                self.pause()
-                self._look_to_resume()  # Constantly check if we can resume
+        # get the pipe to get info from
+        # this variable will not change and is safe to use
+        pipe_read = self.sleep_timer_info.get('print_timer.pipe.read')
 
-            self._sleep()
+        while self.run_thread_info.get('print_timer.main'):
 
-    def _make_run_thread(self) -> None:
-        """Makes and sets the run thread"""
+            # get the amount of time to sleep for
+            sleep_amount: float = pipe_read.recv()
+
+            # exit in special case
+            if sleep_amount == -1:
+                break
+
+            self._sleep_THREAD(sleep_amount)
+
+            # send message to self to print
+            self._send_message_to_self(PrintProgressBar())
+
+    def _make_run_print_timer_thread(self) -> None:
+        """Makes and sets the print timer thread"""
 
         # now, create the thread object
-        run_print_thread = threading.Thread(
-            name='run_daemon_thread',
-            target=self.run_print,
+        run_print_timer_thread = threading.Thread(
+            name='print_timer_daemon_thread',
+            target=self._print_timer_THREAD,
             args=(),
             daemon=True
         )
-        self.run_thread_info = self.run_thread_info.update({}, {'print.main': run_print_thread})
+        self.run_thread_info = self.run_thread_info.update({}, {'print_timer.main': run_print_timer_thread})
+
+        # run the thread
+        self.run_thread_info.get('print_timer.main').start()
+
+        # start the initial timer
+        self._tell_print_timer()
+
+    def _print_progress_bar_timer(self) -> None:
+        """Method to be called when the print timer is up! Performs the printing and starts the next timer."""
+
+        # print the progress bar
+        self._print_progress_bar()
+
+        # start next timer if necessary
+        if self._check_if_should_print():
+            self._tell_print_timer()
+
+    def _tell_print_timer(self, stop: bool = False) -> None:
+        """
+        Method to let the timer know of the new amount of time to wait.
+
+        Parameters
+        ----------
+        stop : bool, optional
+            whether to tell the timer to stop working
+
+        """
+
+        # get pipe to talk to the timer
+        pipe_write = self.sleep_timer_info.get('print_timer.pipe.write')
+
+        # if we have to stop
+        if stop is True:
+            pipe_write.send(-1)
+            return
+
+        # get the amount of time we have to sleep
+        sleep_time = 1 / self._get_update_frequency()
+
+        pipe_write.send(sleep_time)
 
     @abstractmethod
     def run_gather_info(self) -> None:
@@ -741,7 +1058,26 @@ class TheProgressBarBase(ABC, BaseWorker):
         )
         self.run_thread_info = self.run_thread_info.update({}, {'gather_info.main': gather_info_thread})
 
-    def set_number_items(self, number_of_items: int) -> TheProgressBarBase:
+    def set_number_items(self, number_of_items: int) -> 'TheProgressBarBase':
+        """Set the total number of the items.
+
+        Parameters
+        ----------
+        number_of_items : int
+            The total number of items
+
+        Returns
+        -------
+        This instance
+
+        """
+
+        # send message to do the reset
+        self._send_message_to_self(SetNumberItems(number_of_items=number_of_items))
+
+        return self
+
+    def _set_number_items(self, number_of_items: int) -> 'TheProgressBarBase':
         """Set the total number of the items.
 
         Parameters
@@ -1337,7 +1673,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         """Initializes everything related to communication."""
 
         # if we are not in distributed mode, skip
-        if mpi.mpi_communicator.get_size() == 1:
+        if mpi.mpi_communicator.is_distributed() is False:
             return
 
         # initialize the 'gather info' communication
@@ -1763,6 +2099,19 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # send message to self
+        self._send_message_to_self(SetDescriptionAfter(description=description))
+
+    def _set_description_after(self, description: str) -> None:
+        """Sets the description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes after the progress bar
+
+        """
+
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
             {'_bc': {'$regex': 'description.full$'}},
@@ -1779,13 +2128,39 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # send message to self
+        self._send_message_to_self(SetDescriptionBefore(description=description))
+
+    def _set_description_before(self, description: str) -> None:
+        """Sets the description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the description that comes before the progress bar
+
+        """
+
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
             {'_bc': {'$regex': 'description.full$'}},
-            {'before': self._modify_description_after(description)}
+            {'before': self._modify_description_before(description)}
         )
 
     def set_description_short_after(self, description: str) -> None:
+        """Sets the short description that comes after the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes after the progress bar
+
+        """
+
+        # send message to self
+        self._send_message_to_self(SetDescriptionShortAfter(description=description))
+
+    def _set_description_short_after(self, description: str) -> None:
         """Sets the short description that comes after the progress bar.
 
         Parameters
@@ -1802,10 +2177,23 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
             {'_bc': {'$regex': 'description.short'}},
-            {'after': self._modify_description_after(description)}
+            {'after': self._modify_description_short_after(description)}
         )
 
     def set_description_short_before(self, description: str) -> None:
+        """Sets the short description that comes before the progress bar.
+
+        Parameters
+        ----------
+        description : str
+            String to update the short description that comes before the progress bar
+
+        """
+
+        # send message to self
+        self._send_message_to_self(SetDescriptionShortBefore(description=description))
+
+    def _set_description_short_before(self, description: str) -> None:
         """Sets the short description that comes before the progress bar.
 
         Parameters
@@ -1822,7 +2210,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
             {'_bc': {'$regex': 'description.short'}},
-            {'before': self._modify_description_after(description)}
+            {'before': self._modify_description_short_before(description)}
         )
 
     def _make_and_get_description_before(self, data: DataMuncher = None) -> (str, DataMuncher):
@@ -2300,7 +2688,7 @@ class TheProgressBarBase(ABC, BaseWorker):
                 {'last_update_time': time.time()}
             )
 
-    def _look_to_resume(self) -> TheProgressBarBase:
+    def _look_to_resume(self) -> 'TheProgressBarBase':
         """Looks constantly to resumes the progress bar. This method should be called after pause to cause a thread
         to constantly look for a chance to resume.
 
@@ -2325,12 +2713,25 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         return self
 
-    def _sleep(self):
-        """Sleep! used for sleeping between each update of the bar."""
+    def _sleep_THREAD(self, amount: float):
+        """
+        Sleep! used for sleeping between each update of the bar.
 
-        timeout = 1 / self._get_update_frequency()
+        Parameters
+        ----------
+        amount : float
+            amount of time to sleep
 
-        rs, ws, xs = select.select([self.sleep_timer_info.get('pipe.read')], [], [], timeout)
+        Returns
+        -------
+
+        """
+
+        # NOTE: this method can be called by any thread and thus should not use any variable subject to change
+
+        timeout = amount
+
+        rs, ws, xs = select.select([self.sleep_timer_info.get('notifier.pipe.read')], [], [], timeout)
 
         for r in rs:
             r.recv()
@@ -2363,9 +2764,9 @@ class TheProgressBarBase(ABC, BaseWorker):
             # let the time go off
             # we will print the bar ourselves because we do not want to have a race condition: while we are telling
             # the other thread to type, this thread can go and reset the bar that would lead to undefined results
-            # TODO: FIX THIS!
-            # self.sleep_timer_info.get('pipe.write').send('timesup!')
-            self._print_progress_bar()
+            # TODO: FIX THIS! IS IT FIXED WITH THE NEW REACTIVE IMPLEMENTATION??
+            self.sleep_timer_info.get('notifier.pipe.write').send('timesup!')
+            # self._print_progress_bar()
 
     def _get_update_frequency(self) -> float:
         """Returns the number of times in a second that the progress bar should be updated.
@@ -2420,20 +2821,27 @@ class TheProgressBarBase(ABC, BaseWorker):
 
     # writing methods
 
-    def _direct_write(self, msg: str) -> None:
+    def _direct_write(self, msg: str, add_bar: bool = False, force_write: bool = True) -> None:
         """Write the msg directly on the output with no buffers.
 
         Parameters
         ----------
         msg : str
             Message to be written
+        add_bar : bool, optional
+            whether to add bar at the end
+        force_write : bool, optional
+            force the writing of the message to the output
 
         """
 
         # Only write if we are not paused
         if self.state_info.get('paused') is False:
-            self.stdout_handler.write(msg)
-            self.stdout_handler.flush()
+            # here, instead of writing it to the stdout handler, which may cause another message, I write it directly
+            # this is because this instance will take care of stdout and its write method is asynchronous while
+            # _write is synchronous
+            self._write(msg, add_bar=add_bar, force_write=force_write)
+            self.flush()
 
     def write(self, msg: str) -> None:
         """Prints a message to the output.
@@ -2445,33 +2853,48 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
+        # whatever anyone asks to write will be added to the buffer
+        self._send_message_to_self(BufferAppend(msg))
+
+    def _write(self, msg: str, add_bar: bool = True, force_write: bool = False) -> None:
+        """
+
+        Adds the message to the buffer and possible prints the message and possible the progress bar to the output.
+
+        Parameters
+        ----------
+        msg : str
+            The message to be written
+        add_bar : bool, optional
+            whether to add bar at the end
+        force_write : bool, optional
+            force the writing of the message to the output
+
+        """
+
         self.buffer.append(msg)
 
         # Calling 'print' will call this function twice.
         # First with the message and second with the new line character
         # If the msg ends with \n\b, then do not print the progress bar itself
-        if msg == '\n' or msg.endswith('\n') or msg.endswith('\n\b'):
+        if force_write is True or msg == '\n' or msg.endswith('\n') or msg.endswith('\n\b'):
 
-            with self.print_lock:
+            # Add the progress bar at the end
+            if add_bar is True and self._check_if_should_append_progress_bar() is True:
+                self.buffer.append(self.actions.get('get_bar')())
 
-                # Add the progress bar at the end
-                if not msg.endswith('\n\b') and self._check_if_should_append_progress_bar() is True:
-                    self.buffer.append(self.actions.get('get_bar')())
+            # Create the message from the buffer and print it with extra new line character
+            msg = ''.join(self.buffer)
 
-                # Create the message from the buffer and print it with extra new line character
-                msg = ''.join(self.buffer)
+            self.original_sysout.write(self.cursor_modifier.get('clear_until_end'))
+            self.original_sysout.write(msg)
 
-                self.original_sysout.write(self.cursor_modifier.get('clear_until_end'))
-                self.original_sysout.write(f'{msg}')
-
-                self.buffer = []
+            self.buffer = []
 
     def flush(self) -> None:
         """Flushes the screen."""
 
-        self.original_sysout.write(''.join(self.buffer))
         self.original_sysout.flush()
-        self.buffer = []
 
 
 class TheProgressBar(TheProgressBarBase):
@@ -2551,37 +2974,17 @@ class TheProgressBar(TheProgressBarBase):
                 'get_bar': get_bar_curry,
             })
 
-    def run(self):
+    def _run(self):
         """Runs the daemon threads."""
 
         # if we are single and non-distributed, just print
         if self.state_info.get('role') == self.Roles.SINGLE:
-            self._make_run_thread()
-            self.run_thread_info.get('print.main').start()
+            self._make_run_print_timer_thread()
 
         # if we are in a distributed mode, just publish
         elif self.state_info.get('role') == self.Roles.WORKER:
             self._make_gather_info_thread()
             self.run_thread_info.get('gather_info.main').start()
-
-    def reset(self, return_to_line_number: int = -1) -> TheProgressBar:
-        """Resets the progress bar and returns its instance.
-
-        Parameters
-        ----------
-        return_to_line_number: int, optional
-            The line number to return to
-
-        Returns
-        -------
-        This instance
-
-        """
-
-        # do the resetting
-        super().reset(return_to_line_number=return_to_line_number)
-
-        return self
 
     def run_gather_info(self) -> None:
         """Publish the information to the broker for communication."""
@@ -2592,7 +2995,7 @@ class TheProgressBar(TheProgressBarBase):
             self._send_gather_info_broker_info()
 
             # sleep :D
-            self._sleep()
+            self._sleep_THREAD()
 
     # terminal related methods
 
@@ -2873,7 +3276,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
     # action methods
 
-    def activate(self) -> TheProgressBarParallelManager:
+    def activate(self) -> 'TheProgressBarParallelManager':
         """Activates the progress bar: redirected stdout to this class and prints the progress bar
 
         Returns
@@ -2887,7 +3290,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         return super().activate()
 
-    def run(self):
+    def _run(self):
         """Runs the daemon threads."""
 
         # if we are in a distributed mode, just publish
@@ -2902,10 +3305,10 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             self.run_thread_info.get('printer_gatherer.main').start()
 
             # run the print thread
-            self._make_run_thread()
-            self.run_thread_info.get('print.main').start()
+            self._make_run_print_timer_thread()
+            self.run_thread_info.get('print_timer.main').start()
 
-    def reset(self, return_to_line_number: int = -1) -> TheProgressBarParallelManager:
+    def reset(self, return_to_line_number: int = -1) -> 'TheProgressBarParallelManager':
         """Resets the progress bar and returns its instance.
 
         Parameters
@@ -2931,7 +3334,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         return self
 
-    def set_number_items(self, number_of_items: int) -> TheProgressBarParallelManager:
+    def set_number_items(self, number_of_items: int) -> 'TheProgressBarParallelManager':
         """Set the total number of the items.
 
         Parameters
@@ -2950,7 +3353,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         return self
 
-    def _set_number_items(self, number_of_items: int) -> TheProgressBarParallelManager:
+    def _set_number_items(self, number_of_items: int) -> 'TheProgressBarParallelManager':
         """Set the total number of the items.
 
         Parameters
