@@ -195,6 +195,9 @@ class Trainer(base.BaseEventManager, ABC):
         # Make Train entry
         self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Train': {}}})
 
+        # empty out the epoch info
+        self.train_epoch_info = []
+
         for self.batch in range(self.number_of_iterations):
 
             self.on_batch_begin()
@@ -240,6 +243,9 @@ class Trainer(base.BaseEventManager, ABC):
         # Make Validation entry
         self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Validation': {}}})
 
+        # empty out the epoch info
+        self.val_epoch_info = []
+
         for self.batch in range(self.number_of_iterations):
 
             self.on_val_batch_begin()
@@ -264,7 +270,7 @@ class Trainer(base.BaseEventManager, ABC):
             self.train_current_statistics = \
                 self.train_current_statistics.update(
                     {'Validation': {'$exists': 1}},
-                    {'$set': {'Validation': self.train_batch_info}},
+                    {'$set': {'Validation': self.val_batch_info}},
                 )
 
             self.on_val_batch_end()
@@ -287,10 +293,15 @@ class Trainer(base.BaseEventManager, ABC):
         self.on_test_epoch_begin()
 
         # do one epoch of test
-        epoch_history = self.test_one_epoch()
+        self.test_epoch_info: List[DataMuncher] = self.test_one_epoch()
 
-        # Bookkeeping
-        self.history.append(epoch_history)
+        # bookkeeping
+        self.test_life_info.append(self.test_epoch_info)
+        epoch_info = DataMuncher({
+            'epoch': self.epoch,
+            'test': self.test_epoch_info,
+        })
+        self.history.append(epoch_info)
 
         # the only test epoch is beginning
         self.on_test_epoch_end()
@@ -311,6 +322,9 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Make Test entry
         self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Test': {}}})
+
+        # empty out the epoch info
+        self.test_epoch_info = []
 
         for self.batch in range(self.number_of_iterations):
 
