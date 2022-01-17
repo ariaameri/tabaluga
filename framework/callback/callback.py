@@ -42,7 +42,8 @@ class Callback(base.BaseEventWorker):
         super().__init__(config)
 
         # Set the attributes
-        self.trainer = trainer
+        from ..trainer.trainer import Trainer
+        self.trainer: Trainer = trainer
 
 
 class CallbackManager(base.BaseEventManager, ABC):
