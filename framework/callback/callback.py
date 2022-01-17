@@ -19,7 +19,7 @@ together.
 
 from ..base import base
 from ..util.config import ConfigParser
-from typing import Dict, List
+from ..util.data_muncher import DataMuncher
 from abc import ABC
 from ..util.calculation import Calculation
 
@@ -113,7 +113,7 @@ class TrainStatExpAverage(Callback):
 
         super().__init__(config, trainer)
 
-    def on_batch_end(self, info: Dict = None):
+    def on_batch_end(self, info: DataMuncher = DataMuncher()):
 
         # Get the train statistics
         train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Train$'}})
@@ -130,7 +130,7 @@ class TrainStatExpAverage(Callback):
                 {'Train': self.get_exp_average(train_stat)}
             )
 
-    def on_val_batch_end(self, info: Dict = None):
+    def on_val_batch_end(self, info: DataMuncher = DataMuncher()):
 
         # Get the train statistics
         train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Validation$'}})

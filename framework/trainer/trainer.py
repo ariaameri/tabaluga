@@ -397,23 +397,23 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Take care of signals
         if os_signal == signal.SIGINT:
-            info = {'signal': os_signal}
+            info = DataMuncher({'signal': os_signal})
             self.on_os_signal(info)
             self._universal_log('Interrupt signal received, exiting...', 'error')
             sys.exit(1)
         elif os_signal == signal.SIGTERM:
-            info = {'signal': os_signal}
+            info = DataMuncher({'signal': os_signal})
             self.on_os_signal(info)
             self._universal_log('Termination signal received, exiting...', 'error')
             sys.exit(0)
         elif os_signal == signal.SIGTSTP:
-            info = {'signal': os_signal}
+            info = DataMuncher({'signal': os_signal})
             self.on_os_signal(info)
             self._universal_log('Terminal stop signal received.', 'warning')
             signal.signal(os_signal, signal.SIG_DFL)
             os.kill(os.getpid(), os_signal)
         elif os_signal == signal.SIGCONT:
-            info = {'signal': os_signal}
+            info = DataMuncher({'signal': os_signal})
             self.on_os_signal(info)
             self._universal_log('Continue signal received.', 'info')
 

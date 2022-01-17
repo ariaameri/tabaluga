@@ -7,6 +7,7 @@ import numpy as np
 import re
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
 from ..logger.logger_sole import Logger, LoggerConsoleFile
+from ..util.data_muncher import DataMuncher
 
 
 class BaseWorker:
@@ -260,48 +261,48 @@ class BaseEventWorker(BaseWorker):
 
     # General events
 
-    def on_epoch_begin(self, info: Dict = None):
+    def on_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_epoch_end(self, info: Dict = None):
+    def on_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_begin(self, info: Dict = None):
+    def on_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_end(self, info: Dict = None):
+    def on_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -310,96 +311,96 @@ class BaseEventWorker(BaseWorker):
 
     # Training event methods
 
-    def on_train_begin(self, info: Dict = None):
+    def on_train_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_train_end(self, info: Dict = None):
+    def on_train_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_train_epoch_begin(self, info: Dict = None):
+    def on_train_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each epoch for training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_train_epoch_end(self, info: Dict = None):
+    def on_train_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each epoch for training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_batch_begin(self, info: Dict = None):
+    def on_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_batch_end(self, info: Dict = None):
+    def on_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_train_batch_begin(self, info: Dict = None):
+    def on_train_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_train_batch_end(self, info: Dict = None):
+    def on_train_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -408,146 +409,146 @@ class BaseEventWorker(BaseWorker):
 
     # Validation event methods
 
-    def on_val_begin(self, info: Dict = None):
+    def on_val_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of validation.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information that has to be passed to the callback
 
         """
 
         pass
 
-    def on_val_end(self, info: Dict = None):
+    def on_val_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at event of the end of validation.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_val_epoch_begin(self, info: Dict = None):
+    def on_val_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each validation epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_val_epoch_end(self, info: Dict = None):
+    def on_val_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each validation epoch.
 
-            Parameters
-            ----------
-            info : dict
-                The information needed
+        Parameters
+        ----------
+        info : DataMuncher, optional
+            The information needed
 
-            """
+        """
 
         pass
 
-    def on_val_batch_begin(self, info: Dict = None):
+    def on_val_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each validation batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_val_batch_end(self, info: Dict = None):
+    def on_val_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each validation batch.
 
-            Parameters
-            ----------
-            info : dict
-                The information needed
+        Parameters
+        ----------
+        info : DataMuncher, optional
+            The information needed
 
-            """
+        """
 
         pass
 
     # Test event methods
 
-    def on_test_begin(self, info: Dict = None):
+    def on_test_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of testing.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information that has to be passed to the callback
 
         """
 
         pass
 
-    def on_test_end(self, info: Dict = None):
+    def on_test_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at event of the end of testing.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_test_batch_begin(self, info: Dict = None):
+    def on_test_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each testing batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_test_batch_end(self, info: Dict = None):
+    def on_test_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each testing batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_test_epoch_begin(self, info: Dict = None):
+    def on_test_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each test epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
 
         pass
 
-    def on_test_epoch_end(self, info: Dict = None):
+    def on_test_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each test epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -556,12 +557,12 @@ class BaseEventWorker(BaseWorker):
 
     # Exception event methods
 
-    def on_os_signal(self, info: Dict = None):
+    def on_os_signal(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of an OS signal, such as SIGINT.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -609,13 +610,13 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
         An event function
         """
 
-        def _event(info: Dict = None):
+        def _event(info: DataMuncher = DataMuncher()):
 
             """An event function.
 
             Parameters
             ----------
-            info : dict
+            info : DataMuncher, optional
                 The information needed
 
             """
@@ -628,12 +629,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
     # def str_with_config_representation(self, depth: int = -1):
 
-    def on_begin(self, info: Dict = None):
+    def on_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -642,12 +643,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_begin(info)
 
-    def on_end(self, info: Dict = None):
+    def on_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -656,12 +657,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_end(info)
 
-    def on_epoch_begin(self, info: Dict = None):
+    def on_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -670,12 +671,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_epoch_begin(info)
 
-    def on_epoch_end(self, info: Dict = None):
+    def on_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information that has to be passed to the callback
 
         """
@@ -686,12 +687,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
     # Training event methods
 
-    def on_train_begin(self, info: Dict = None):
+    def on_train_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -700,12 +701,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_train_begin(info)
 
-    def on_train_end(self, info: Dict = None):
+    def on_train_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of training.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -714,12 +715,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_train_end(info)
 
-    def on_train_epoch_begin(self, info: Dict = None):
+    def on_train_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -728,12 +729,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_train_epoch_begin(info)
 
-    def on_train_epoch_end(self, info: Dict = None):
+    def on_train_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -742,12 +743,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_train_epoch_end(info)
 
-    def on_batch_begin(self, info: Dict = None):
+    def on_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -756,12 +757,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_batch_begin(info)
 
-    def on_batch_end(self, info: Dict = None):
+    def on_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -770,12 +771,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_batch_end(info)
 
-    def on_train_batch_begin(self, info: Dict = None):
+    def on_train_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -784,12 +785,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_train_batch_begin(info)
 
-    def on_train_batch_end(self, info: Dict = None):
+    def on_train_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each training batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -800,12 +801,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
     # Validation event methods
 
-    def on_val_begin(self, info: Dict = None):
+    def on_val_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of validation.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information that has to be passed to the callback
 
         """
@@ -814,12 +815,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_val_begin(info)
 
-    def on_val_end(self, info: Dict = None):
+    def on_val_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at event of the end of validation.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -828,12 +829,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_val_end(info)
 
-    def on_val_batch_begin(self, info: Dict = None):
+    def on_val_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each validation batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -842,12 +843,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_val_batch_begin(info)
 
-    def on_val_batch_end(self, info: Dict = None):
+    def on_val_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each validation batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -856,12 +857,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_val_batch_end(info)
 
-    def on_val_epoch_begin(self, info: Dict = None):
+    def on_val_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each validation epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -870,12 +871,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_val_epoch_begin(info)
 
-    def on_val_epoch_end(self, info: Dict = None):
+    def on_val_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each validation epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -886,12 +887,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
     # Test event methods
 
-    def on_test_begin(self, info: Dict = None):
+    def on_test_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of testing.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information that has to be passed to the callback
 
         """
@@ -900,12 +901,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_begin(info)
 
-    def on_test_end(self, info: Dict = None):
+    def on_test_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at event of the end of testing.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -914,12 +915,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_end(info)
 
-    def on_test_batch_begin(self, info: Dict = None):
+    def on_test_batch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each testing batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -928,12 +929,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_batch_begin(info)
 
-    def on_test_batch_end(self, info: Dict = None):
+    def on_test_batch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each testing batch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -942,12 +943,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_batch_end(info)
 
-    def on_test_epoch_begin(self, info: Dict = None):
+    def on_test_epoch_begin(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of beginning of each test epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -956,12 +957,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
             if issubclass(type(worker), BaseEventWorker):
                 worker.on_test_epoch_begin(info)
 
-    def on_test_epoch_end(self, info: Dict = None):
+    def on_test_epoch_end(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of end of each test epoch.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
@@ -972,12 +973,12 @@ class BaseEventManager(BaseEventWorker, BaseManager, ABC):
 
     # Exception event methods
 
-    def on_os_signal(self, info: Dict = None):
+    def on_os_signal(self, info: DataMuncher = DataMuncher()):
         """Method to be called at the event of an OS signal, such as SIGINT.
 
         Parameters
         ----------
-        info : dict
+        info : DataMuncher, optional
             The information needed
 
         """
