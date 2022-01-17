@@ -221,30 +221,17 @@ class TheProgressBarLogger(Logger):
         if self._the_progress_bar_manager is not None:
             self._the_progress_bar_manager.resume()
 
-    def update(self, update_count: int, msg_dict: Dict = None) -> None:
+    def update(self, update_count: int) -> None:
         """Update the TheProgressBar progress bar with description set to message.
 
         Parameters
         ----------
         update_count : int
             The amount that should be added to the TheProgressBar instance.
-        msg_dict : Dict, optional
-            Contains the dictionary message to be set as the progress bar description.
         """
 
         # first, update the bar
         self._the_progress_bar.update(update_count)
-
-        # # generate the message and aggregation data
-        # message, data = self._generate_message_from_loghug(msg_dict)
-        #
-        # # set all
-        # self._the_progress_bar.set_aggregation_data(data)
-        #
-        # self._the_progress_bar.set_description_after(message)
-        #
-        # self._the_progress_bar.set_description_short_after("yellow")
-        # self._the_progress_bar.set_description_short_before(f'At epoch {msg_dict["epoch"]}/{self._n_epochs} of {msg_dict["mode"]}:')
 
     def set_description(
             self,
