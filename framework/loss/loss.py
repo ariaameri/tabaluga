@@ -1,5 +1,6 @@
 from ..base.base import BaseWorker, BaseEventManager
 from ..util.config import ConfigParser
+from ..util.data_muncher import DataMuncher
 from abc import ABC, abstractmethod
 
 
@@ -11,14 +12,14 @@ class Loss(BaseWorker, ABC):
         super().__init__(config)
 
     @abstractmethod
-    def calculate(self, x: dict):
+    def calculate(self, x: DataMuncher):
         """
         Calculates the loss function value.
 
         Parameters
         ----------
-        x : dict
-            data given in a dictionary
+        x : DataMuncher
+            data given in a DataMuncher
 
         Returns
         -------
