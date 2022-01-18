@@ -4,6 +4,7 @@ from types import FunctionType
 from typing import Any, Type, Callable, TypeVar, Generic
 
 T = TypeVar('T')
+S = TypeVar('S')
 
 
 class Option(Generic[T], ABC):
@@ -263,6 +264,25 @@ class Option(Generic[T], ABC):
 
         return self.get()
 
+    @abstractmethod
+    def zip(self, that: Option[S]) -> Option[(T, S)]:
+        """
+        Zips this and that option and returns the result.
+
+        Parameters
+        ----------
+        that : Option[S]
+            the other option
+
+        Returns
+        -------
+        Option[(T, S)]
+            the zipped option
+
+        """
+
+        raise NotImplementedError
+
 
 class Some(Option):
     """A subclass of the Option class that holds a value."""
@@ -435,6 +455,28 @@ class Some(Option):
 
         return self._value == x
 
+    def zip(self, that: Option[S]) -> Option[(T, S)]:
+        """
+        Zips this and that option and returns the result. If that option is nothing, it will return nothing, else, will
+        return a Some containing a tuple of both the values.
+
+        Parameters
+        ----------
+        that : Option[S]
+            the other option
+
+        Returns
+        -------
+        Option[(T, S)]
+            the zipped option
+
+        """
+
+        if that.is_defined():
+            return Some((self._value, that._value))
+        else:
+            return nothing
+
 
 class Nothing(Option):
 
@@ -592,6 +634,24 @@ class Nothing(Option):
         """
 
         return False
+
+    def zip(self, that: Option[S]) -> Option[(T, S)]:
+        """
+        returns nothing
+
+        Parameters
+        ----------
+        that : Option[S]
+            the other option
+
+        Returns
+        -------
+        Option[(T, S)]
+            nothing
+
+        """
+
+        return nothing
 
 
 # An instance that should be passed around and imported elsewhere
