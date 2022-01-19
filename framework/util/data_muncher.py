@@ -55,21 +55,21 @@ class DataMuncher(Panacea):
         """
 
         # Update the filter criteria to make sure it selects only the leaf nodes
-        self_selector = filter_dict.get('_self')
+        self_selector = filter_dict.get(FM.SELF)
         if self_selector is not None:
-            function_selector = self_selector.get('$function')
+            function_selector = self_selector.get(UO.FUNCTION)
             if function_selector is not None:
                 if isinstance(function_selector, list):
-                    filter_dict['_self']['$function'] += [lambda x: x.is_leaf()]
+                    filter_dict[FM.SELF][FO.FUNCTION] += [lambda x: x.is_leaf()]
                 else:
-                    filter_dict['_self']['$function'] = [filter_dict['_self']['$function'], lambda x: x.is_leaf()]
+                    filter_dict[FM.SELF][FO.FUNCTION] = [filter_dict[FM.SELF][FO.FUNCTION], lambda x: x.is_leaf()]
             else:
-                filter_dict['_self']['$function'] = lambda x: x.is_leaf()
+                filter_dict[FM.SELF][FO.FUNCTION] = lambda x: x.is_leaf()
         else:
-            filter_dict['_self'] = {'$function': lambda x: x.is_leaf()}
+            filter_dict[FM.SELF] = {FO.FUNCTION: lambda x: x.is_leaf()}
 
         # Make the appropriate update dictionary to call the superclass update method
-        update_dict = {'$function': {'_value': functions}}
+        update_dict = {UO.FUNCTION: {UM.VALUE: functions}}
 
         # Do the update
         result = super().update(filter_dict=filter_dict, update_dict=update_dict)

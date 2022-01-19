@@ -1,6 +1,7 @@
 from __future__ import annotations
 import time
 from ..util.config import ConfigParser
+from ..util.config import UM, UO, UC, FM, FO
 from ..util.panacea import Panacea
 from ..base.base import BaseEventManager
 from .the_progress_bar import TheProgressBar, TheProgressBarParallelManager
@@ -46,7 +47,7 @@ class TheProgressBarLogger(Logger):
 
         # Making sure the logger is going to write to the console
         # Make sure it does not write any prefix
-        config = config.update({}, {'$set': {'console': True, 'format': ''}})
+        config = config.update({}, {UO.SET: {'console': True, 'format': ''}})
 
         super().__init__(config)
 

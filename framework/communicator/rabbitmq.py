@@ -1,6 +1,7 @@
 from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
+from ..util.data_muncher import UM, UO, UC, FM, FO
 from ..util.option import Option
 from typing import Optional, Callable, Union, List
 import kombu
@@ -314,7 +315,7 @@ class _RabbitMQCommunicator(BaseWorker):
         #     exchange.unbind_from()
 
         # save it
-        self._broker_info = self._broker_info.update({'_bc': {'$regex': 'exchange$'}}, {'$set': {name: exchange}})
+        self._broker_info = self._broker_info.update({FM.BC: {FO.REGEX: 'exchange$'}}, {UO.SET: {name: exchange}})
 
         return exchange
 
@@ -408,7 +409,7 @@ class _RabbitMQCommunicator(BaseWorker):
             )
 
         # save it
-        self._broker_info = self._broker_info.update({'_bc': {'$regex': 'queue$'}}, {'$set': {name: queue}})
+        self._broker_info = self._broker_info.update({FM.BC: {FO.REGEX: 'queue$'}}, {UO.SET: {name: queue}})
 
         return queue
 

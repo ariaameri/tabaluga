@@ -20,6 +20,7 @@ together.
 from ..base import base
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
+from ..util.data_muncher import UM, UO, UC, FM, FO
 from abc import ABC
 from ..util.calculation import Calculation
 
@@ -116,7 +117,7 @@ class TrainStatExpAverage(Callback):
     def on_batch_end(self, info: DataMuncher = DataMuncher()):
 
         # Get the train statistics
-        train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Train$'}})
+        train_stat = self.trainer.train_current_statistics.find_one({FM.BC: {FO.REGEX: 'Train$'}})
 
         if train_stat.is_empty():
             return
@@ -126,14 +127,14 @@ class TrainStatExpAverage(Callback):
         # Update the train statistics
         self.trainer.train_current_statistics = \
             self.trainer.train_current_statistics.update(
-                {'Train': {'$exists': 1}},
+                {'Train': {FO.EXISTS: 1}},
                 {'Train': self.get_exp_average(train_stat)}
             )
 
     def on_val_batch_end(self, info: DataMuncher = DataMuncher()):
 
         # Get the train statistics
-        train_stat = self.trainer.train_current_statistics.find_one({'_bc': {'$regex': 'Validation$'}})
+        train_stat = self.trainer.train_current_statistics.find_one({FM.BC: {FO.REGEX: 'Validation$'}})
 
         if train_stat.is_empty():
             return
@@ -143,7 +144,7 @@ class TrainStatExpAverage(Callback):
         # Update the train statistics
         self.trainer.train_current_statistics = \
             self.trainer.train_current_statistics.update(
-                {'Validation': {'$exists': 1}},
+                {'Validation': {FO.EXISTS: 1}},
                 {'Validation': self.get_exp_average(train_stat)}
             )
 
@@ -186,4 +187,4 @@ class TrainStatExpAverage(Callback):
         # Update the exponential average for the deeper leaves
         sub_exp_average = {key: self.get_exp_average(value) for key, value in parameters_branch.items()}
 
-        return stat.update({}, {'$set': {'Exp Average': exp_average, **sub_exp_average}})
+        return stat.update({}, {UO.SET: {'Exp Average': exp_average, **sub_exp_average}})

@@ -1,6 +1,7 @@
 from ..base import base
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
+from ..util.config import UM, UO, UC, FM, FO
 from ..callback.callback import CallbackManager, Callback
 from ..model.model import ModelManager, Model
 from ..logger.logger import Logger
@@ -193,7 +194,7 @@ class Trainer(base.BaseEventManager, ABC):
         """
 
         # Make Train entry
-        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Train': {}}})
+        self.train_current_statistics = self.train_current_statistics.update({}, {UO.SET: {'Train': {}}})
 
         # empty out the epoch info
         self.train_epoch_info = []
@@ -213,7 +214,7 @@ class Trainer(base.BaseEventManager, ABC):
                 self.train_batch_info.update(
                     {},
                     {
-                        '$set_only': {
+                        UO.SET_ONLY: {
                             EPOCH_STRING: self.epoch,
                             BATCH_STRING: self.batch,
                         }
@@ -222,8 +223,8 @@ class Trainer(base.BaseEventManager, ABC):
             )
             self.train_current_statistics = \
                 self.train_current_statistics.update(
-                    {'Train': {'$exists': 1}},
-                    {'$set': {'Train': self.train_batch_info}},
+                    {'Train': {FO.EXISTS: 1}},
+                    {UO.SET: {'Train': self.train_batch_info}},
                 )
 
             self.on_train_batch_end()
@@ -241,7 +242,7 @@ class Trainer(base.BaseEventManager, ABC):
         """
 
         # Make Validation entry
-        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Validation': {}}})
+        self.train_current_statistics = self.train_current_statistics.update({}, {UO.SET: {'Validation': {}}})
 
         # empty out the epoch info
         self.val_epoch_info = []
@@ -260,7 +261,7 @@ class Trainer(base.BaseEventManager, ABC):
                 self.val_batch_info.update(
                     {},
                     {
-                        '$set_only': {
+                        UO.SET_ONLY: {
                             EPOCH_STRING: self.epoch,
                             BATCH_STRING: self.batch,
                         }
@@ -269,8 +270,8 @@ class Trainer(base.BaseEventManager, ABC):
             )
             self.train_current_statistics = \
                 self.train_current_statistics.update(
-                    {'Validation': {'$exists': 1}},
-                    {'$set': {'Validation': self.val_batch_info}},
+                    {'Validation': {FO.EXISTS: 1}},
+                    {UO.SET: {'Validation': self.val_batch_info}},
                 )
 
             self.on_val_batch_end()
@@ -321,7 +322,7 @@ class Trainer(base.BaseEventManager, ABC):
         """
 
         # Make Test entry
-        self.train_current_statistics = self.train_current_statistics.update({}, {'$set': {'Test': {}}})
+        self.train_current_statistics = self.train_current_statistics.update({}, {UO.SET: {'Test': {}}})
 
         # empty out the epoch info
         self.test_epoch_info = []
@@ -340,7 +341,7 @@ class Trainer(base.BaseEventManager, ABC):
                 self.test_batch_info.update(
                     {},
                     {
-                        '$set_only': {
+                        UO.SET_ONLY: {
                             BATCH_STRING: self.batch,
                         }
                     }
@@ -348,8 +349,8 @@ class Trainer(base.BaseEventManager, ABC):
             )
             self.train_current_statistics = \
                 self.train_current_statistics.update(
-                    {'Test': {'$exists': 1}},
-                    {'$set': {'Test': self.test_batch_info}},
+                    {'Test': {FO.EXISTS: 1}},
+                    {UO.SET: {'Test': self.test_batch_info}},
                 )
 
             self.on_test_batch_end()

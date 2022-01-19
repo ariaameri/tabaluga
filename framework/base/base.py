@@ -1,5 +1,6 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
+from ..util.config import UM, UO, UC, FM, FO
 from ..util.option import Option, Some, nothing
 from typing import List, Dict, Union
 from abc import ABC, abstractmethod
@@ -82,7 +83,7 @@ class BaseWorker:
             self._config\
                 .get_or_empty("_logger")\
                 .update({}, {
-                    '$set_on_insert': {
+                    UO.SET_ON_INSERT: {
                         "name": self._modify_logger_name(self.__class__.__name__),
                         "console_handler": self._console_handler,
                     }

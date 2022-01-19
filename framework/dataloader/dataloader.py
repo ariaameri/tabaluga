@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from ..base import base
 from ..util.config import ConfigParser
+from ..util.config import UM, UO, UC, FM, FO
 from ..communicator import mpi
 from typing import List, Optional
 import pandas as pd
@@ -154,7 +155,7 @@ class DataManager(base.BaseEventManager, ABC):
         if self._config.get_or_else('multithreading', False) is True:
             self._config = self._config.update(
                 {},
-                {'$set_on_insert': {
+                {UO.SET_ON_INSERT: {
                     'train.multithreading': self._config.get('multithreading'),
                     'val.multithreading': self._config.get('multithreading'),
                 }})

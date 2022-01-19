@@ -14,6 +14,7 @@ import datetime
 import os
 import colored
 from ..util.data_muncher import DataMuncher
+from ..util.data_muncher import UM, UO, UC, FM, FO
 from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.calculation import Calculation
@@ -678,7 +679,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         self.statistics_info = \
             self.statistics_info \
                 .update(
-                {'_bc': '.time'},
+                {FM.BC: '.time'},
                 {'initial_run_time': current_time, 'initial_progress_bar_time': current_time}
             )
 
@@ -899,13 +900,13 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         if count > 0:
             # Update current item
-            self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}},
-                                                     {'$inc': {'current_item_index': count}})
+            self.state_info = self.state_info.update({FM.BC: {FO.REGEX: 'item$'}},
+                                                     {UO.INC: {'current_item_index': count}})
 
             # Keep track of an average number of elements in each update
             self.statistics_info = \
                 self.statistics_info.update(
-                    {'_bc': {'$regex': 'average$'}},
+                    {FM.BC: {FO.REGEX: 'average$'}},
                     {'average_item_per_update':
                         Calculation.exp_average(
                              item=self.statistics_info.get('average.average_item_per_update'),
@@ -969,8 +970,8 @@ class TheProgressBarBase(ABC, BaseWorker):
         self.state_info = \
             self.state_info \
                 .update(
-                    {'_bc': {'$regex': 'item$'}},
-                    {'$inc': {'current_iteration_index': 1}}
+                    {FM.BC: {FO.REGEX: 'item$'}},
+                    {UO.INC: {'current_iteration_index': 1}}
                 )
 
         # Set the initial time
@@ -978,24 +979,24 @@ class TheProgressBarBase(ABC, BaseWorker):
         self.statistics_info = \
             self.statistics_info \
                 .update(
-                    {'_bc': {'$regex': 'time$'}},
+                    {FM.BC: {FO.REGEX: 'time$'}},
                     {'initial_progress_bar_time': current_time, 'last_update_time': current_time}
                 )\
                 .update(
-                    {'_bc': {'$regex': 'average$'}},
+                    {FM.BC: {FO.REGEX: 'average$'}},
                     {'average_time_per_update': -np.inf, 'average_item_per_update': -np.inf}
                 )
 
         # Reset the current item counter
         self.state_info = self.state_info.update(
-            {'_bc': {'$regex': 'item$'}},
-            {'$set': {'current_item_index': 0, 'total_items_count': -np.inf}}
+            {FM.BC: {FO.REGEX: 'item$'}},
+            {UO.SET: {'current_item_index': 0, 'total_items_count': -np.inf}}
         )
 
         # Reset the sleep info
         self.sleep_timer_info = self.sleep_timer_info.update(
             {},
-            {'$set': {'stat.last_item_index': -np.inf}},
+            {UO.SET: {'stat.last_item_index': -np.inf}},
         )
 
         # Reset the descriptions
@@ -1149,7 +1150,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         """
 
-        self.state_info = self.state_info.update({'_bc': {'$regex': 'item$'}}, {'total_items_count': number_of_items})
+        self.state_info = self.state_info.update({FM.BC: {FO.REGEX: 'item$'}}, {'total_items_count': number_of_items})
 
         return self
 
@@ -1299,7 +1300,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
-                {'_bc': {'$regex': 'console$'}},
+                {FM.BC: {FO.REGEX: 'console$'}},
                 {'rows': lines, 'columns': columns}
             )
 
@@ -1721,7 +1722,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
-                {'_bc': {'$regex': 'progress_bar$'}},
+                {FM.BC: {FO.REGEX: 'progress_bar$'}},
                 {'progress_bar': self._make_and_get_progress_bar()}
             )
 
@@ -1849,7 +1850,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
-                {'_bc': {'$regex': 'progress_bar$'}},
+                {FM.BC: {FO.REGEX: 'progress_bar$'}},
                 {'prefix': self._make_and_get_bar_prefix()}
             )
 
@@ -1957,7 +1958,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
-                {'_bc': {'$regex': 'progress_bar$'}},
+                {FM.BC: {FO.REGEX: 'progress_bar$'}},
                 {'bar': self._make_and_get_bar(length)}
             )
 
@@ -2047,7 +2048,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # update the output
         output_data = output_data.update({}, {
-            '$set': {
+            UO.SET: {
                 "time_since_last_update": {
                     "hours": hours,
                     "minutes": minutes,
@@ -2091,7 +2092,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # update the output
         output_data = output_data.update({}, {
-            '$set': {
+            UO.SET: {
                 "time_since_beginning_activation": {
                     "hours": hours,
                     "minutes": minutes,
@@ -2160,7 +2161,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Retrieve and store
         self.progress_bar_info = \
             self.progress_bar_info.update(
-                {'_bc': {'$regex': 'progress_bar$'}},
+                {FM.BC: {FO.REGEX: 'progress_bar$'}},
                 {'suffix': self._make_and_get_bar_suffix()}
             )
 
@@ -2191,7 +2192,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.full$'}},
+            {FM.BC: {FO.REGEX: 'description.full$'}},
             {'after': self._modify_description_after(description)}
         )
 
@@ -2220,7 +2221,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.full$'}},
+            {FM.BC: {FO.REGEX: 'description.full$'}},
             {'before': self._modify_description_before(description)}
         )
 
@@ -2253,7 +2254,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.short'}},
+            {FM.BC: {FO.REGEX: 'description.short'}},
             {'after': self._modify_description_short_after(description)}
         )
 
@@ -2286,7 +2287,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Update the progress bar info
         self.progress_bar_info = self.progress_bar_info.update(
-            {'_bc': {'$regex': 'description.short'}},
+            {FM.BC: {FO.REGEX: 'description.short'}},
             {'before': self._modify_description_short_before(description)}
         )
 
@@ -2749,7 +2750,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the moving average
         self.statistics_info = \
             self.statistics_info.update(
-                {'_bc': {'$regex': 'average$'}},
+                {FM.BC: {FO.REGEX: 'average$'}},
                 {'average_time_per_update':
                     Calculation.exp_average(
                         item=self.statistics_info.get('average.average_time_per_update'),
@@ -2761,7 +2762,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         # Update the last time
         self.statistics_info = \
             self.statistics_info.update(
-                {'_bc': {'$regex': 'time$'}},
+                {FM.BC: {FO.REGEX: 'time$'}},
                 {'last_update_time': time.time()}
             )
 
@@ -2988,7 +2989,7 @@ class TheProgressBar(TheProgressBarBase):
         # create a channel to talk to the gather info timer
         r_timer, w_timer = multiprocessing.Pipe(duplex=False)
         self.sleep_timer_info = self.sleep_timer_info.update({}, {
-            '$set': {
+            UO.SET: {
                 'gather_info_timer': {
                     # pipe to talk with the gather info timer, should not be changed
                     'pipe': {
@@ -3001,7 +3002,7 @@ class TheProgressBar(TheProgressBarBase):
 
         # set the gather info timer thread
         self.run_thread_info = self.run_thread_info.update({}, {
-            '$set': {
+            UO.SET: {
                 'gather_info_timer': {
                     'main': None,
                 }
@@ -3045,10 +3046,10 @@ class TheProgressBar(TheProgressBarBase):
         # find and update the role
         if self.state_info.get('parallel.is_distributed') is True:
             # update the role
-            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.WORKER}})
+            self.state_info = self.state_info.update({}, {UO.SET: {'role': self.Roles.WORKER}})
         else:
             # leave it be single mode
-            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.SINGLE}})
+            self.state_info = self.state_info.update({}, {UO.SET: {'role': self.Roles.SINGLE}})
 
     def _set_actions(self):
         """Sets the proper actions based on the conditions."""
@@ -3215,7 +3216,7 @@ class TheProgressBar(TheProgressBarBase):
         data: DataMuncher = gather_info_data_msg_template.get('progress_bar')
 
         # update it!
-        data = data.update({}, {'$update_only': {
+        data = data.update({}, {UO.UPDATE_ONLY: {
             'prefix': self._get_bar_prefix_data(),
             'bar': self._get_bar_data(),
             'suffix': self._get_bar_suffix_data(),
@@ -3288,7 +3289,7 @@ class TheProgressBar(TheProgressBarBase):
 
         # update the info
         self.communication_info = self.communication_info.update(
-            {'_bc': {'$regex': r'gather_info$'}},
+            {FM.BC: {FO.REGEX: r'gather_info$'}},
             {
                 'exchange.exchange': exchange,
                 'queue.queue': queue,
@@ -3308,7 +3309,7 @@ class TheProgressBar(TheProgressBarBase):
 
         data = gather_info_data_msg_template.update(
             {},
-            {'$update_only': {
+            {UO.UPDATE_ONLY: {
                 'rank': mpi.mpi_communicator.get_rank(),
                 'progress_bar': self._make_and_get_progress_bar_data(),
                 'current_iteration_index': self.state_info.get('item.current_iteration_index'),
@@ -3360,7 +3361,7 @@ class TheProgressBar(TheProgressBarBase):
 
         # update the info
         self.communication_info = self.communication_info.update(
-            {'_bc': {'$regex': r'printer_gatherer$'}},
+            {FM.BC: {FO.REGEX: r'printer_gatherer$'}},
             {
                 'exchange.exchange': exchange,
                 'queue.queue': queue,
@@ -3426,7 +3427,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # set the gather info thread
         self.run_thread_info = self.run_thread_info.update({}, {
-            '$set': {
+            UO.SET: {
                 'gather_info': {
                     'main': None,
                 }
@@ -3705,9 +3706,9 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         # find and update the role
         if self.state_info.get('parallel.is_distributed') is True:
             # update the role
-            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.MANAGER}})
+            self.state_info = self.state_info.update({}, {UO.SET: {'role': self.Roles.MANAGER}})
         else:
-            self.state_info = self.state_info.update({}, {'$set': {'role': self.Roles.SINGLE}})
+            self.state_info = self.state_info.update({}, {UO.SET: {'role': self.Roles.SINGLE}})
 
     def _set_actions(self):
         """Sets the proper actions based on the conditions."""
@@ -3839,7 +3840,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
                     .update(
                         {},
                         {
-                            '$set':
+                            UO.SET:
                             {
                                 # set terminal size
                                 'progress_bar.terminal': {'columns': terminal_cols, 'rows': terminal_rows}},
@@ -3977,7 +3978,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # update the info
         self.communication_info = self.communication_info.update(
-            {'_bc': {'$regex': r'gather_info$'}},
+            {FM.BC: {FO.REGEX: r'gather_info$'}},
             {
                 'exchange.exchange': exchange,
             }
@@ -4001,7 +4002,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
             # update the info
             queue_names.append(queue_name)
             self.communication_info = self.communication_info.update(
-                {'_bc': {'$regex': r'gather_info$'}},
+                {FM.BC: {FO.REGEX: r'gather_info$'}},
                 {
                     f'queue.{index}.queue': queue,
                 }
@@ -4014,7 +4015,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
                 queue_names=queue_names,
             ).add_callback([self._receive_gather_info_THREAD])
         self.communication_info = self.communication_info.update(
-            {'_bc': {'$regex': r'gather_info$'}},
+            {FM.BC: {FO.REGEX: r'gather_info$'}},
             {
                 f'consumer.consumer': consumer,
             }
@@ -4054,7 +4055,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # update the info
         self.communication_info = self.communication_info.update(
-            {'_bc': {'$regex': r'printer_gatherer$'}},
+            {FM.BC: {FO.REGEX: r'printer_gatherer$'}},
             {
                 'exchange.exchange': exchange,
                 'queue.queue': queue,
