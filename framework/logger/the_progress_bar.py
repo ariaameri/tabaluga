@@ -1548,16 +1548,16 @@ class TheProgressBarBase(ABC, BaseWorker):
                 if item != ''
             )
         # Figure how many lines we have
-        number_of_lines += progress_bar.count(f'\n')
+        number_of_lines += progress_bar.count(f'\n') + 1
 
         # Recalculate the return_to_line_number in case of negative numbers
         return_to_line_number = \
             return_to_line_number \
             if return_to_line_number >= 0 \
-            else number_of_lines + 1 + 1 + return_to_line_number
+            else number_of_lines + 1 + return_to_line_number
 
         # The total number of lines we need to go up or return
-        return_line_count = number_of_lines - return_to_line_number
+        return_line_count = number_of_lines - 1 - return_to_line_number
 
         # Compensate for the lines to be printed and go back to the beginning of all of them
         progress_bar_with_space += \
@@ -2345,11 +2345,13 @@ class TheProgressBarBase(ABC, BaseWorker):
         description = self._get_bar_description_after() if data is None else data.get('after')
 
         # also add the aggregation string
-        subs_str = r'\1\t'
-        description += \
-            f'\n\n' \
-            f'{REGEX_INDENTATION.sub(subs_str, self._make_and_get_aggregation_str())}' \
-            f'\n'
+        aggregation_string = self._make_and_get_aggregation_str()
+        if aggregation_string != '':
+            subs_str = r'\1\t'
+            description += \
+                f'\n\n' \
+                f'{REGEX_INDENTATION.sub(subs_str, self._make_and_get_aggregation_str())}' \
+                f'\n'
 
         # construct the data that has to be outputted
         output_data = \
