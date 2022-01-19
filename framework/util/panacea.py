@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, Any, List, Type, Union, Callable, Generator
+from typing import Dict, Any, List, Type, Union, Callable, Generator, TypeVar
 from types import FunctionType
 import yaml
 from enum import Enum
@@ -17,7 +17,12 @@ _restricted_update_names = {'_value', '_self', '_bc', '_key_name', '_recursive'}
 # total restricted names is a collection of the filter and update restricted names and other name
 _restricted_names = \
     _restricted_filter_names.union(_restricted_update_names)\
-        .union({})  # other names
+    .union({})  # other names
+
+# for return type to include subclasses
+PanaceaBaseSubclass = TypeVar("PanaceaBaseSubclass", bound="PanaceaBase")
+PanaceaSubclass = TypeVar("PanaceaSubclass", bound="Panacea")
+PanaceaLeafSubclass = TypeVar("PanaceaLeafSubclass", bound="PanaceaLeaf")
 
 
 class PanaceaBase(ABC):
@@ -83,7 +88,7 @@ class PanaceaBase(ABC):
     # Getters
 
     @abstractmethod
-    def get_option(self, item: str) -> Option[PanaceaBase]:
+    def get_option(self, item: str) -> Option[PanaceaBaseSubclass]:
         """Gets an item in the instance and return an Option value of that.
 
         Parameters
@@ -143,7 +148,7 @@ class PanaceaBase(ABC):
         """
 
         # get the item
-        value: Option[PanaceaBase] = self.get_option(item)
+        value: Option[PanaceaBaseSubclass] = self.get_option(item)
 
         # return the right thing!
         if value.filter(lambda x: x.is_leaf()).is_defined():
@@ -185,7 +190,7 @@ class PanaceaBase(ABC):
 
     # Operations
 
-    def map(self, func: FunctionType) -> PanaceaBase:
+    def map(self, func: FunctionType) -> PanaceaBaseSubclass:
         """Applies a function on the internal value and returns a new instance.
 
         Parameters
@@ -226,7 +231,7 @@ class PanaceaBase(ABC):
 
     # Debugging mode
 
-    def enable_debug_mode(self) -> PanaceaBase:
+    def enable_debug_mode(self) -> PanaceaBaseSubclass:
         """Enables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
 
         # Reserve the current __dict__
@@ -244,7 +249,7 @@ class PanaceaBase(ABC):
 
         return self
 
-    def disable_debug_mode(self) -> PanaceaBase:
+    def disable_debug_mode(self) -> PanaceaBaseSubclass:
         """Disables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
 
         # Check if enable_debug_mode has already been activated
@@ -264,7 +269,7 @@ class PanaceaBase(ABC):
 
     # Traversals
 
-    def filter(self, filter_dict: Dict = None) -> Panacea:
+    def filter(self, filter_dict: Dict = None) -> PanaceaSubclass:
         """Method to filter the current item based on the criteria given and return a new Panacea that satisfies
             the criteria.
 
@@ -284,7 +289,7 @@ class PanaceaBase(ABC):
         modifier = Modification(filter_dict=filter_dict)
 
         # Perform the filtering
-        filtered: Option[(str, PanaceaBase)] = modifier.filter(panacea=self)
+        filtered: Option[(str, PanaceaBaseSubclass)] = modifier.filter(panacea=self)
 
         # Return the result of an empty Panacea if the filtering result is empty
         return filtered.get_or_else(('', self.__class__()))[1]
@@ -338,7 +343,7 @@ class PanaceaBase(ABC):
         for item in found_all:
             yield item.get()
 
-    def update(self, filter_dict: Dict = None, update_dict: Dict = None, condition_dict: Dict = None) -> PanaceaBase:
+    def update(self, filter_dict: Dict = None, update_dict: Dict = None, condition_dict: Dict = None) -> PanaceaBaseSubclass:
         """Update an entry in the config and return a new Panacea.
 
         Parameters
@@ -363,7 +368,7 @@ class PanaceaBase(ABC):
         modifier = Modification(filter_dict=filter_dict, update_dict=update_dict, condition_dict=condition_dict)
 
         # Perform the update
-        updated: Option[(str, PanaceaBase)] = modifier.update(panacea=self)
+        updated: Option[(str, PanaceaBaseSubclass)] = modifier.update(panacea=self)
 
         # Return
         return updated.get_or_else(('', self))[1]
@@ -383,7 +388,7 @@ class Panacea(PanaceaBase):
 
     vertical_bar_with_color = lambda _: f'\033[37m\u22EE\033[0m'
 
-    def __init__(self, config_dict: Dict = None, leaf_class: PanaceaLeaf = None):
+    def __init__(self, config_dict: Dict = None, leaf_class: PanaceaLeafSubclass = None):
         """Initializes the class based on the input config dictionary.
 
         Parameters
@@ -397,7 +402,7 @@ class Panacea(PanaceaBase):
         super().__init__()
 
         # Set the given leaf class or the default
-        self.Leaf: PanaceaLeaf = leaf_class if leaf_class is not None else PanaceaLeaf
+        self.Leaf: Type[PanaceaLeaf] = leaf_class if leaf_class is not None else PanaceaLeaf
 
         # Create a dictionary to hold the data
         self._parameters: Dict[str, PanaceaBase] = {}
@@ -440,7 +445,7 @@ class Panacea(PanaceaBase):
 
         """
 
-        def helper(value: Any) -> PanaceaBase:
+        def helper(value: Any) -> PanaceaBaseSubclass:
             """Helper function to decide what to do with the incoming value.
 
             Parameters
@@ -527,7 +532,7 @@ class Panacea(PanaceaBase):
 
     # Operations
 
-    def map(self, func: FunctionType) -> PanaceaBase:
+    def map(self, func: FunctionType) -> PanaceaBaseSubclass:
         """Applies a function to parameters and return a new Panacea of that.
 
         Parameters
@@ -652,7 +657,7 @@ class Panacea(PanaceaBase):
 
     # Getters
 
-    def get_option(self, item: str) -> Option[PanaceaBase]:
+    def get_option(self, item: str) -> Option[PanaceaBaseSubclass]:
         """
         Gets a branch/leaf item in the instance and return an Option value of that.
         This should be noted that this method returns a PanaceaBase, so the search can result in a branch or leaf node,
@@ -685,7 +690,7 @@ class Panacea(PanaceaBase):
         else:
             return nothing
 
-    def get_leaf(self, item: str) -> PanaceaLeaf:
+    def get_leaf(self, item: str) -> PanaceaLeafSubclass:
         """Gets a leaf node in the instance and return it.
 
         Parameters
@@ -708,7 +713,7 @@ class Panacea(PanaceaBase):
 
         return out.get()
 
-    def get_or_empty(self, item: str) -> Panacea:
+    def get_or_empty(self, item: str) -> PanaceaSubclass:
         """
         Tries to get an item. If the item does not exist, returns an empty instance of the class.
 
@@ -884,7 +889,7 @@ class Panacea(PanaceaBase):
 
         return result
 
-    def union(self, new_config: Panacea) -> Panacea:
+    def union(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
         """method to take the union of two config instances and replace the currently existing ones.
 
         Parameters
@@ -898,7 +903,7 @@ class Panacea(PanaceaBase):
 
         """
 
-        def union_helper(new: Any, old: Any, this) -> PanaceaBase:
+        def union_helper(new: Any, old: Any, this) -> PanaceaBaseSubclass:
             """Helper function to create the union of two elements.
 
             Parameters
@@ -958,7 +963,7 @@ class Panacea(PanaceaBase):
         else:
             return self.__class__(final_parameters)
 
-    def intersection(self, new_config: Panacea) -> Panacea:
+    def intersection(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
         """method to take the intersection of two config instances.
 
         Parameters
@@ -974,7 +979,7 @@ class Panacea(PanaceaBase):
 
         return self.intersection_option(new_config).get_or_else(self.__class__())
 
-    def intersection_option(self, new_config: Panacea) -> Option:
+    def intersection_option(self, new_config: PanaceaSubclass) -> Option:
         """method to help to take the intersection of two config instances.
 
         Parameters
@@ -1047,12 +1052,12 @@ class PanaceaLeaf(PanaceaBase):
 
     # Relations
 
-    def _leaf_reference_eq(self, other: PanaceaLeaf):
+    def _leaf_reference_eq(self, other: PanaceaLeafSubclass):
         """Check whether other has the same reference as the current instance."""
 
         return self is other
 
-    def _leaf_value_eq(self, other: PanaceaLeaf):
+    def _leaf_value_eq(self, other: PanaceaLeafSubclass):
         """Check whether other has the same internal value as the current instance."""
 
         if isinstance(other, self.__class__):
@@ -1065,7 +1070,7 @@ class PanaceaLeaf(PanaceaBase):
 
         return self.contains(other)
 
-    def _leaf_value_lt(self, other: PanaceaLeaf):
+    def _leaf_value_lt(self, other: PanaceaLeafSubclass):
         """Check whether other internal value is less than the current instance."""
 
         if isinstance(other, self.__class__):
@@ -1136,7 +1141,7 @@ class PanaceaLeaf(PanaceaBase):
 
     # Operations
 
-    def __add__(self, other) -> PanaceaLeaf:
+    def __add__(self, other) -> PanaceaLeafSubclass:
         """Returns a new Leaf with added value"""
 
         if isinstance(other, self.__class__):
@@ -1144,7 +1149,7 @@ class PanaceaLeaf(PanaceaBase):
         else:
             return self.__class__(self._value + other)
 
-    def __mul__(self, other) -> PanaceaLeaf:
+    def __mul__(self, other) -> PanaceaLeafSubclass:
         """Returns a new Leaf with multiple value"""
 
         if isinstance(other, self.__class__):
@@ -1152,12 +1157,12 @@ class PanaceaLeaf(PanaceaBase):
         else:
             return self.__class__(self._value * other)
 
-    def __copy__(self) -> PanaceaLeaf:
+    def __copy__(self) -> PanaceaLeafSubclass:
         """Returns a copy of itself"""
 
         return self.__class__(self._value)
 
-    def map(self, func: FunctionType) -> PanaceaBase:
+    def map(self, func: FunctionType) -> PanaceaBaseSubclass:
         """Applies a function on the internal value and returns a new Leaf.
 
         Parameters
@@ -1187,7 +1192,7 @@ class PanaceaLeaf(PanaceaBase):
 
     # Modification
 
-    def intersection_option(self, new_config: PanaceaBase) -> Option:
+    def intersection_option(self, new_config: PanaceaBaseSubclass) -> Option:
         """method to help to take the intersection of two config instances.
 
         Parameters
@@ -1291,7 +1296,7 @@ class PanaceaLeaf(PanaceaBase):
 
     # Getters
 
-    def get_option(self, item: str = '_value') -> Option[PanaceaBase]:
+    def get_option(self, item: str = '_value') -> Option[PanaceaBaseSubclass]:
         """
         Gets a branch/leaf item in the instance and return an Option value of that.
         Basically, return an Option value of self
@@ -1347,7 +1352,7 @@ class PanaceaLeaf(PanaceaBase):
 
     # Debugging mode
 
-    def enable_debug_mode(self) -> PanaceaLeaf:
+    def enable_debug_mode(self) -> PanaceaLeafSubclass:
         """Enables debug mode, in this instance and all children, where parameters can be accessed with . notation."""
 
         # Do the general enable_debug_mode
