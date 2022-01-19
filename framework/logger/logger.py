@@ -1,7 +1,8 @@
 from __future__ import annotations
 import time
 from ..util.config import ConfigParser
-from ..util.config import UM, UO, UC, FM, FO
+from ..util.config import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
+from ..util.config import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.panacea import Panacea
 from ..base.base import BaseEventManager
 from .the_progress_bar import TheProgressBar, TheProgressBarParallelManager

@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from ..base import base
 from ..util.config import ConfigParser
-from ..util.config import UM, UO, UC, FM, FO
+from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
+from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..communicator import mpi
 from typing import List, Optional
 import pandas as pd

@@ -14,7 +14,8 @@ import datetime
 import os
 import colored
 from ..util.data_muncher import DataMuncher
-from ..util.data_muncher import UM, UO, UC, FM, FO
+from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
+from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.calculation import Calculation

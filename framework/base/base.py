@@ -1,6 +1,7 @@
 from __future__ import annotations
 from ..util.config import ConfigParser
-from ..util.config import UM, UO, UC, FM, FO
+from ..util.config import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
+from ..util.config import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.option import Option, Some, nothing
 from typing import List, Dict, Union
 from abc import ABC, abstractmethod
