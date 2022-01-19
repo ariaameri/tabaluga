@@ -1,4 +1,6 @@
 from ..util.data_muncher import DataMuncher, DataMuncherLeaf
+from ..util.data_muncher import FILTER_MODIFIERS, FILTER_OPERATIONS, FM, FO
+from ..util.data_muncher import UPDATE_MODIFIERS, UPDATE_OPERATIONS, UPDATE_CONDITIONALS, UM, UO, UC
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import re
 import colored

@@ -1,6 +1,8 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Callable, Union
+from typing import List, Dict, Any, Callable, Union, TypeVar, Type
 from .panacea import Panacea, PanaceaLeaf
+from .panacea import FILTER_MODIFIERS, FILTER_OPERATIONS, FM, FO
+from .panacea import UPDATE_MODIFIERS, UPDATE_OPERATIONS, UPDATE_CONDITIONALS, UM, UO, UC
 
 
 class DataMuncher(Panacea):
@@ -10,7 +12,7 @@ class DataMuncher(Panacea):
     item_begin_symbol = lambda _: f'\u2058'
     item_color = lambda _: f'\033[38;5;112m'
 
-    def __init__(self, data_dict: Dict = None, leaf_class: PanaceaLeaf = None):
+    def __init__(self, data_dict: Dict = None, leaf_class: Type[DataMuncherLeaf] = None):
         """Initializes the class based on the input data dictionary.
 
         Parameters
