@@ -11,14 +11,6 @@ import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
 
 
-# a list of restricted names that are used and a key name should not collide with these
-_restricted_filter_names = {'_value', '_self', '_bc', '_key_name'}
-_restricted_update_names = {'_value', '_self', '_bc', '_key_name', '_recursive'}
-# total restricted names is a collection of the filter and update restricted names and other name
-_restricted_names = \
-    _restricted_filter_names.union(_restricted_update_names)\
-    .union({})  # other names
-
 # for return type to include subclasses
 PanaceaBaseSubclass = TypeVar("PanaceaBaseSubclass", bound="PanaceaBase")
 PanaceaSubclass = TypeVar("PanaceaSubclass", bound="Panacea")
@@ -478,14 +470,6 @@ class Panacea(PanaceaBase):
             # check that the names do not contain `.`s
             if '.' in item:
                 raise ValueError(f'cannot have a key of name {item}: key elements cannot have `.` in their names')
-
-            # check for invalid key names
-            if item in _restricted_names:
-                restricted_names_str = '"' + '," "'.join(_restricted_names) + '"'
-                raise ValueError(
-                    f'cannot have a key of name {item}: '
-                    f'key elements must be different than {restricted_names_str}'
-                )
 
             # check if the key is string
             if not isinstance(item, str):
@@ -1559,18 +1543,18 @@ class Modification:
                 """
 
                 # If the operation is a function, return the wrapper with the function
-                if single_operator == self.Operations.FUNCTION or single_operator == self.Operations.FUNCTION.value:
+                if single_operator == self.Operations.FUNCTION:
                     return self._function(value)
                 # Do the rest of the operations
-                elif single_operator == self.Operations.EXISTS or single_operator == self.Operations.EXISTS.value:
+                elif single_operator == self.Operations.EXISTS:
                     return self._exists(value)
-                elif single_operator == self.Operations.REGEX or single_operator == self.Operations.REGEX.value:
+                elif single_operator == self.Operations.REGEX:
                     return self._regex(value)
-                elif single_operator == self.Operations.EQUAL or single_operator == self.Operations.EQUAL.value:
+                elif single_operator == self.Operations.EQUAL:
                     return self._equal(value)
-                elif single_operator == self.Operations.OR or single_operator == self.Operations.OR.value:
+                elif single_operator == self.Operations.OR:
                     return self._or(value)
-                elif single_operator == self.Operations.AND or single_operator == self.Operations.AND.value:
+                elif single_operator == self.Operations.AND:
                     return self._and(value)
                 else:
                     raise AttributeError(f"Such operator {single_operator} does not exist for filtering/finding!")
@@ -1945,11 +1929,11 @@ class Modification:
 
         def _process_condition(self, condition_dict):
 
-            condition_dict[self.Conditionals.PROCESS_MAX_COUNT.value] = \
-                min(multiprocessing.cpu_count(), condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT.value) or 5)
+            condition_dict[self.Conditionals.PROCESS_MAX_COUNT] = \
+                min(multiprocessing.cpu_count(), condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT) or 5)
 
-            condition_dict[self.Conditionals.THREAD_MAX_COUNT.value] = \
-                min(multiprocessing.cpu_count() * 5, condition_dict.get(self.Conditionals.THREAD_MAX_COUNT.value) or 5)
+            condition_dict[self.Conditionals.THREAD_MAX_COUNT] = \
+                min(multiprocessing.cpu_count() * 5, condition_dict.get(self.Conditionals.THREAD_MAX_COUNT) or 5)
 
             return condition_dict
 
@@ -1990,44 +1974,31 @@ class Modification:
                 """
 
                 # If the operation is $operator, set the function to its corresponding wrapper
-                if single_operator == self.Operations.UNSET.value or \
-                        single_operator == self.Operations.UNSET:
+                if single_operator == self.Operations.UNSET:
                     function = self._unset
-                elif single_operator == self.Operations.SET.value or \
-                        single_operator == self.Operations.SET:
+                elif single_operator == self.Operations.SET:
                     function = self._set
-                elif single_operator == self.Operations.SET_ONLY.value or \
-                        single_operator == self.Operations.SET_ONLY:
+                elif single_operator == self.Operations.SET_ONLY:
                     function = self._set_only
-                elif single_operator == self.Operations.SET_ON_INSERT.value or \
-                        single_operator == self.Operations.SET_ON_INSERT:
+                elif single_operator == self.Operations.SET_ON_INSERT:
                     function = self._set_on_insert
-                elif single_operator == self.Operations.UPDATE_ONLY.value or \
-                        single_operator == self.Operations.UPDATE_ONLY:
+                elif single_operator == self.Operations.UPDATE_ONLY:
                     function = self._update_only
-                elif single_operator == self.Operations.UPDATE.value or \
-                        single_operator == self.Operations.UPDATE:
+                elif single_operator == self.Operations.UPDATE:
                     function = self._update
-                elif single_operator == self.Operations.RENAME.value or \
-                        single_operator == self.Operations.RENAME:
+                elif single_operator == self.Operations.RENAME:
                     function = self._rename
-                elif single_operator == self.Operations.INC.value or \
-                        single_operator == self.Operations.INC:
+                elif single_operator == self.Operations.INC:
                     function = self._inc
-                elif single_operator == self.Operations.MULT.value or \
-                        single_operator == self.Operations.MULT:
+                elif single_operator == self.Operations.MULT:
                     function = self._mult
-                elif single_operator == self.Operations.FUNCTION.value or \
-                        single_operator == self.Operations.FUNCTION:
+                elif single_operator == self.Operations.FUNCTION:
                     function = self._function
-                elif single_operator == self.Operations.MAP.value or \
-                        single_operator == self.Operations.MAP:
+                elif single_operator == self.Operations.MAP:
                     function = self._map
-                elif single_operator == self.Operations.MAP_ON_VALUE.value or \
-                        single_operator == self.Operations.MAP_ON_VALUE:
+                elif single_operator == self.Operations.MAP_ON_VALUE:
                     function = self._map_on_value
-                elif single_operator == self.Operations.MAP_ON_VALUE_THREAD.value or \
-                        single_operator == self.Operations.MAP_ON_VALUE_THREAD:
+                elif single_operator == self.Operations.MAP_ON_VALUE_THREAD:
                     function = self._map_on_value_thread
                 # TODO: FIx multiprocessing, it does not currently work
                 # elif single_operator == '$map_on_value_process':
@@ -2183,7 +2154,7 @@ class Modification:
 
                 # if the value exists
                 if x.is_defined():
-                    raise ValueError(f"The value '{key}' to `{self.Operations.SET_ONLY.value}` exists!")
+                    raise ValueError(f"The value '{key}' to `{self.Operations.SET_ONLY}` exists!")
 
                 # the good case!
                 else:
@@ -2265,7 +2236,7 @@ class Modification:
 
                 # if the value does not exist
                 if x.is_empty():
-                    raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY.value}` does not exist!")
+                    raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY}` does not exist!")
 
                 # the good case!
                 result = Some((key, value))
@@ -2659,7 +2630,7 @@ class Modification:
 
                     result = item
 
-                    with multiprocessing.Pool(self.condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT.value)) \
+                    with multiprocessing.Pool(self.condition_dict.get(self.Conditionals.PROCESS_MAX_COUNT)) \
                             as executor:
                         # Apply all the functions in order
                         for func in funcs:
@@ -2737,7 +2708,7 @@ class Modification:
 
                     result = item
 
-                    with ThreadPoolExecutor(self.condition_dict.get(self.Conditionals.THREAD_MAX_COUNT.value)) \
+                    with ThreadPoolExecutor(self.condition_dict.get(self.Conditionals.THREAD_MAX_COUNT)) \
                             as executor:
                         # Apply all the functions in order
                         for func in funcs:
@@ -3038,16 +3009,16 @@ class Modification:
         filter_dict_modified = {
             # Elements that are already in dictionary form that Filter class accept
             **{key: value for key, value in filter_dict.items()
-               if isinstance(value, dict) and not key.startswith('$')},
+               if isinstance(value, dict)},
             # Elements that are not in dictionary form are set to '$equal' operator for the Filter class
-            **{key: {self.Filter.Operations.EQUAL.value: value} for key, value in filter_dict.items()
-               if not isinstance(value, dict) and not key.startswith('$')}
+            **{key: {self.Filter.Operations.EQUAL: value} for key, value in filter_dict.items()
+               if not isinstance(value, dict)},
         }
         # Add operator keys
-        operators_dict = {key: value for key, value in filter_dict.items() if key.startswith('$')}
+        operators_dict = {key: value for key, value in filter_dict.items() if isinstance(key, self.Filter.Operations)}
         if operators_dict:
-            self_dict = filter_dict_modified.get('_self') or {}
-            filter_dict_modified['_self'] = {**self_dict, **operators_dict}
+            self_dict = filter_dict_modified.get(self.Filter.Modifiers.SELF) or {}
+            filter_dict_modified[self.Filter.Modifiers.SELF] = {**self_dict, **operators_dict}
 
         # Process the criteria for each of the filter_dict fields into an instance of the Filter class
         processed_filter_dict: Dict = {key: self.Filter(value) for key, value in filter_dict_modified.items()}
@@ -3061,13 +3032,13 @@ class Modification:
                     key: value
                     for key, value
                     in processed_filter_dict.items()
-                    if key not in _restricted_filter_names
+                    if not isinstance(key, self.Filter.Modifiers)
                 },
                 '_special': {
                     key: value
                     for key, value
                     in processed_filter_dict.items()
-                    if key in _restricted_filter_names
+                    if isinstance(key, self.Filter.Modifiers)
                 }
             }
 
@@ -3107,32 +3078,32 @@ class Modification:
         satisfied &= \
             filter_dict \
                 .get('_special') \
-                .get('_bc') \
+                .get(self.Filter.Modifiers.BC) \
                 .filter(Some(bc)) \
-                if filter_dict.get('_special').get('_bc') is not None \
+                if filter_dict.get('_special').get(self.Filter.Modifiers.BC) is not None \
                 else True
         satisfied &= \
             filter_dict \
                 .get('_special') \
-                .get('_self') \
+                .get(self.Filter.Modifiers.SELF) \
                 .filter(Some(panacea)) \
-                if filter_dict.get('_special').get('_self') is not None \
+                if filter_dict.get('_special').get(self.Filter.Modifiers.SELF) is not None \
                 else True
         satisfied &= \
             filter_dict \
                 .get('_special') \
-                .get('_key_name') \
+                .get(self.Filter.Modifiers.KEYNAME) \
                 .filter(Some(bc.split('.')[-1])) \
-                if filter_dict.get('_special').get('_key_name') is not None \
+                if filter_dict.get('_special').get(self.Filter.Modifiers.KEYNAME) is not None \
                 else True
 
         # For special item '_value', `panacea` has to be a leaf
         satisfied &= \
             filter_dict \
                 .get('_special') \
-                .get('_value') \
+                .get(self.Filter.Modifiers.VALUE) \
                 .filter(panacea.get_value_option('_value').filter(lambda x: issubclass(type(panacea), PanaceaLeaf))) \
-                if filter_dict.get('_special').get('_value') is not None \
+                if filter_dict.get('_special').get(self.Filter.Modifiers.VALUE) is not None \
                 else True
 
         return satisfied
@@ -3285,6 +3256,7 @@ class Modification:
 
         # placeholder
         processed_update_dict = {}
+        special_update_dict = {}
 
         # Replace the key/value pairs whose value is not a dictionary with '$set' operator
         modified_update_dict = {
@@ -3300,7 +3272,7 @@ class Modification:
             {**(modified_update_dict.get(self.Update.Operations.SET) or {}), **set_dict}
 
         # if doing recursive, extract the recursive parts
-        if self.condition_dict.get('recursive') is True:
+        if self.condition_dict.get(self.Update.Conditionals.RECURSIVE) is True:
             recursive_dict = {}
             for operation, fields in modified_update_dict.items():
                 for field, operand in fields.items():
@@ -3313,7 +3285,7 @@ class Modification:
                     if isinstance(operand, dict):
                         del modified_update_dict[operation][field]
 
-            processed_update_dict['_recursive'] = recursive_dict
+            special_update_dict['_recursive'] = recursive_dict
 
         # Process the update_dict and get a modified update dictionary
         processed_update_dict: Dict = \
@@ -3331,13 +3303,16 @@ class Modification:
                     key: value
                     for key, value
                     in processed_update_dict.items()
-                    if key not in _restricted_update_names
+                    if not isinstance(key, self.Update.Modifiers)
                 },
                 '_special': {
-                    key: value
-                    for key, value
-                    in processed_update_dict.items()
-                    if key in _restricted_update_names
+                    **special_update_dict,
+                    **{
+                        key: value
+                        for key, value
+                        in processed_update_dict.items()
+                        if isinstance(key, self.Update.Modifiers)
+                    }
                 }
             }
 
@@ -3449,21 +3424,21 @@ class Modification:
                                     self.Update.Operations.SET: {updated_key: updated_panacea},
                                 }
                             )
-        if update_dict.get('_special').get('_key_name') is not None:
+        if update_dict.get('_special').get(self.Update.Modifiers.KEYNAME) is not None:
             # Apply the update rule
-            new_key: str = update_dict.get('_special').get('_key_name')('', Some(key)).get()[1]
+            new_key: str = update_dict.get('_special').get(self.Update.Modifiers.KEYNAME)('', Some(key)).get()[1]
             if not isinstance(new_key, str):
                 raise ValueError('operation on key name resulted in a non string variable.')
-        if update_dict.get('_special').get('_self') is not None:
+        if update_dict.get('_special').get(self.Update.Modifiers.SELF) is not None:
             # Apply the update rule
             # Note that the result can be anything, anything that the user says, not necessarily a leaf
-            new_panacea: Any = update_dict.get('_special').get('_self')('', Some(new_panacea)).get()[1]
+            new_panacea: Any = update_dict.get('_special').get(self.Update.Modifiers.SELF)('', Some(new_panacea)).get()[1]
 
         # If we have a `_value' item and new_panacea (after all the updates yet) is a leaf, update it
-        if update_dict.get('_special').get('_value') is not None and issubclass(type(new_panacea), PanaceaLeaf):
+        if update_dict.get('_special').get(self.Update.Modifiers.VALUE) is not None and issubclass(type(new_panacea), PanaceaLeaf):
 
             # Get the result of applying the update rule to the internal value
-            result = update_dict.get('_special').get('_value')('', Some(new_panacea.get())).get()[1]
+            result = update_dict.get('_special').get(self.Update.Modifiers.VALUE)('', Some(new_panacea.get())).get()[1]
 
             # Make a new leaf from the new value
             new_panacea = new_panacea.map(lambda x: result)
@@ -3509,7 +3484,7 @@ class Modification:
         # If the `panacea` instance met the filtering criteria
         # After that, do the updating and return the result in a correct way
         # If we should go even deeper than the shallowest level matched, go deeper!
-        if self.condition_dict.get(self.Update.Conditionals.DEEP.value) is True:
+        if self.condition_dict.get(self.Update.Conditionals.DEEP) is True:
             do_after_satisfied = lambda key, panacea: propagate(*self.update_self(key, panacea))
         else:
             do_after_satisfied = lambda key, panacea: Some(self.update_self(key, panacea))
@@ -3519,8 +3494,8 @@ class Modification:
 
 
 # constants
-FILTER_OPERATIONS = Modification.Filter.Operations
-FILTER_MODIFIERS = Modification.Filter.Modifiers
-UPDATE_OPERATIONS = Modification.Update.Operations
-UPDATE_MODIFIERS = Modification.Update.Modifiers
-UPDATE_CONDITIONALS = Modification.Update.Conditionals
+FILTER_OPERATIONS = FO = Modification.Filter.Operations
+FILTER_MODIFIERS = FM = Modification.Filter.Modifiers
+UPDATE_OPERATIONS = UO = Modification.Update.Operations
+UPDATE_MODIFIERS = UM = Modification.Update.Modifiers
+UPDATE_CONDITIONALS = UC = Modification.Update.Conditionals
