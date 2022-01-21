@@ -2,65 +2,68 @@ import multiprocessing.connection
 import queue
 import random
 import threading
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TypeVar, Generic, Optional
+
+# type of message we accept
+MessageType = TypeVar("MessageType")
 
 
-class MessagePasser:
+class ReceiveResults:
+    """class to define the next behavior of the messaging system."""
+
+    class BaseReceiveResult:
+        pass
+
+    class SameReceive(BaseReceiveResult):
+        """Indicating the same behavior for receiving"""
+
+        pass
+    sameReceive = SameReceive()
+
+    class EndReceive(BaseReceiveResult):
+        """Indicating end of receiving"""
+
+        pass
+    endReceive = EndReceive()
+
+
+class MessagePasser(Generic[MessageType], ABC):
     """Trait implementing message internal passing interface."""
-
-    class Error:
-        """Messages representing an error."""
-
-        class BaseError(BaseException):
-            pass
-
-    class Message:
-        """Messages."""
-
-        class BaseMessage:
-            pass
-
-        @dataclass
-        class AskMessage:
-            """Message wrapper for the ask pattern."""
-            pipe_write: multiprocessing.connection.Connection
-            message: 'MessagePasser.Message.BaseMessage'
-
-    class ReceiveResults:
-        """class to define the next behavior of the messaging system."""
-
-        class BaseReceiveResult:
-            pass
-
-        class SameReceive(BaseReceiveResult):
-            """Indicating the same behavior for receiving"""
-
-            pass
-        sameReceive = SameReceive()
-
-        class EndReceive(BaseReceiveResult):
-            """Indicating end of receiving"""
-
-            pass
-        endReceive = EndReceive()
 
     def __init__(self):
         """Initializer."""
 
         # make a queue for the internal messages and a thread to run it
         self._message_pass_queue: queue.Queue = queue.Queue()
-        self._message_pass_thread: threading.Thread = \
-            threading.Thread(
-                name=f'{self.__class__.__name__}_message_processor_{random.randint(1, 1000)}',  # come up with rand name
-                target=self._receive,
-                args=(),
-                daemon=True
-            )
+        self._message_pass_thread: Optional[threading.Thread] = None
+        self._message_pass_thread_ident: Optional[int] = None
 
-    def _start_message_passing(self) -> None:
-        """Starts the whole message passing listening but spawning a new thread."""
+    def _start_message_passing(self, blocking: bool = False) -> None:
+        """
+        Starts the whole message passing listening but spawning a new thread.
 
-        self._message_pass_thread.start()
+        Parameters
+        ----------
+        blocking : bool, optional
+            whether to block or not by starting a new thread for listening
+
+        """
+
+        if blocking is False:
+            self._message_pass_thread = \
+                threading.Thread(
+                    # come up with random name
+                    name=f'{self.__class__.__name__}_message_processor_{random.randint(1, 1000)}',
+                    target=self._receive,
+                    args=(),
+                    daemon=True
+                )
+            self._message_pass_thread.start()
+            self._message_pass_thread_ident = self._message_pass_thread.ident
+        else:
+            self._receive()
 
     def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
@@ -68,25 +71,27 @@ class MessagePasser:
         while True:
 
             # get the command
-            message: MessagePasser.Message.BaseMessage = self._message_pass_queue.get()
+            message: MessageType = self._message_pass_queue.get()
 
             # process the message
-            result: MessagePasser.ReceiveResults.BaseReceiveResult = self._receive_message(message)
+            result: ReceiveResults.BaseReceiveResult = self._receive_message(message)
 
-            if isinstance(result, self.ReceiveResults.SameReceive):
+            if isinstance(result, ReceiveResults.SameReceive):
+                # do nothing and go to the next fetching
                 pass
-            elif isinstance(result, self.ReceiveResults.EndReceive):
+            elif isinstance(result, ReceiveResults.EndReceive):
                 break
             else:
                 raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
 
-    def _receive_message(self, message: Message.BaseMessage) -> ReceiveResults.BaseReceiveResult:
+    @abstractmethod
+    def _receive_message(self, message: MessageType) -> ReceiveResults.BaseReceiveResult:
         """
         Processes the given message and acts upon it.
 
         Parameters
         ----------
-        message : Message.BaseMessage
+        message : MessageType
             received message
 
         Returns
@@ -98,45 +103,77 @@ class MessagePasser:
 
         raise NotImplementedError
 
-    def _send_message_to_self(self, message: Message.BaseMessage) -> None:
+    def tell(self, message: MessageType) -> None:
         """
         Sends the message to self for later processing.
 
         Parameters
         ----------
-        message : Message.BaseMessage
+        message : MessageType
             the message to be sent for later processing
 
         """
 
         self._message_pass_queue.put(message)
 
-    def _ask_message_from_self(self, message: Message.BaseMessage) -> Message.BaseMessage:
+    def ask(self, message: MessageType) -> MessageType:
         """
         Sends the message to self and wait for its reply.
 
+        This method should NOT be called from the thread that is listening to messages.
+
         Parameters
         ----------
-        message : Message.BaseMessage
+        message : MessageType
             the message to be sent for later processing
 
         Returns
         -------
-        Message.BaseMessage
+        MessageType
             the result
 
         """
 
-        # make a pipe for receiving the result
-        r, w = multiprocessing.Pipe(duplex=False)
+        # check we are not the same method as the listener
+        if self._message_pass_thread_ident is not None and threading.get_ident() == self._message_pass_thread_ident:
+            raise RuntimeError("ask is called from the same thread as listener.")
 
-        # wrap the message in an ask class and send it
-        self._message_pass_queue.put(
-            self.Message.AskMessage(
-                message=message,
-                pipe_write=w,
-            )
-        )
+        return _Asker(self).ask(message)
 
-        return r.recv()
 
+class _Asker(Generic[MessageType]):
+
+    def __init__(self, reference: MessagePasser[MessageType]):
+        """
+        Initializer.
+
+        Parameters
+        ----------
+        reference : MessagePasser
+            the message passer to ask from
+        """
+
+        # make a queue for the internal messages and a thread to run it
+        self._message_pass_queue: queue.Queue = queue.Queue()
+        # keep the message passer for asking
+        self.ask_reference: MessagePasser[MessageType] = reference
+
+    def _receive(self) -> MessageType:
+        """Main method. Receives the messages and returns it."""
+
+        # get only a single message and return it
+
+        # get the message
+        message: MessageType = self._message_pass_queue.get()
+
+        return message
+
+    def ask(self, message: MessageType) -> MessageType:
+
+        # first tell the message
+        self.ask_reference.tell(message)
+
+        # now, wait for the result
+        result = self._receive()
+
+        return result
