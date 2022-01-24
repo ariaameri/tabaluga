@@ -43,6 +43,19 @@ class MessagePasserBase(Generic[MessageType], ABC):
 
         raise NotImplementedError
 
+    def tell(self, message: MessageType) -> None:
+        """
+        Sends the message to self for later processing.
+
+        Parameters
+        ----------
+        message : MessageType
+            the message to be sent for later processing
+
+        """
+
+        self._message_pass_queue.put(message)
+
 
 class MessagePasser(MessagePasserBase[MessageType], ABC):
     """Trait implementing message internal passing interface."""
@@ -118,19 +131,6 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         """
 
         raise NotImplementedError
-
-    def tell(self, message: MessageType) -> None:
-        """
-        Sends the message to self for later processing.
-
-        Parameters
-        ----------
-        message : MessageType
-            the message to be sent for later processing
-
-        """
-
-        self._message_pass_queue.put(message)
 
     def ask(self, message_factory: Callable[[MessagePasserBaseSubclass], MessageType]) -> Any:
         """
