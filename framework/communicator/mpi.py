@@ -9,6 +9,7 @@ from typing import Optional, Any, Sequence, List
 from mpi4py import MPI
 import os
 from readerwriterlock import rwlock
+from . import config
 
 
 class _MPICommunicatorSingletonClass(BaseWorker):
@@ -458,13 +459,12 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             return self._size
 
 
+def init_with_config(config: ConfigParser):
+    return _MPICommunicatorSingletonClass(config)
+
+
+# this is an instance that everyone can use
 # this is the only instance that everyone should use
 # this instance has to be initialized and set at the beginning of the program
 # then everyone should use this instance
-mpi_communicator: Optional[_MPICommunicatorSingletonClass] = None
-
-
-def init(config: ConfigParser = None):
-    global mpi_communicator
-    mpi_communicator = _MPICommunicatorSingletonClass(config)
-    mpi_communicator.init_logger()
+mpi_communicator: _MPICommunicatorSingletonClass = init_with_config(config.mpi_config or ConfigParser({}))

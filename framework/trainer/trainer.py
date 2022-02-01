@@ -21,16 +21,16 @@ class Trainer(base.BaseEventManager, ABC):
     """A class to help with training a neural network."""
 
     def __init__(self, config: ConfigParser = None):
-        """Initializer for the this instance of the class"""
+        """Initializer for this instance of the class"""
+
+        # set communicators' configs
+        self._set_communicator_configs(config)
 
         # initialize mpi
-        from ..communicator import mpi
-        mpi.init(config.get_or_empty("mpi"))
-
-        # initialize rabbitmq if exist
-        if mpi.mpi_communicator.is_distributed() is True:
-            from ..communicator import rabbitmq
-            rabbitmq.init(config.get_or_else("rabbitmq", ConfigParser()))
+        # from ..communicator import mpi
+        # if config.contains_key("mpi"):
+        #     # reinitialize mpi
+        #     mpi.mpi_communicator = mpi.init_with_config(config.get_or_empty("mpi"))
 
         super().__init__(config)
 
@@ -73,6 +73,16 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Register exception hook to be caught
         self._register_exception_hook()
+
+    def _set_communicator_configs(self, config: ConfigParser):
+        """Sets the configurations for the communicators."""
+
+        from ..communicator import config as comm_config
+
+        comm_config.mpi_config = config.get_or_empty("mpi")
+        comm_config.rabbit_config = config.get_or_empty("rabbitmq")
+        comm_config.mongo_config = config.get_or_empty('mongodb')
+        comm_config.influx_config = config.get_or_empty('influxdb')
 
     def create_model(self) -> Union[ModelManager, Model]:
         """Creates an instance of the model and returns it."""

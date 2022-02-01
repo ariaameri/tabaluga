@@ -9,7 +9,6 @@ import kombu
 import kombu.pools
 from kombu import mixins
 from enum import Enum
-from readerwriterlock import rwlock
 
 
 class RabbitMQExchangeType(Enum):
@@ -137,7 +136,7 @@ class RabbitMQConsumer(mixins.ConsumerMixin, BaseWorker):
         self._log.debug(f"consumer of name '{self.name}' ended consumption.")
 
 
-class _RabbitMQCommunicator(BaseWorker):
+class RabbitMQCommunicator(BaseWorker):
     """
     Class to handle RabbitMQ-related tasks.
 
@@ -547,26 +546,47 @@ class _RabbitMQCommunicator(BaseWorker):
         ).add_queue(queues_list)
 
 
-# this is the only instance that everyone should use
-# this instance has to be initialized and set at the beginning of the program
-# then everyone should use this instance
-rabbitmq_communicator: Optional[_RabbitMQCommunicator] = None
+def init_with_config(config: ConfigParser) -> RabbitMQCommunicator:
+    return RabbitMQCommunicator(config)
 
 
-def init(config: ConfigParser):
-    global rabbitmq_communicator
-    rabbitmq_communicator = _RabbitMQCommunicator(config)
+class _RabbitMQGlobal:
+    """
+    Wrapper class around a rabbitmq global variable.
+
+    This class helps with rabbitmq connector initialization on the first demand.
+    """
+
+    def __init__(self):
+
+        # a placeholder for the global rabbitmq instance
+        self._rabbitmq_global: Optional[RabbitMQCommunicator] = None
+
+    def _create_instance(self) -> None:
+        """Creates the rabbitmq instance."""
+
+        from . import config
+
+        self._rabbitmq_global = init_with_config(config.rabbit_config or ConfigParser({}))
+
+    @property
+    def rabbitmq(self) -> RabbitMQCommunicator:
+        """
+        Returns the rabbitmq instance.
+
+        If the instance is not yet made, this will make it.
+
+        Returns
+        -------
+        RabbitMQCommunicator
+        """
+
+        # if not made, make it
+        if self._rabbitmq_global is None:
+            self._create_instance()
+
+        return self._rabbitmq_global
 
 
-
-
-
-
-
-
-
-
-
-
-
-
+# this is an instance that everyone can use
+rabbitmq_communicator: _RabbitMQGlobal = _RabbitMQGlobal()

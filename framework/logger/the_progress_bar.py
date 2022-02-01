@@ -22,6 +22,7 @@ from ..util.calculation import Calculation
 from ..util.option import Some
 from ..communicator import mpi
 from ..communicator import rabbitmq
+from ..communicator.rabbitmq import rabbitmq_communicator
 import re
 import fcntl
 import termios
@@ -3256,7 +3257,7 @@ class TheProgressBar(TheProgressBarBase):
         data: dict = self._make_and_get_gather_info_communication_message_json()
 
         # send the data
-        rabbitmq.rabbitmq_communicator.publish(
+        rabbitmq_communicator.rabbitmq.publish(
             body=data,
             routing_key=rabbit_data.get('gather_info.message.routing_key'),
             exchange=self.communication_info.get('gather_info.exchange.exchange'),
@@ -3270,7 +3271,7 @@ class TheProgressBar(TheProgressBarBase):
         """Initializes everything related to gathering update to the manager."""
 
         # define the exchange
-        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+        exchange = rabbitmq_communicator.rabbitmq.make_and_get_exchange(
             name=rabbit_data.get('gather_info.exchange.name'),
             type=rabbit_data.get('gather_info.exchange.type'),
             return_on_exist=True,
@@ -3280,7 +3281,7 @@ class TheProgressBar(TheProgressBarBase):
         )
 
         # define the queue
-        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+        queue = rabbitmq_communicator.rabbitmq.make_and_get_queue(
             name=rabbit_data.get('gather_info.queue.name'),
             exchange_name=rabbit_data.get('gather_info.exchange.name'),
             routing_key=rabbit_data.get('gather_info.message.routing_key'),
@@ -3343,7 +3344,7 @@ class TheProgressBar(TheProgressBarBase):
         """Initializes everything related to printing to the manager."""
 
         # define the exchange
-        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+        exchange = rabbitmq_communicator.rabbitmq.make_and_get_exchange(
             name=rabbit_data.get('printer_gatherer.exchange.name'),
             type=rabbit_data.get('printer_gatherer.exchange.type'),
             return_on_exist=True,
@@ -3353,7 +3354,7 @@ class TheProgressBar(TheProgressBarBase):
         )
 
         # define the queue
-        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+        queue = rabbitmq_communicator.rabbitmq.make_and_get_queue(
             name=rabbit_data.get('printer_gatherer.queue.name'),
             exchange_name=rabbit_data.get('printer_gatherer.exchange.name'),
             routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
@@ -3384,7 +3385,7 @@ class TheProgressBar(TheProgressBarBase):
 
         # send the data
         try:
-            rabbitmq.rabbitmq_communicator.publish(
+            rabbitmq_communicator.rabbitmq.publish(
                 body=data,
                 routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
                 exchange=self.communication_info.get('printer_gatherer.exchange.exchange'),
@@ -3970,7 +3971,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         """Initializes everything related to gathering update to the manager."""
 
         # define the exchange
-        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+        exchange = rabbitmq_communicator.rabbitmq.make_and_get_exchange(
             name=rabbit_data.get('gather_info.exchange.name'),
             type=rabbit_data.get('gather_info.exchange.type'),
             return_on_exist=True,
@@ -3992,7 +3993,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         for index in range(mpi.mpi_communicator.get_size()):
             # define the queue
             queue_name = rabbit_data.get('gather_info.queue.name_template').replace('<rank>', str(index))
-            queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+            queue = rabbitmq_communicator.rabbitmq.make_and_get_queue(
                 name=queue_name,
                 exchange_name=rabbit_data.get('gather_info.exchange.name'),
                 routing_key=rabbit_data.get('gather_info.message.routing_key'),
@@ -4013,7 +4014,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # make the consumer and store it
         consumer = \
-            rabbitmq.rabbitmq_communicator.consume(
+            rabbitmq_communicator.rabbitmq.consume(
                 name=rabbit_data.get('gather_info.consumer.name'),
                 queue_names=queue_names,
             ).add_callback([self._receive_gather_info_THREAD])
@@ -4030,7 +4031,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         """Initializes everything related to printing to the manager."""
 
         # define the exchange
-        exchange = rabbitmq.rabbitmq_communicator.make_and_get_exchange(
+        exchange = rabbitmq_communicator.rabbitmq.make_and_get_exchange(
             name=rabbit_data.get('printer_gatherer.exchange.name'),
             type=rabbit_data.get('printer_gatherer.exchange.type'),
             return_on_exist=True,
@@ -4040,7 +4041,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
         )
 
         # define the queue
-        queue = rabbitmq.rabbitmq_communicator.make_and_get_queue(
+        queue = rabbitmq_communicator.rabbitmq.make_and_get_queue(
             name=rabbit_data.get('printer_gatherer.queue.name'),
             exchange_name=rabbit_data.get('printer_gatherer.exchange.name'),
             routing_key=rabbit_data.get('printer_gatherer.message.routing_key'),
@@ -4051,7 +4052,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # make the consumer and store it
         consumer = \
-            rabbitmq.rabbitmq_communicator.consume(
+            rabbitmq_communicator.rabbitmq.consume(
                 name=rabbit_data.get('printer_gatherer.consumer.name'),
                 queue_names=[rabbit_data.get('printer_gatherer.queue.name')],
             ).add_callback([self._receive_printer_gatherer_THREAD])
