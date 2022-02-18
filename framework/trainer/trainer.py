@@ -87,6 +87,7 @@ class Trainer(base.BaseEventManager, ABC):
         comm_config.rabbit_config = config.get_or_empty("rabbitmq")
         comm_config.mongo_config = config.get_or_empty('mongodb')
         comm_config.influx_config = config.get_or_empty('influxdb')
+        comm_config.zmq_config = config.get_or_empty('zmq_internal')
 
     def create_model(self) -> Union[ModelManager, Model]:
         """Creates an instance of the model and returns it."""
