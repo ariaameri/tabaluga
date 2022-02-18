@@ -268,7 +268,7 @@ class _AsyncerGlobal:
 
         from . import config
 
-        self._asyncer_global = init_with_config(config.asyner_config or ConfigParser({}))
+        self._asyncer_global = init_with_config(config.asyncer_config or ConfigParser({}))
 
     @property
     def asyncer(self) -> Asyncer:

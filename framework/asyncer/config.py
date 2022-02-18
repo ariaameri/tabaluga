@@ -3,4 +3,4 @@ from ..util.config import ConfigParser
 
 
 # store configs
-asyner_config: Optional[ConfigParser] = None
+asyncer_config: Optional[ConfigParser] = None
