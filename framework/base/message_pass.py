@@ -1,12 +1,17 @@
-import queue
-import random
-import threading
+import time
+from ..asyncer.asyncer import asyncer
+from .base import ConfigReader, Logger
+from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional, Callable, Any
+import janus
 
 # type of message we accept
 MessageType = TypeVar("MessageType")
 MessagePasserBaseSubclass = TypeVar("MessagePasserBaseSubclass", bound="MessagePasserBase")
+
+# constants
+_MESSAGE_PASSER_CONFIG_PREFIX = "_message_passer"
 
 
 class ReceiveResults:
@@ -27,18 +32,59 @@ class ReceiveResults:
         pass
     end_receive = EndReceive()
 
+    class DestructReceive(BaseReceiveResult):
+        """Indicating end of everything, the destructor"""
 
-class MessagePasserBase(Generic[MessageType], ABC):
+        pass
+    destruct_receive = DestructReceive()
+
+
+class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
     """Abstract parent trait implementing message internal passing interface."""
 
-    def __init__(self):
+    def __init__(self, config: ConfigParser = None):
         """Initializer."""
 
-        # make a queue for message passing
-        self._message_pass_queue: queue.Queue[MessageType] = queue.Queue()
+        ConfigReader.__init__(self, config)
+        Logger.__init__(self, self._config)
+
+        # ensure we have the async event loop
+        if asyncer.asyncer.get_event_loop_option(
+                self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+        ).is_empty() and \
+            asyncer.asyncer.create_event_loop(
+            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+        ).is_err():
+            self._log.error("could not create event loop for message passing.")
+            raise RuntimeError("could not create event loop for message passing.")
+
+        async def make_janus_queue():
+            """Helper function for creating a janus queue in the desired event loop."""
+            return janus.Queue()
+
+        # this is because of the stupid janus that only accepts current running loop as its event loop
+        # block until we have the queue available
+        res = asyncer.asyncer.add_coroutine(
+            coroutine=make_janus_queue(),
+            event_loop_name=
+            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+        )
+        if res.is_err():
+            self._log.error("could not create queue for event loop for message passing.")
+            raise RuntimeError("could not create queue for event loop for message passing.")
+        i = 0
+        while not res.get().done() and i < 5000:
+            i += 1
+            time.sleep(.001)
+        if i == 5000:
+            self._log.error("waited too log to obtain queue for message passing")
+            raise RuntimeError("waited too log to obtain queue for message passing")
+        self._message_pass_queue: janus.Queue[MessageType] = res.get().result()
+        self._message_pass_queue_sync: janus.SyncQueue = self._message_pass_queue.sync_q
+        self._message_pass_queue_async: janus.AsyncQueue = self._message_pass_queue.async_q
 
     @abstractmethod
-    def _receive(self) -> None:
+    async def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
 
         raise NotImplementedError
@@ -54,67 +100,58 @@ class MessagePasserBase(Generic[MessageType], ABC):
 
         """
 
-        self._message_pass_queue.put(message)
+        self._message_pass_queue_sync.put(message)
 
 
 class MessagePasser(MessagePasserBase[MessageType], ABC):
     """Trait implementing message internal passing interface."""
 
-    def __init__(self):
+    def __init__(self, config: ConfigParser = None):
         """Initializer."""
 
-        super().__init__()
+        super().__init__(config)
 
-        # make a thread to run it
-        self._message_pass_thread: Optional[threading.Thread] = None
-        self._message_pass_thread_ident: Optional[int] = None
+    def __del__(self):
 
-    def _start_message_passing(self, blocking: bool = False) -> None:
-        """
-        Starts the whole message passing listening but spawning a new thread.
+        self.tell(ReceiveResults.destruct_receive)
 
-        Parameters
-        ----------
-        blocking : bool, optional
-            whether to block or not by starting a new thread for listening
+    def close(self):
+        """Destruct everything and close."""
 
-        """
+        self.__del__()
 
-        if blocking is False:
-            self._message_pass_thread = \
-                threading.Thread(
-                    # come up with random name
-                    name=f'{self.__class__.__name__}_message_processor_{random.randint(1, 1000)}',
-                    target=self._receive,
-                    args=(),
-                    daemon=True
-                )
-            self._message_pass_thread.start()
-            self._message_pass_thread_ident = self._message_pass_thread.ident
-        else:
-            self._receive()
+    def _start_message_passing(self) -> None:
+        """Starts the whole message passing listening in an async way."""
 
-    def _receive(self) -> None:
+        asyncer.asyncer.add_coroutine(
+            coroutine=self._receive(),
+            event_loop_name=
+            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer"),
+        )
+
+    async def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
 
         while True:
 
             # get the command
-            message: MessageType = self._message_pass_queue.get()
+            message: MessageType = await self._message_pass_queue_async.get()
 
             # process the message
-            result: ReceiveResults.BaseReceiveResult = self._receive_message(message)
+            result: ReceiveResults.BaseReceiveResult = await self._receive_message(message)
 
             if isinstance(result, ReceiveResults.SameReceive):
                 # do nothing and go to the next fetching
                 pass
             elif isinstance(result, ReceiveResults.EndReceive):
                 break
+            elif isinstance(result, ReceiveResults.DestructReceive):
+                break
             else:
                 raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
 
     @abstractmethod
-    def _receive_message(self, message: MessageType) -> ReceiveResults.BaseReceiveResult:
+    async def _receive_message(self, message: MessageType) -> ReceiveResults.BaseReceiveResult:
         """
         Processes the given message and acts upon it.
 
@@ -151,8 +188,8 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         """
 
         # check we are not the same method as the listener
-        if self._message_pass_thread_ident is not None and threading.get_ident() == self._message_pass_thread_ident:
-            raise RuntimeError("ask is called from the same thread as listener.")
+        # if self._message_pass_thread_ident is not None and threading.get_ident() == self._message_pass_thread_ident:
+        #     raise RuntimeError("ask is called from the same thread as listener.")
 
         return _Asker(self).ask(message_factory)
 
@@ -186,7 +223,7 @@ MessageTypeAsk = TypeVar("MessageTypeAsk")
 
 class _Asker(MessagePasserBase[Any]):
 
-    def __init__(self, reference: MessagePasser[MessageTypeAsk]):
+    def __init__(self, reference: MessagePasser[MessageTypeAsk], config: ConfigParser = None):
         """
         Initializer.
 
@@ -196,7 +233,7 @@ class _Asker(MessagePasserBase[Any]):
             the message passer to ask from
         """
 
-        super().__init__()
+        super().__init__(config)
 
         # keep the message passer for asking
         self.ask_reference: MessagePasser[MessageTypeAsk] = reference
@@ -208,7 +245,7 @@ class _Asker(MessagePasserBase[Any]):
 
         # get the message
         # notice that we get an Any message because we do not know the type of the sender's message
-        message: Any = self._message_pass_queue.get()
+        message: Any = self._message_pass_queue_sync.get()
 
         return message
 
