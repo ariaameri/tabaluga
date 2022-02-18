@@ -26,6 +26,10 @@ class Trainer(base.BaseEventManager, ABC):
         # set communicators' configs
         self._set_communicator_configs(config)
 
+        # set async config
+        from ..asyncer import config as async_config
+        async_config.asyner_config = (config or ConfigParser()).get_or_empty('asyncer')
+
         # initialize mpi
         # from ..communicator import mpi
         # if config.contains_key("mpi"):
