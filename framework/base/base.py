@@ -8,15 +8,97 @@ from abc import ABC, abstractmethod
 import numpy as np
 import re
 from ..util.console_colors import CONSOLE_COLORS_CONFIG as CCC
-from ..logger.logger_sole import Logger, LoggerConsoleFile
+from ..logger.logger_sole import Logger as LogerSole, LoggerConsoleFile
 from ..util.data_muncher import DataMuncher
 
 
-class BaseWorker:
+# Constants
+_LOGGER_CONFIG_PREFIX = "_logger"
+
+
+class ConfigReader:
+    """Trait for implementing classes that read and store config."""
+
+    def __init__(self, config: ConfigParser = None):
+        """
+        Initializer.
+
+        Parameters
+        ----------
+        config : ConfigReader
+            config
+        """
+
+        self._config = config if config is not None else ConfigParser({})
+
+
+class Logger(ConfigReader):
+    """Trait for implementing the logger functionality"""
+
+    _console_handler = LoggerConsoleFile()
+
+    def __init__(self, config: ConfigParser = None):
+        """
+        Initializer.
+
+        Parameters
+        ----------
+        config : ConfigReader
+            config for this instance, the required config for this trait should be embedded within, see the code
+        """
+
+        super().__init__(config)
+
+        # make logger for this instance
+        self._log = self._create_logger()
+
+    def _create_logger(self) -> LogerSole:
+        """Creates a logger for this instance."""
+
+        # this is only to check if we have already create the logger
+        # this problem is troublesome in multi-parent inheritance that this class get initiated more than once
+        # which causes multiple loggers to be created.
+        # here we check if we have already created it and avoid its recreation
+        if hasattr(self, "_log") and self._log is not None:
+            return self._log
+
+        config_logger = \
+            self._config\
+                .get_or_empty(_LOGGER_CONFIG_PREFIX)\
+                .update({}, {
+                    UO.SET_ON_INSERT: {
+                        "name": self._modify_logger_name(self.__class__.__name__),
+                        "console_handler": self._console_handler,
+                    }
+                })
+
+        logger = LogerSole(config_logger)
+
+        return logger
+
+    def _modify_logger_name(self, name: str = '') -> str:
+        """
+        Modify the logger name provided. Method to be overriden for extra flexibility
+
+        Parameters
+        ----------
+        name : str
+            name provided
+
+        Returns
+        -------
+        str
+            modified name
+
+        """
+
+        return name
+
+
+class BaseWorker(Logger, ConfigReader):
     """Class to serve as the base of all workers."""
 
     _universal_logger_shared = []
-    _console_handler = LoggerConsoleFile()
 
     def __init__(self, config: ConfigParser = None):
         """Initializer of the instance.
@@ -28,11 +110,8 @@ class BaseWorker:
 
         """
 
-        # Set the configuration
-        self._config = config if config is not None else ConfigParser({})
-
-        # make logger for this instance
-        self._log = self._create_logger()
+        ConfigReader.__init__(self, config)
+        Logger.__init__(self, self._config)
 
         # check and process the config
         self._check_process_config()
@@ -69,48 +148,6 @@ class BaseWorker:
         """
 
         pass
-
-    def _create_logger(self) -> Logger:
-        """Creates a logger for this instance."""
-
-        # this is only to check if we have already create the logger
-        # this problem is troublesome in multi-parent inheritance that this class get initiated more than once
-        # which causes multiple loggers to be created.
-        # here we check if we have already created it and avoid its recreation
-        if hasattr(self, "_log") and self._log is not None:
-            return self._log
-
-        config_logger = \
-            self._config\
-                .get_or_empty("_logger")\
-                .update({}, {
-                    UO.SET_ON_INSERT: {
-                        "name": self._modify_logger_name(self.__class__.__name__),
-                        "console_handler": self._console_handler,
-                    }
-                })
-
-        logger = Logger(config_logger)
-
-        return logger
-
-    def _modify_logger_name(self, name: str = '') -> str:
-        """
-        Modify the logger name provided. Method to be overriden for extra flexibility
-
-        Parameters
-        ----------
-        name : str
-            name provided
-
-        Returns
-        -------
-        str
-            modified name
-
-        """
-
-        return name
 
     def _universal_log(self, msg: str, level: str = 'debug') -> None:
         """Logs the given message at the given level.
@@ -155,12 +192,12 @@ class BaseWorker:
 
         return msg
 
-    def set_universal_logger(self, logger: Logger) -> None:
+    def set_universal_logger(self, logger: LogerSole) -> None:
         """Set the instance of the general logger for this worker.
 
         Parameters
         ----------
-        logger : Logger
+        logger : LogerSole
             An instance of the Logger class of general logging
 
         """
