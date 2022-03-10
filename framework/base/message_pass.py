@@ -11,7 +11,7 @@ MessageType = TypeVar("MessageType")
 MessagePasserBaseSubclass = TypeVar("MessagePasserBaseSubclass", bound="MessagePasserBase")
 
 # constants
-_MESSAGE_PASSER_CONFIG_PREFIX = "_message_passer"
+MESSAGE_PASSER_CONFIG_PREFIX = "_message_passer"
 
 
 class ReceiveResults:
@@ -48,12 +48,15 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         ConfigReader.__init__(self, config)
         Logger.__init__(self, self._config)
 
+        self._event_loop_name = \
+            self._config.get_or_else(f"{MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+
         # ensure we have the async event loop
         if asyncer.asyncer.get_event_loop_option(
-                self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+                self._event_loop_name
         ).is_empty() and \
             asyncer.asyncer.create_event_loop(
-            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+            self._event_loop_name
         ).is_err():
             self._log.error("could not create event loop for message passing.")
             raise RuntimeError("could not create event loop for message passing.")
@@ -67,7 +70,7 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         res = asyncer.asyncer.add_coroutine(
             coroutine=make_janus_queue(),
             event_loop_name=
-            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer")
+            self._event_loop_name
         )
         if res.is_err():
             self._log.error("could not create queue for event loop for message passing.")
@@ -126,7 +129,7 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         asyncer.asyncer.add_coroutine(
             coroutine=self._receive(),
             event_loop_name=
-            self._config.get_or_else(f"{_MESSAGE_PASSER_CONFIG_PREFIX}.event_loop_name", "message_passer"),
+            self._event_loop_name,
         )
 
     async def _receive(self) -> None:
