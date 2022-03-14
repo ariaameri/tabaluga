@@ -5,6 +5,7 @@ from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional, Callable, Any
 import janus
+from ..util.result import Result
 
 # type of message we accept
 MessageType = TypeVar("MessageType")
@@ -92,7 +93,7 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
 
         raise NotImplementedError
 
-    def tell(self, message: MessageType) -> None:
+    def tell(self, message: MessageType) -> Result:
         """
         Sends the message to self for later processing.
 
@@ -101,9 +102,14 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         message : MessageType
             the message to be sent for later processing
 
+        Returns
+        -------
+        Result
+            whether the operation was successful
+
         """
 
-        self._message_pass_queue_sync.put(message)
+        return Result.from_func(self._message_pass_queue_sync.put, message)
 
 
 class MessagePasser(MessagePasserBase[MessageType], ABC):
@@ -138,7 +144,11 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         while True:
 
             # get the command
-            message: MessageType = await self._message_pass_queue_async.get()
+            try:
+                message: MessageType = await self._message_pass_queue_async.get()
+            except BaseException as e:
+                self._log.debug(f"failed getting message from queue with error of '{e}'")
+                break
 
             # process the message
             result: ReceiveResults.BaseReceiveResult = await self._receive_message(message)
@@ -172,7 +182,7 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
         raise NotImplementedError
 
-    def ask(self, message_factory: Callable[[MessagePasserBaseSubclass], MessageType]) -> Any:
+    def ask(self, message_factory: Callable[[MessagePasserBaseSubclass], MessageType]) -> Result[Any, BaseException]:
         """
         Sends the message to self and wait for its reply.
 
@@ -185,8 +195,8 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
         Returns
         -------
-        Any
-            the result
+        Result
+            the answer wrapped in Result
 
         """
 
@@ -252,7 +262,7 @@ class _Asker(MessagePasserBase[Any]):
 
         return message
 
-    def ask(self, message_factory: Callable[['_Asker'], MessageType]) -> Any:
+    def ask(self, message_factory: Callable[['_Asker'], MessageType]) -> Result[Any, BaseException]:
         """
         Asks for a value, waits for it, and returns it.
 
@@ -263,8 +273,8 @@ class _Asker(MessagePasserBase[Any]):
 
         Returns
         -------
-        Any
-            the result
+        Result
+           the answer wrapped in Result
 
         """
 
@@ -272,6 +282,6 @@ class _Asker(MessagePasserBase[Any]):
         self.ask_reference.tell(message_factory(self))
 
         # now, wait for the result
-        result = self._receive()
+        result = Result.from_func(self._receive)
 
         return result
