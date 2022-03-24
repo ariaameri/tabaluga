@@ -1,4 +1,5 @@
 import time
+from dataclasses import dataclass
 from ..asyncer.asyncer import asyncer
 from .base import ConfigReader, Logger
 from ..util.config import ConfigParser
@@ -38,6 +39,12 @@ class ReceiveResults:
 
         pass
     destruct_receive = DestructReceive()
+
+
+@dataclass
+class _PanicReceive(ReceiveResults.BaseReceiveResult):
+    """Used when the calling message receiver panics."""
+    error: BaseException
 
 
 class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
@@ -150,8 +157,11 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
                 self._log.debug(f"failed getting message from queue with error of '{e}'")
                 break
 
-            # process the message
-            result: ReceiveResults.BaseReceiveResult = await self._receive_message(message)
+            try:
+                # process the message
+                result: ReceiveResults.BaseReceiveResult = await self._receive_message(message)
+            except BaseException as e:
+                result: ReceiveResults.BaseReceiveResult = _PanicReceive(error=e)
 
             if isinstance(result, ReceiveResults.SameReceive):
                 # do nothing and go to the next fetching
@@ -159,6 +169,9 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
             elif isinstance(result, ReceiveResults.EndReceive):
                 break
             elif isinstance(result, ReceiveResults.DestructReceive):
+                break
+            elif isinstance(result, _PanicReceive):
+                self._log.warning(f"receiver panicked with error of '{result.error}'")
                 break
             else:
                 raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
