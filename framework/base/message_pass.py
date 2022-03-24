@@ -6,7 +6,7 @@ from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional, Callable, Any
 import janus
-from ..util.result import Result
+from ..util.result import Result, Err
 
 # type of message we accept
 MessageType = TypeVar("MessageType")
@@ -45,6 +45,22 @@ class ReceiveResults:
 class _PanicReceive(ReceiveResults.BaseReceiveResult):
     """Used when the calling message receiver panics."""
     error: BaseException
+
+
+class MessagePasserError:
+    """Struct to hold message passer errors"""
+
+    class BaseMessagePasserError(Exception):
+        """Base class for message passer errors."""
+        pass
+
+    class QueueError(BaseMessagePasserError):
+        """Errors related to the queue."""
+        pass
+
+    class OperationError(BaseMessagePasserError):
+        """Error for when we are not operational."""
+        pass
 
 
 class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
@@ -94,6 +110,9 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         self._message_pass_queue_sync: janus.SyncQueue = self._message_pass_queue.sync_q
         self._message_pass_queue_async: janus.AsyncQueue = self._message_pass_queue.async_q
 
+        # bookkeeping to know we are operational
+        self._message_pass_working = True
+
     @abstractmethod
     async def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
@@ -116,7 +135,14 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
 
         """
 
-        return Result.from_func(self._message_pass_queue_sync.put, message)
+        if self._message_pass_working is False:
+            return Err(MessagePasserError.OperationError("not operational"))
+
+        res = Result.from_func(self._message_pass_queue_sync.put, message)
+        if res.is_err():
+            res = Err(MessagePasserError.QueueError(res.get_err()))
+
+        return res
 
 
 class MessagePasser(MessagePasserBase[MessageType], ABC):
@@ -174,7 +200,11 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
                 self._log.warning(f"receiver panicked with error of '{result.error}'")
                 break
             else:
+                self._message_pass_working = False
                 raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
+
+        # no longer operational
+        self._message_pass_working = False
 
     @abstractmethod
     async def _receive_message(self, message: MessageType) -> ReceiveResults.BaseReceiveResult:
@@ -213,9 +243,8 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
         """
 
-        # check we are not the same method as the listener
-        # if self._message_pass_thread_ident is not None and threading.get_ident() == self._message_pass_thread_ident:
-        #     raise RuntimeError("ask is called from the same thread as listener.")
+        if self._message_pass_working is False:
+            return Err(MessagePasserError.OperationError("not operational"))
 
         return _Asker(self).ask(message_factory)
 
