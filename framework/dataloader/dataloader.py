@@ -311,7 +311,8 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(metadata_count) \
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
-        self.train_metadata_original = self.train_metadata_original.loc[indices]
+        if len(indices) > 0:
+            self.train_metadata_original = self.train_metadata_original.loc[indices]
 
         # shuffle val_metadata_original
         metadata_count = self.val_metadata_original.index.get_level_values(0).unique().size
