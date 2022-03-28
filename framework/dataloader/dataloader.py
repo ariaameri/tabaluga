@@ -127,7 +127,7 @@ class DataManager(base.BaseEventManager, ABC):
 
             # if we have to shuffle, shuffle
             if self._shuffle is True:
-                self.shuffle_each_original_metadata()
+                self._shuffle_each_original_metadata()
 
             # now pass the metadata to the syncer
             self.syncer.set_train_val_test_metadata(
@@ -192,7 +192,9 @@ class DataManager(base.BaseEventManager, ABC):
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
 
+        # store the previous state of the random generator
         # Find the indices of each set
+        rng_state = np.random.get_state()
         np.random.seed(self._seed)
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
@@ -217,16 +219,21 @@ class DataManager(base.BaseEventManager, ABC):
                         key: value
                         for value, key
                         in enumerate(df.index.get_level_values(0).unique(), start=0)
-                    }
+                    },
+                    level=0,
                 )
                 for df
                 in [self.train_metadata, self.val_metadata, self.test_metadata]
             ]
 
+        # restore the random generator state
+        np.random.set_state(rng_state)
+
     def shuffle_each_metadata(self) -> None:
         """Shuffles each of the metadata separately."""
 
-        # set the seed
+        # store the previous state of the random generator and set the seed
+        rng_state = np.random.get_state()
         np.random.seed(self._seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
@@ -237,7 +244,8 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(metadata_count) \
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
-        self.train_metadata = self.train_metadata[indices]
+        if len(indices) > 0:
+            self.train_metadata = self.train_metadata.loc[indices]
 
         # shuffle val_metadata
         metadata_count = self.val_metadata.index.get_level_values(0).unique().size
@@ -245,7 +253,7 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.val_metadata = self.val_metadata[indices]
+            self.val_metadata = self.val_metadata.loc[indices]
 
         # shuffle val_metadata
         metadata_count = self.test_metadata.index.get_level_values(0).unique().size
@@ -253,16 +261,20 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.test_metadata = self.test_metadata[indices]
+            self.test_metadata = self.test_metadata.loc[indices]
 
-    def shuffle_each_original_metadata(self) -> None:
+        # restore the random generator state
+        np.random.set_state(rng_state)
+
+    def _shuffle_each_original_metadata(self) -> None:
         """Shuffles each of the metadata separately."""
 
         # only shuffle if we are distributed and we are the main rank
         if mpi.mpi_communicator.is_distributed() is False or mpi.mpi_communicator.is_main_rank() is False:
             return
 
-        # set the seed
+        # store the previous state of the random generator and set the seed
+        rng_state = np.random.get_state()
         np.random.seed(self._seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
@@ -273,7 +285,7 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(metadata_count) \
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
-        self.train_metadata_original = self.train_metadata_original[indices]
+        self.train_metadata_original = self.train_metadata_original.loc[indices]
 
         # shuffle val_metadata_original
         metadata_count = self.val_metadata_original.index.get_level_values(0).unique().size
@@ -281,7 +293,7 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.val_metadata_original = self.val_metadata_original[indices]
+            self.val_metadata_original = self.val_metadata_original.loc[indices]
 
         # shuffle val_metadata_original
         metadata_count = self.test_metadata_original.index.get_level_values(0).unique().size
@@ -289,7 +301,10 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.test_metadata_original = self.test_metadata_original[indices]
+            self.test_metadata_original = self.test_metadata_original.loc[indices]
+
+        # restore the random generator state
+        np.random.set_state(rng_state)
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
@@ -384,7 +399,8 @@ class MetadataManipulator(base.BaseWorker):
         """
 
         metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)},
+            level=0,
         )
 
         return metadata
@@ -1056,7 +1072,8 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Also rename the index level 0 name to be 'index' (instead of criterion)
         if reset_index:
             metadata = metadata.rename(
-                index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)}
+                index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)},
+                level=0,
             )
             metadata.index.names = [None, *metadata.index.names[1:]]
 
