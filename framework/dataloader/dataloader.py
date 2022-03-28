@@ -2,6 +2,7 @@ import math
 import pathlib
 from abc import ABC, abstractmethod
 from pathlib import Path
+import colored
 from ..base import base
 from ..util.config import ConfigParser
 from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
@@ -65,7 +66,15 @@ class DataManager(base.BaseEventManager, ABC):
         self._val_ratio: float = self._config.get_or_else('val_ratio', 0)
 
         # Set batch size
-        self.batch_size: int = self._config.get('batch_size')
+        self.batch_size_report: int = self._config.get('batch_size')
+        # have another batch size to use for loading the actual data with
+        # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
+        # but load the data with another; for example, in multi-scale image training
+        self._batch_size_effective: int = self._config.get_or_else('batch_size_effective', self.batch_size_report)
+        # log
+        self._log.info(f"reporting batch size as {colored.fg('cyan')}{self.batch_size_report}{colored.attr('reset')}")
+        self._log.info(f"performing data loading with batch size of "
+                       f"{colored.fg('cyan')}{self._batch_size_effective}{colored.attr('reset')}")
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
@@ -112,6 +121,10 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Create workers
         self.create_workers()
+
+        # set the batch sizes
+        self.set_batch_size_report(self.batch_size_report)
+        self.set_batch_size_effective(self._batch_size_effective)
 
     def get_syncer(self):
 
@@ -333,8 +346,8 @@ class DataManager(base.BaseEventManager, ABC):
         # restore the random generator state
         np.random.set_state(rng_state)
 
-    def set_batch_size(self, batch_size: int) -> None:
-        """Sets the batch size and thus finds the total number of batches in one epoch.
+    def set_batch_size_report(self, batch_size: int) -> None:
+        """Sets the batch size that is used for reporting.
 
         Parameter
         ---------
@@ -343,11 +356,27 @@ class DataManager(base.BaseEventManager, ABC):
 
         """
 
-        self.batch_size = batch_size
+        self.batch_size_report = batch_size
 
         # Set batch size of all the workers
         for worker in self.workers:
-            worker.set_batch_size(batch_size)
+            worker.set_batch_size_report(batch_size)
+
+    def set_batch_size_effective(self, batch_size: int) -> None:
+        """Sets the batch size that is used to actually load the data with
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        self._batch_size_effective = batch_size
+
+        # Set batch size of all the workers
+        for worker in self.workers:
+            worker.set_batch_size_effective(batch_size)
 
 
 class MetadataManipulator(base.BaseWorker):
@@ -1065,8 +1094,13 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Book keeping for iterator, batch size and number of iterations (batches in an epoch)
         self._iterator_count = 0
-        self.batch_size: int = -1
+        self.batch_size_report: int = -1
         self.number_of_iterations: int = -1
+        # have another batch size to use for loading the actual data with
+        # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
+        # but load the data with another; for example, in multi-scale image training
+        self._batch_size_effective: int = -1
+        self._number_of_iterations_effective: int = -1
 
         # Create workers
         self.create_workers()
@@ -1138,7 +1172,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return True
 
-    def set_batch_size(self, batch_size: int) -> None:
+    def set_batch_size_report(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
 
         Parameter
@@ -1148,14 +1182,14 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        self.batch_size = batch_size
+        self.batch_size_report = batch_size
 
         # Book keeping for the returned number of iterations from workers
         number_of_iterations_workers = []
 
         # Set batch size of all the workers and get their number_of_iterations
         for worker in self.workers:
-            number_of_iterations_workers.append(worker.set_batch_size(batch_size))
+            number_of_iterations_workers.append(worker.set_batch_size_report(batch_size))
 
         # Check if all the returned number of iterations are the same
         assert all([no == number_of_iterations_workers[0] for no in number_of_iterations_workers]) is True, \
@@ -1172,6 +1206,32 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Set the number of iterations
         self.number_of_iterations = number_of_iterations_workers[0]
+
+    def set_batch_size_effective(self, batch_size: int) -> None:
+        """Sets the batch size to load the data with.
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        # check if the batch size is set and the errors are checked for
+        if self.batch_size_report == -1:
+            raise RuntimeError('please first set the report batch size and then call this method')
+
+        self._batch_size_effective = batch_size
+
+        # Book keeping for the returned number of iterations from workers
+        number_of_iterations_workers = []
+
+        # Set batch size of all the workers and get their number_of_iterations
+        for worker in self.workers:
+            number_of_iterations_workers.append(worker.set_batch_size_effective(batch_size))
+
+        # Set the number of iterations
+        self._number_of_iterations_effective = number_of_iterations_workers[0]
 
     def __len__(self) -> int:
         """Returns the length of the instance.
@@ -1250,8 +1310,15 @@ class DataLoader(base.BaseEventWorker, ABC):
             self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader-thread-pool")
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
-        self.batch_size: int = -1
+        self.batch_size_report: int = -1
         self.number_of_iterations: int = -1
+        # have another batch size to use for loading the actual data with
+        # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
+        # but load the data with another; for example, in multi-scale image training
+        self._batch_size_effective: int = -1
+        self._number_of_iterations_effective: int = -1
+        # in case the effective batch size is bigger than the report, we have to wrap around the metadata while loading
+        self._data_loading_wrap_around = False
 
         # Book keeping for iterator
         self._iterator_count = 0
@@ -1290,7 +1357,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return True
 
-    def set_batch_size(self, batch_size: int) -> int:
+    def set_batch_size_report(self, batch_size: int) -> int:
         """Sets the batch size and thus finds the total number of batches in one epoch.
 
         Parameter
@@ -1300,10 +1367,33 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         """
 
-        self.batch_size = batch_size
+        self.batch_size_report = batch_size
         self.number_of_iterations = len(self.metadata) // batch_size
 
         return self.number_of_iterations
+
+    def set_batch_size_effective(self, batch_size: int) -> int:
+        """Sets the batch size to load the data with and thus finds the total number of batches in one epoch.
+
+        Parameter
+        ---------
+        batch_size : int
+            Batch size
+
+        """
+
+        # check if the batch size is set and the errors are checked for
+        if self.batch_size_report == -1:
+            raise RuntimeError('please first set the report batch size and then call this method')
+
+        self._batch_size_effective = batch_size
+        self._number_of_iterations_effective = len(self.metadata) // batch_size
+
+        # set the wrap around
+        if self._batch_size_effective > self.batch_size_report:
+            self._data_loading_wrap_around = True
+
+        return self._number_of_iterations_effective
 
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
@@ -1419,12 +1509,17 @@ class DataLoader(base.BaseEventWorker, ABC):
         """
 
         # Check if item count is sensible
-        assert item < self.number_of_iterations, \
-            f'Requested number of images to be loaded goes beyond the end of available data.'
+        if item >= self.number_of_iterations and self._data_loading_wrap_around is False:
+            raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
 
         # Find the corresponding metadata
-        begin_index = item * self.batch_size
-        metadata = self.metadata.iloc[begin_index:(begin_index + self.batch_size)]
+        begin_index = (item * self._batch_size_effective) % len(self.metadata)
+        end_index = begin_index + self._batch_size_effective
+        metadata = self.metadata.iloc[begin_index:end_index]
+        if end_index > len(self.metadata) - 1 and self._data_loading_wrap_around is True:
+            remainder = self._batch_size_effective - (len(self.metadata) - 1 - begin_index)
+            metadata2 = self.metadata.iloc[:remainder]
+            metadata = pd.concat([metadata, metadata2])
 
         # Load the images
         data = self.load_data(metadata)
