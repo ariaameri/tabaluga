@@ -117,8 +117,16 @@ class DataManager(base.BaseEventManager, ABC):
 
         return self.syncer
 
-    def sync_train_val_test_metadata(self):
-        """Syncs the metadata across processes."""
+    def sync_train_val_test_metadata(self, rand_seed_add: int = 0):
+        """
+        Syncs the metadata across processes.
+
+        Parameters
+        ----------
+        rand_seed_add : int, optional
+            number to add with the random seed generator to have different random number generation each time
+
+        """
 
         if mpi.mpi_communicator.is_distributed() is False:
             raise RuntimeError("not in distributed mode to sync train/val/test metadata.")
@@ -127,7 +135,7 @@ class DataManager(base.BaseEventManager, ABC):
 
             # if we have to shuffle, shuffle
             if self._shuffle is True:
-                self._shuffle_each_original_metadata()
+                self._shuffle_each_original_metadata(rand_seed_add=rand_seed_add)
 
             # now pass the metadata to the syncer
             self.syncer.set_train_val_test_metadata(
@@ -229,12 +237,21 @@ class DataManager(base.BaseEventManager, ABC):
         # restore the random generator state
         np.random.set_state(rng_state)
 
-    def shuffle_each_metadata(self) -> None:
-        """Shuffles each of the metadata separately."""
+    def shuffle_each_metadata(self, rand_seed_add: int = 0) -> None:
+        """
+        Shuffles each of the metadata separately.
+
+        Parameters
+        ----------
+        rand_seed_add : int, optional
+            number to add with the random seed generator to have different random number generation each time
+
+        """
 
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
-        np.random.seed(self._seed)
+        seed = None if self._seed is None else self._seed + rand_seed_add
+        np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
         # each metadata separately
@@ -266,8 +283,16 @@ class DataManager(base.BaseEventManager, ABC):
         # restore the random generator state
         np.random.set_state(rng_state)
 
-    def _shuffle_each_original_metadata(self) -> None:
-        """Shuffles each of the metadata separately."""
+    def _shuffle_each_original_metadata(self, rand_seed_add: int = 0) -> None:
+        """
+        Shuffles each of the metadata separately.
+
+        Parameters
+        ----------
+        rand_seed_add : int, optional
+            number to add with the random seed generator to have different random number generation each time
+
+        """
 
         # only shuffle if we are distributed and we are the main rank
         if mpi.mpi_communicator.is_distributed() is False or mpi.mpi_communicator.is_main_rank() is False:
@@ -275,7 +300,8 @@ class DataManager(base.BaseEventManager, ABC):
 
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
-        np.random.seed(self._seed)
+        seed = None if self._seed is None else self._seed + rand_seed_add
+        np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
         # each metadata separately
