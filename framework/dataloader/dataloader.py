@@ -1247,7 +1247,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
         self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
         if self.multithreading is True:
-            self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader")
+            self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader-thread-pool")
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1
