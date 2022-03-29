@@ -2708,7 +2708,11 @@ class Modification:
 
                     result = item
 
-                    with ThreadPoolExecutor(self.condition_dict.get(self.Conditionals.THREAD_MAX_COUNT)) \
+                    with \
+                            ThreadPoolExecutor(
+                                self.condition_dict.get(self.Conditionals.THREAD_MAX_COUNT),
+                                thread_name_prefix="panacea-map-on-value"
+                            ) \
                             as executor:
                         # Apply all the functions in order
                         for func in funcs:

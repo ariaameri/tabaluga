@@ -3,7 +3,6 @@ from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
 from typing import List
-from concurrent.futures import ThreadPoolExecutor
 import cv2
 
 

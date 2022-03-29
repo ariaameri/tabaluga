@@ -721,7 +721,7 @@ class Syncer(base.BaseWorker):
             self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
         # make a thread pool ot be used for loading the data
-        thread_pool = ThreadPoolExecutor(self.thread_count)
+        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-broadcast")
 
         # go over the data in batch_size chunks
         for start_idx in range(0, len(metadata), self.batch_size):
@@ -748,6 +748,9 @@ class Syncer(base.BaseWorker):
             # save only if we are not the main rank
             if self.receiver:
                 self._save_local_data_raw(metadata_updated, thread_pool)
+
+        # shutdown the threadpool as it is no longer needed
+        thread_pool.shutdown(wait=True)
 
         # log
         if self.is_distributor():
@@ -867,11 +870,12 @@ class Syncer(base.BaseWorker):
         """
 
         # make a thread pool to be used for the subthreads
-        thread_pool = ThreadPoolExecutor(self.thread_count)
+        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-selective")
 
         if self.distributor:
             # make a thread pool to be used for interacting with other ranks
-            thread_communicator_pool = ThreadPoolExecutor(self.thread_count)
+            thread_communicator_pool = \
+                ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-selective-distributor")
 
             list(
                 thread_communicator_pool.map(
@@ -882,6 +886,9 @@ class Syncer(base.BaseWorker):
         else:
             # just receive the data!
             self._sync_local_data_with_rank(self.rank, metadata, thread_pool)
+
+        # shutdown the threadpool as it is no longer needed
+        thread_pool.shutdown(wait=True)
 
     def _sync_local_data_with_rank(self, rank: int, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor):
         """
@@ -1240,7 +1247,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
         self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
         if self.multithreading is True:
-            self.thread_pool = ThreadPoolExecutor(self.thread_count)
+            self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader")
 
         # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size: int = -1
