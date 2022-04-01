@@ -582,6 +582,9 @@ class Syncer(base.BaseWorker):
         # get the batch size for syncing
         self.batch_size = self._config.get_or_else('batch_size', 16)
 
+        # whether we should split the train data among nodes
+        self.all_nodes_all_train_data = self._config.get_or_else('all_nodes_all_train_data', False)
+
         # book keeping
         self.thread_count: int = self._config.get_or_else('multithreading_count', 10)
         # whether we should force the data syncing initially
@@ -1005,25 +1008,38 @@ class Syncer(base.BaseWorker):
             if any([item is None for item in [self.train_metadata, self.validation_metadata, self.test_metadata]]):
                 raise ValueError("metadata are not set in the main rank. please set them before calling this function.")
 
-            # split the training metadata
-            train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
-            chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
-            # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped and
-            # not synced
-            train_split_indices = \
-                [
-                    train_zero_level_indices[start_idx:(start_idx+chunk_size)]
-                    for start_idx
-                    in range(0, train_zero_level_indices.size, chunk_size)
-                ]
-            train_split_metadata = \
-                [
-                    self.train_metadata.loc[chunk_indices]
-                    for chunk_indices
-                    in train_split_indices
-                ]
-            # remove the extra training data
-            train_split_metadata = train_split_metadata[:self.dist_size]
+            # if we should not split the train data
+            if self.all_nodes_all_train_data is True:
+
+                # make the train data
+                train_split_metadata = [self.train_metadata]
+                train_split_metadata.extend([
+                    self.train_metadata  # make copies of the train metadata
+                    for _
+                    in range(1, self.dist_size)
+                ])
+
+            # if we should split the train data among the nodes
+            else:
+                # split the training metadata
+                train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
+                chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
+                # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped and
+                # not synced
+                train_split_indices = \
+                    [
+                        train_zero_level_indices[start_idx:(start_idx+chunk_size)]
+                        for start_idx
+                        in range(0, train_zero_level_indices.size, chunk_size)
+                    ]
+                train_split_metadata = \
+                    [
+                        self.train_metadata.loc[chunk_indices]
+                        for chunk_indices
+                        in train_split_indices
+                    ]
+                # remove the extra training data
+                train_split_metadata = train_split_metadata[:self.dist_size]
 
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
@@ -1042,6 +1058,7 @@ class Syncer(base.BaseWorker):
                 for _
                 in range(1, self.dist_size)
             ])
+
         else:
             train_split_metadata = None
             val_split_metadata = None
