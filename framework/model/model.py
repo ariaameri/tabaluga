@@ -1,7 +1,9 @@
 import pathlib
 from abc import ABC, abstractmethod
+from typing import List
 from ..util.config import ConfigParser
 from ..base import base
+from ..util.result import Result
 
 
 class ModelManager(base.BaseEventManager, ABC):
@@ -20,7 +22,7 @@ class ModelManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
     @abstractmethod
-    def save(self, path: pathlib.Path) -> bool:
+    def save(self, path: pathlib.Path) -> Result[List[pathlib.Path], Exception]:
         """
         Takes care of saving its models.
 
@@ -31,15 +33,15 @@ class ModelManager(base.BaseEventManager, ABC):
 
         Returns
         -------
-        bool
-            whether the save was successful
+        Result[List[pathlib.Path], Exception]
+            paths of the saved models wrapped in Result
 
         """
 
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, path: pathlib.Path) -> bool:
+    def load(self, path: pathlib.Path) -> Result[List[pathlib.Path], Exception]:
         """
         Takes care of loading its models.
 
@@ -50,8 +52,8 @@ class ModelManager(base.BaseEventManager, ABC):
 
         Returns
         -------
-        bool
-            whether the loading was successful
+        Result[List[pathlib.Path], Exception]
+            paths of the loaded models wrapped in Result
 
         """
 
@@ -76,7 +78,7 @@ class Model(base.BaseWorker, ABC):
         super().__init__(config)
 
     @abstractmethod
-    def save(self, path: pathlib.Path) -> bool:
+    def save(self, path: pathlib.Path) -> Result[pathlib.Path, Exception]:
         """
         Saves the model.
 
@@ -87,15 +89,15 @@ class Model(base.BaseWorker, ABC):
 
         Returns
         -------
-        bool
-            whether the save was successful
+        Result[pathlib.Path, Exception]
+            the saved path wrapped in result
 
         """
 
         raise NotImplementedError
 
     @abstractmethod
-    def load(self, path: pathlib.Path) -> bool:
+    def load(self, path: pathlib.Path) -> Result[pathlib.Path, Exception]:
         """
         Loads the model.
 
@@ -106,8 +108,8 @@ class Model(base.BaseWorker, ABC):
 
         Returns
         -------
-        bool
-            whether the loading was successful
+        Result[pathlib.Path, Exception]
+            the loaded path wrapped in result
 
         """
 
