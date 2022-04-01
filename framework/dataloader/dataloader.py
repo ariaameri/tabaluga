@@ -72,9 +72,14 @@ class DataManager(base.BaseEventManager, ABC):
         # but load the data with another; for example, in multi-scale image training
         self._batch_size_effective: int = self._config.get_or_else('batch_size_effective', self.batch_size_report)
         # log
-        self._log.info(f"reporting batch size as {colored.fg('cyan')}{self.batch_size_report}{colored.attr('reset')}")
-        self._log.info(f"performing data loading with batch size of "
-                       f"{colored.fg('cyan')}{self._batch_size_effective}{colored.attr('reset')}")
+        if self.batch_size_report == self._batch_size_effective:
+            self._log.info(f"reporting and performing data loading with batch size of "
+                           f"{colored.fg('cyan')}{self.batch_size_report}{colored.attr('reset')}")
+        else:
+            self._log.info(f"reporting batch size as "
+                           f"{colored.fg('cyan')}{self.batch_size_report}{colored.attr('reset')} "
+                           f"while performing data loading with batch size of "
+                           f"{colored.fg('cyan')}{self._batch_size_effective}{colored.attr('reset')}")
 
         # Pandas data frame to hold the metadata of the data
         self.metadata: pd.DataFrame
