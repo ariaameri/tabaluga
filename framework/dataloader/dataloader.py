@@ -1114,10 +1114,10 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Modify the metadata
         self.modify_metadata()
 
-        # Book keeping for iterator, batch size and number of iterations (batches in an epoch)
+        # bookkeeping for iterator, batch size and number of iterations (batches in an epoch)
         self._iterator_count = 0
         self.batch_size_report: int = -1
-        self.number_of_iterations: int = -1
+        self.number_of_iterations_report: int = -1
         # have another batch size to use for loading the actual data with
         # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
         # but load the data with another; for example, in multi-scale image training
@@ -1206,7 +1206,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         self.batch_size_report = batch_size
 
-        # Book keeping for the returned number of iterations from workers
+        # bookkeeping for the returned number of iterations from workers
         number_of_iterations_workers = []
 
         # Set batch size of all the workers and get their number_of_iterations
@@ -1227,7 +1227,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             )
 
         # Set the number of iterations
-        self.number_of_iterations = number_of_iterations_workers[0]
+        self.number_of_iterations_report = number_of_iterations_workers[0]
 
     def set_batch_size_effective(self, batch_size: int) -> None:
         """Sets the batch size to load the data with.
@@ -1245,7 +1245,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         self._batch_size_effective = batch_size
 
-        # Book keeping for the returned number of iterations from workers
+        # bookkeeping for the returned number of iterations from workers
         number_of_iterations_workers = []
 
         # Set batch size of all the workers and get their number_of_iterations
@@ -1255,6 +1255,82 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Set the number of iterations
         self._number_of_iterations_effective = number_of_iterations_workers[0]
 
+    def get_batch_size(self) -> int:
+        """
+        Returns the batch size.
+
+        This returns the batch size effective as it is the real batch size that we load data with, locally.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.get_batch_size_effective()
+
+    def get_batch_size_effective(self) -> int:
+        """
+        Returns the batch size of effective.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self._batch_size_effective
+
+    def get_batch_size_report(self) -> int:
+        """
+        Returns the batch size of report.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.batch_size_report
+
+    def get_number_of_iterations(self) -> int:
+        """
+        Returns the number of iterations.
+
+        This method returns number of iterations of report as it is the count that we want to iterate over globally.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.get_number_of_iterations_report()
+
+    def get_number_of_iterations_effective(self) -> int:
+        """
+        Returns the number of iterations of effective.
+
+        Returns
+        -------
+        int
+            the number of iterations
+        """
+
+        return self._number_of_iterations_effective
+
+    def get_number_of_iterations_report(self) -> int:
+        """
+        Returns the number of iterations of report.
+
+        Returns
+        -------
+        int
+            the number of iterations
+        """
+
+        return self.number_of_iterations_report
+
     def __len__(self) -> int:
         """Returns the length of the instance.
 
@@ -1262,10 +1338,13 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        return self.number_of_iterations
+        return self.get_number_of_iterations()
 
     def __iter__(self):
         """Returns an iterable, self."""
+
+        # reset the iteration counter
+        self._iterator_count = 0
 
         return self
 
@@ -1279,7 +1358,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         # if the batch size is more that the amount of data left, go to beginning and return None
-        if self._iterator_count > self.number_of_iterations:
+        if self._iterator_count > self.get_number_of_iterations():
             self._iterator_count = 0
             return StopIteration
 
@@ -1331,9 +1410,9 @@ class DataLoader(base.BaseEventWorker, ABC):
         if self.multithreading is True:
             self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader-thread-pool")
 
-        # Book keeping for the batch size and thus the number of iterations (batches) in each epoch
+        # bookkeeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size_report: int = -1
-        self.number_of_iterations: int = -1
+        self.number_of_iterations_report: int = -1
         # have another batch size to use for loading the actual data with
         # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
         # but load the data with another; for example, in multi-scale image training
@@ -1342,7 +1421,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         # in case the effective batch size is bigger than the report, we have to wrap around the metadata while loading
         self._data_loading_wrap_around = False
 
-        # Book keeping for iterator
+        # bookkeeping for iterator
         self._iterator_count = 0
 
     def modify_metadata(self) -> None:
@@ -1390,9 +1469,9 @@ class DataLoader(base.BaseEventWorker, ABC):
         """
 
         self.batch_size_report = batch_size
-        self.number_of_iterations = len(self.metadata) // batch_size
+        self.number_of_iterations_report = len(self.metadata) // batch_size
 
-        return self.number_of_iterations
+        return self.number_of_iterations_report
 
     def set_batch_size_effective(self, batch_size: int) -> int:
         """Sets the batch size to load the data with and thus finds the total number of batches in one epoch.
@@ -1416,6 +1495,82 @@ class DataLoader(base.BaseEventWorker, ABC):
             self._data_loading_wrap_around = True
 
         return self._number_of_iterations_effective
+
+    def get_batch_size(self) -> int:
+        """
+        Returns the batch size.
+
+        This returns the batch size effective as it is the real batch size that we load data with, locally.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.get_batch_size_effective()
+
+    def get_batch_size_effective(self) -> int:
+        """
+        Returns the batch size of effective.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self._batch_size_effective
+
+    def get_batch_size_report(self) -> int:
+        """
+        Returns the batch size of report.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.batch_size_report
+
+    def get_number_of_iterations(self) -> int:
+        """
+        Returns the number of iterations.
+
+        This method returns number of iterations of report as it is the count that we want to iterate over globally.
+
+        Returns
+        -------
+        int
+            batch size
+        """
+
+        return self.get_number_of_iterations_report()
+
+    def get_number_of_iterations_effective(self) -> int:
+        """
+        Returns the number of iterations of effective.
+
+        Returns
+        -------
+        int
+            the number of iterations
+        """
+
+        return self._number_of_iterations_effective
+
+    def get_number_of_iterations_report(self) -> int:
+        """
+        Returns the number of iterations of report.
+
+        Returns
+        -------
+        int
+            the number of iterations
+        """
+
+        return self.number_of_iterations_report
 
     def load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
@@ -1490,10 +1645,13 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         """
 
-        return self.number_of_iterations
+        return self.get_number_of_iterations()
 
     def __iter__(self):
         """Returns an iterable, self."""
+
+        # reset the counter
+        self._iterator_count = 0
 
         return self
 
@@ -1507,7 +1665,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         """
 
         # if the batch size is more that the amount of data left, go to beginning and return None
-        if self._iterator_count > self.number_of_iterations:
+        if self._iterator_count > self.get_number_of_iterations():
             self._iterator_count = 0
             raise StopIteration
 
@@ -1531,7 +1689,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         """
 
         # Check if item count is sensible
-        if item >= self.number_of_iterations and self._data_loading_wrap_around is False:
+        if item >= self.get_number_of_iterations() and self._data_loading_wrap_around is False:
             raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
 
         # Find the corresponding metadata
