@@ -59,7 +59,8 @@ class DataManager(base.BaseEventManager, ABC):
 
         # Get random seed and shuffle boolean
         self._seed = self._config.get_or_else('seed', None)
-        self._shuffle: bool = self._config.get_or_else('shuffle', False)
+        self._shuffle: bool = self._config.get_or_else('shuffle.enabled', False)
+        self._shuffle_add_node_rank: bool = self._config.get_or_else('shuffle.add_node_rank', True)
 
         # Get test and validation ratios
         self._test_ratio: float = self._config.get_or_else('test_ratio', 0)
@@ -221,7 +222,14 @@ class DataManager(base.BaseEventManager, ABC):
         # store the previous state of the random generator
         # Find the indices of each set
         rng_state = np.random.get_state()
-        np.random.seed(self._seed)
+        seed = self._seed
+        if self._seed is not None:
+
+            # add rank
+            if self._shuffle_add_node_rank is True:
+                seed += mpi.mpi_communicator.get_rank()
+        np.random.seed(seed)
+
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
             else np.random.permutation(total_data_count)
@@ -268,7 +276,15 @@ class DataManager(base.BaseEventManager, ABC):
 
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
-        seed = None if self._seed is None else self._seed + rand_seed_add
+        seed = self._seed
+        if self._seed is not None:
+
+            # add the given number
+            seed += rand_seed_add
+
+            # add rank
+            if self._shuffle_add_node_rank is True:
+                seed += mpi.mpi_communicator.get_rank()
         np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
@@ -318,7 +334,15 @@ class DataManager(base.BaseEventManager, ABC):
 
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
-        seed = None if self._seed is None else self._seed + rand_seed_add
+        seed = self._seed
+        if self._seed is not None:
+
+            # add the given number
+            seed += rand_seed_add
+
+            # add rank
+            if self._shuffle_add_node_rank is True:
+                seed += mpi.mpi_communicator.get_rank()
         np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
