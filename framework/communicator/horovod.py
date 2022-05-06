@@ -28,7 +28,9 @@ class Horovod(BaseWorker, ABC):
 
         # get a new mpi group for horovod
         self.mpi_comm_name = 'horovod'
-        _ = mpi.mpi_communicator.get_or_create_communicator(self.mpi_comm_name)
+        self.mpi_comm = mpi.mpi_communicator.get_or_create_communicator(self.mpi_comm_name)
+
+        self.rank, self.size = mpi.mpi_communicator.get_rank_size(self.mpi_comm)
 
         # initialize!
         self.init()
@@ -81,10 +83,30 @@ class Horovod(BaseWorker, ABC):
 
         raise NotImplementedError
 
+    def get_rank(self) -> int:
+        """returns the rank according to horovod."""
+
+        return self.hvd.rank()
+
+    def get_cross_rank(self) -> int:
+        """returns the cross rank according to horovod."""
+
+        return self.hvd.cross_rank()
+
+    def get_size(self) -> int:
+        """returns the size according to horovod."""
+
+        return self.hvd.size()
+
     def get_local_rank(self) -> int:
         """returns the local rank according to horovod."""
 
         return self.hvd.local_rank()
+
+    def get_local_size(self) -> int:
+        """returns the local size according to horovod."""
+
+        return self.hvd.local_size()
 
     def is_nccl_built(self) -> bool:
         """returns boolean on whether horovod is built with nccl."""
