@@ -3,7 +3,7 @@ from ..util.config import ConfigParser
 from ..util.config import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
 from ..util.config import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.option import Option, Some, nothing
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Optional
 from abc import ABC, abstractmethod
 import numpy as np
 import re
@@ -14,6 +14,24 @@ from ..util.data_muncher import DataMuncher
 
 # Constants
 _LOGGER_CONFIG_PREFIX = "_logger"
+
+# Shared global variables
+_LOGGER_WORKER_CONFIG: Optional[ConfigParser] = None
+
+
+def set_logger_worker_config(config: ConfigParser) -> None:
+    """
+    Sets the logger worker config to be shared among all workers.
+
+    Parameters
+    ----------
+    config : ConfigParser
+        logger config to be shared among all workers
+
+    """
+
+    global _LOGGER_WORKER_CONFIG
+    _LOGGER_WORKER_CONFIG = config
 
 
 class ConfigReader:
@@ -62,15 +80,22 @@ class Logger(ConfigReader):
         if hasattr(self, "_log") and self._log is not None:
             return self._log
 
+        # first, set the initial config that is shared among all and override with local config
+        local_config = self._config.get_or_empty(_LOGGER_CONFIG_PREFIX)
         config_logger = \
-            self._config\
-                .get_or_empty(_LOGGER_CONFIG_PREFIX)\
-                .update({}, {
-                    UO.SET_ON_INSERT: {
-                        "name": self._modify_logger_name(self.__class__.__name__),
-                        "console_handler": self._console_handler,
-                    }
-                })
+            _LOGGER_WORKER_CONFIG\
+            .update({}, {
+                UO.SET: local_config.dict_representation()
+            }, {UC.RECURSIVE: True}) if _LOGGER_WORKER_CONFIG is not None else local_config
+
+        config_logger = \
+            config_logger\
+            .update({}, {
+                UO.SET_ON_INSERT: {
+                    "name": self._modify_logger_name(self.__class__.__name__),
+                    "console_handler": self._console_handler,
+                }
+            })
 
         logger = LogerSole(config_logger)
 
