@@ -1,5 +1,6 @@
 import math
 import pathlib
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 import colored
@@ -501,6 +502,11 @@ class FolderReader(base.BaseWorker):
         # Folders containing the data
         self._folders: List[str] = []
 
+        # list of extensions to ignore
+        self._extension_ignore: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
+        ]
+
         # check and populate the folder metadata
         self._check_populate_folder_metadata()
 
@@ -591,7 +597,31 @@ class FolderReader(base.BaseWorker):
         # Take care of MacOS special files
         check &= file_name not in ['Icon\r']
 
+        # criteria for the file extension
+        check &= self._filter_file_extension(pathlib.Path(file_name).suffix[1:])  # remove the leading . from the ext
+
         return check
+
+    def _filter_file_extension(self, extension: str) -> bool:
+        """
+        Method to check whether the extension is acceptable or not.
+
+        Parameters
+        ----------
+        extension : str
+            the extension
+
+        Returns
+        -------
+        bool
+            whether the extension is acceptable
+
+        """
+
+        if any(pattern.match(extension) is not None for pattern in self._extension_ignore):
+            return False
+
+        return True
 
 
 class Syncer(base.BaseWorker):
