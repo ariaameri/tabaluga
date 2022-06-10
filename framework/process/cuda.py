@@ -74,7 +74,7 @@ class CUDAInformation(Process):
             # get temperature info
             try:
                 info = pynvml.nvmlDeviceGetTemperature(handle, 0)
-                device_info += f'\t - {colored.fg("cornsilk_1")}temperature{colored.attr("reset")}: {info}\u00B0C\n'
+                device_info += f'\t - {colored.fg("cornsilk_1")}temperature{colored.attr("reset")}: {info}\u00B0C\n\n'
             except:
                 pass
 
