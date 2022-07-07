@@ -1450,6 +1450,7 @@ class Modification:
             FUNCTION = '$function'
             EXISTS = '$exists'
             REGEX = '$regex'
+            REGEX_COMPILED = '$regex_compiled'
             EQUAL = '$equal'
             OR = '$or'
             AND = '$and'
@@ -1550,6 +1551,8 @@ class Modification:
                     return self._exists(value)
                 elif single_operator == self.Operations.REGEX:
                     return self._regex(value)
+                elif single_operator == self.Operations.REGEX_COMPILED:
+                    return self._regex_compiled(value)
                 elif single_operator == self.Operations.EQUAL:
                     return self._equal(value)
                 elif single_operator == self.Operations.OR:
@@ -1701,6 +1704,46 @@ class Modification:
 
             # Define the compiled regex
             regex_checker = re.compile(regex)
+
+            return helper
+
+        def _regex_compiled(self, regex: re.Pattern) -> Callable[[Option], bool]:
+            """Operator for checking a regex string on a value.
+
+               Parameters
+               ----------
+               regex : str
+                   A regex string to be checked on the Option value
+
+               Returns
+               -------
+               A function for filtering
+
+               """
+
+            def helper(x: Option) -> bool:
+                """Helper function to decide whether or not a regex satisfies the Option x element.
+
+                Parameters
+                ----------
+                x : Option
+                    An Option value to be checked
+
+                Returns
+                -------
+                A boolean indicating whether or not the Option x satisfy the regex
+
+                """
+
+                # Check if the item is a string and then do regex filtering
+                return \
+                    x \
+                        .filter(lambda d: isinstance(d, str)) \
+                        .filter(lambda a: regex_checker.search(a) is not None) \
+                        .is_defined()
+
+            # Define the compiled regex
+            regex_checker = regex
 
             return helper
 
