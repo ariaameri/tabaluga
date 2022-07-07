@@ -2,6 +2,10 @@ import os
 import pathlib
 import subprocess
 import sys
+import re
+
+REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
+REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
 
 
 def check_terminal_focused() -> bool:
