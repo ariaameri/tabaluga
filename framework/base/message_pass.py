@@ -439,7 +439,7 @@ class _MessagePasserTerminator(BaseWorker):
                     check, names_queue = self._check_all_message_passers_terminated()
                     if check is True:
                         break
-                    log_str = f'waiting on all message passers to terminate... it has been {i * 30} seconds.'
+                    log_str = f'waiting on all message passers to terminate... it has been {i * 30} seconds. '
                     if names_queue is not None:
                         log_str += \
                             f"the followings are still remaining with approximate queue sizes:\n\n\t - " + \
