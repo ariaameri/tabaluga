@@ -92,6 +92,7 @@ ENV_VARS = ConfigParser({
     'tty_size': 'TPB_TTY_SIZE',
     'force_tty': 'TPB_FORCE_TTY',
 })
+THREAD_NAME_PREFIX = "the_progressbar_"
 
 
 # function to initialize rabbit data
@@ -627,7 +628,7 @@ class TheProgressBarBase(ABC, BaseWorker):
                 {},
                 {
                     'receiver_thread': threading.Thread(
-                        name='message_processor',
+                        name=THREAD_NAME_PREFIX + 'message_processor',
                         target=self._receive,
                         args=(),
                         daemon=True
@@ -1069,7 +1070,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # now, create the thread object
         run_print_timer_thread = threading.Thread(
-            name='print_timer_daemon_thread',
+            name=THREAD_NAME_PREFIX + 'print_timer_daemon_thread',
             target=self._timer_THREAD(
                 pipe_read=self.sleep_timer_info.get('print_timer.pipe.read'),
                 message=PrintProgressBar(),
@@ -2786,7 +2787,7 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         # Run the thread for checking when to resume
         self.check_for_resume_thread = threading.Thread(
-            name='check_for_resume_daemon_thread',
+            name=THREAD_NAME_PREFIX + 'check_for_resume_daemon_thread',
             target=self._run_check_for_resume,
             args=(),
             daemon=True
@@ -3115,7 +3116,7 @@ class TheProgressBar(TheProgressBarBase):
 
         # now, create the thread object
         gather_info_thread = threading.Thread(
-            name='gather_info_timer_daemon_thread',
+            name=THREAD_NAME_PREFIX + 'gather_info_timer_daemon_thread',
             target=self._timer_THREAD(
                 pipe_read=self.sleep_timer_info.get('gather_info_timer.pipe.read'),
                 message=SendGatherInfo(),
@@ -3569,7 +3570,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # now, create the thread object
         gather_info_thread = threading.Thread(
-            name='gather_info_daemon_thread',
+            name=THREAD_NAME_PREFIX + 'gather_info_daemon_thread',
             target=self._run_gather_info_THREAD,
             args=(),
             daemon=True
@@ -3664,7 +3665,7 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # now, create the thread object
         gather_info_thread = threading.Thread(
-            name='printer_gatherer_daemon_thread',
+            name=THREAD_NAME_PREFIX + 'printer_gatherer_daemon_thread',
             target=self._run_printer_gatherer_THREAD,
             args=(),
             daemon=True
