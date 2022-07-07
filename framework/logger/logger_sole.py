@@ -1,4 +1,5 @@
 from ..util.config import ConfigParser
+from ..util.util import REGEX_INDENT_NEW_LINE_ONLY
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import logging
 from collections import OrderedDict
@@ -260,7 +261,8 @@ class Logger:
         with self._rwlock.gen_wlock():
             count = self._counter[0]
             self._logger = logging.getLogger(str(count))
-            self.set_name(self._config.get_or_else('name', str(count)))
+            self._logger_name = self._config.get_or_else('name', str(count))
+            self._logger_name = self.set_name(self._logger_name)
             self._counter[0] += 1
         self._logger.setLevel(logging.DEBUG)
         self._logger.propagate = False  # Suppress _logger output to stdout
@@ -284,6 +286,10 @@ class Logger:
             file_handler = logging.FileHandler(self._config.get_or_else('file_name', file_name))
             self._file_handler = self._set_handler_properties(file_handler, self._create_format("file"))
             self._logger.addHandler(self._file_handler)
+
+        prefix_len = 1 + len(self._logger_name) + 1  # 1 for arrow and 1 for the space after the name
+        self._indenter = \
+            lambda text, add_space: REGEX_INDENT_NEW_LINE_ONLY.sub(rf"\1{' ' * (prefix_len + add_space)}", text)
 
     def _set_handler_properties(self, handler: logging.Handler, format: str) -> logging.Handler:
         """
@@ -313,13 +319,18 @@ class Logger:
 
         return handler
 
-    def set_name(self, name: str) -> None:
+    def set_name(self, name: str) -> str:
         """Changes the name of the current logger handler
 
         Parameters
         ----------
         name : str
             New name to be set
+
+        Returns
+        -------
+        str
+            final name of the logger
 
         """
 
@@ -334,6 +345,8 @@ class Logger:
             name += name_suffix
 
         self._logger.name = name
+
+        return name
 
     def get_abilities(self) -> List[str]:
         """Method to return the list of abilities for the logger.
@@ -446,6 +459,9 @@ class Logger:
             f'{colored.attr("reset")}' \
             f'{msg}'
 
+        # indent with 8 extra spaces to take care of 'report: '
+        report_message = self._indenter(report_message, 8)
+
         self._logger.info(report_message)
 
     def info(self, msg: str) -> None:
@@ -464,6 +480,9 @@ class Logger:
             f'info: ' \
             f'{colored.attr("reset")}' \
             f'{msg}'
+
+        # indent with 6 extra spaces to take care of 'info: '
+        info_message = self._indenter(info_message, 6)
 
         self._logger.info(info_message)
 
@@ -503,6 +522,9 @@ class Logger:
             f'{msg}' \
             f'{colored.attr("reset")}'
 
+        # indent with 7 extra spaces to take care of 'ERROR: '
+        error_message = self._indenter(error_message, 7)
+
         self._logger.error(error_message)
 
     def debug(self, msg: str) -> None:
@@ -521,5 +543,8 @@ class Logger:
             f'debug: '\
             f'{colored.attr("reset")}' \
             f'{msg}'
+
+        # indent with 7 extra spaces to take care of 'debug: '
+        debug_message = self._indenter(debug_message, 7)
 
         self._logger.debug(debug_message)
