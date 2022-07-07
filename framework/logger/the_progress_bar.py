@@ -2352,7 +2352,7 @@ class TheProgressBarBase(ABC, BaseWorker):
             subs_str = r'\1\t'
             description += \
                 f'\n\n' \
-                f'{REGEX_INDENTATION.sub(subs_str, self._make_and_get_aggregation_str())}' \
+                f'{REGEX_INDENTATION.sub(subs_str, aggregation_string)}' \
                 f'\n'
 
         # construct the data that has to be outputted
@@ -2418,8 +2418,8 @@ class TheProgressBarBase(ABC, BaseWorker):
         # also add the aggregation string
         aggregation_str = self._make_and_get_aggregation_short_str()
         # make sure its a one liner
-        if '\n' in aggregation_str:
-            raise ValueError('aggregation short function must result in a one-line string')
+        # if '\n' in aggregation_str:
+        #     raise ValueError('aggregation short function must result in a one-line string')
         description += f' {aggregation_str}'
 
         # construct the data that has to be outputted
