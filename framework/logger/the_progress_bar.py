@@ -3910,6 +3910,64 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         return description, output_data
 
+    def _make_and_get_description_short_after(self, data: DataMuncher = None) -> (str, DataMuncher):
+        """Returns the short description that comes after the bar.
+
+        Parameters
+        ----------
+        data : DataMuncher
+            the data needed to create the bar in form of:
+                {
+                    'after': '',
+                }
+
+        Returns
+        -------
+        (str, DataMuncher)
+            A string containing short description after
+            data built
+
+        """
+
+        # get the passed description and return it
+        if data is not None:
+            return data.get('after'), DataMuncher({"description": data.get('after')})
+
+        # construct the whole thing
+        prefix = '\t'
+
+        # get the description
+        description_after = self._get_bar_description_short_after()
+        if description_after != '':
+            description_after += '\n\n'
+
+        # get the aggregation
+        # first, gather all aggregation data
+        aggregation_data = \
+            [
+                self.worker_gather_info.get_or_else(f'worker.{rank}.aggregation_data.aggregation_data', None)
+                for rank
+                in range(self.state_info.get('parallel.size'))
+            ]
+        # now, get the string
+        aggregation_str = self.actions.get('aggregator.short')(aggregation_data)
+        # finally, indent the string
+        aggregation_str = REGEX_INDENTATION.sub(r'\1' + prefix, aggregation_str)
+
+        # construct the final output
+        description = \
+            f'\n' \
+            f'{description_after}' \
+            f'{aggregation_str}'
+
+        # construct the data that has to be outputted
+        output_data = \
+            DataMuncher({
+                "description": description,
+            })
+
+        return description, output_data
+
     # communication methods
 
     def _init_mpi_process_info(self) -> DataMuncher:
