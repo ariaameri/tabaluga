@@ -1,7 +1,8 @@
+from threading import Lock
 import time
 from dataclasses import dataclass
 from ..asyncer.asyncer import asyncer
-from .base import ConfigReader, Logger
+from .base import ConfigReader, Logger, BaseWorker
 from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
 from typing import TypeVar, Generic, Optional, Callable, Any
@@ -9,11 +10,27 @@ import janus
 from ..util.result import Result, Err
 
 # type of message we accept
-MessageType = TypeVar("MessageType")
+MessageType = TypeVar("MessageType", bound="BaseMessage")
 MessagePasserBaseSubclass = TypeVar("MessagePasserBaseSubclass", bound="MessagePasserBase")
 
 # constants
 MESSAGE_PASSER_CONFIG_PREFIX = "_message_passer"
+
+# global variables
+# keep a list of all message passers so that we can in the end send a message to all to terminate
+_ALL_MESSAGE_PASSERS_LOCK = Lock()
+_ALL_MESSAGE_PASSERS: set['MessagePasserBase'] = set()
+
+
+class BaseMessage:
+    """base class pf the message classes. All message types should extend this class."""
+
+
+class TerminateMessage(BaseMessage):
+    """message to send to tell the message passer to terminate"""
+
+
+terminate_message = TerminateMessage
 
 
 class ReceiveResults:
@@ -113,6 +130,18 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         # bookkeeping to know we are operational
         self._message_pass_working = True
 
+        # add us to the list of all message passers
+        with _ALL_MESSAGE_PASSERS_LOCK:
+            _ALL_MESSAGE_PASSERS.add(self)
+
+    def get_approximate_message_passer_queue_size(self) -> int:
+        """Returns the approximate size of the message passing queue."""
+
+        if self._message_pass_working is False:
+            return 0
+
+        return self._message_pass_queue_async.qsize()
+
     @abstractmethod
     async def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
@@ -144,6 +173,11 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
 
         return res
 
+    def __terminate_message_passing__(self) -> Result:
+        """sends a message to self to be terminated."""
+
+        return self.tell(terminate_message)
+
 
 class MessagePasser(MessagePasserBase[MessageType], ABC):
     """Trait implementing message internal passing interface."""
@@ -155,7 +189,7 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
     def __del__(self):
 
-        self.tell(ReceiveResults.destruct_receive)
+        self.tell(terminate_message)
 
     def close(self):
         """Destruct everything and close."""
@@ -180,7 +214,11 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
             try:
                 message: MessageType = await self._message_pass_queue_async.get()
             except BaseException as e:
-                self._log.debug(f"failed getting message from queue with error of '{e}'")
+                self._log.error(f"failed getting message from queue with error of '{e}'. stopping message receiving")
+                break
+
+            # if it is a termination message, terminate
+            if message == terminate_message:
                 break
 
             try:
@@ -205,6 +243,10 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
         # no longer operational
         self._message_pass_working = False
+
+        # remove ourselves from the set of all message passers
+        with _ALL_MESSAGE_PASSERS_LOCK:
+            _ALL_MESSAGE_PASSERS.remove(self)
 
     @abstractmethod
     async def _receive_message(self, message: MessageType) -> ReceiveResults.BaseReceiveResult:
@@ -302,6 +344,14 @@ class _Asker(MessagePasserBase[Any]):
         # notice that we get an Any message because we do not know the type of the sender's message
         message: Any = self._message_pass_queue_sync.get()
 
+        # remove ourselves from the set of all message passers
+        with _ALL_MESSAGE_PASSERS_LOCK:
+            _ALL_MESSAGE_PASSERS.remove(self)
+
+        # if it is a termination message, terminate
+        if message == terminate_message:
+            raise RuntimeError("received a terminate message before getting the result")
+
         return message
 
     def ask(self, message_factory: Callable[['_Asker'], MessageType]) -> Result[Any, BaseException]:
@@ -327,3 +377,93 @@ class _Asker(MessagePasserBase[Any]):
         result = Result.from_func(self._receive)
 
         return result
+
+
+class _MessagePasserTerminator(BaseWorker):
+
+    def __init__(self, config: ConfigParser):
+
+        super().__init__(config)
+
+        self.number_of_retries: int = int(self._config.get_or_else('number_of_retries', 1000))
+        self.retry_interval: int = int(self._config.get_or_else('retry_interval', 15))
+
+    @staticmethod
+    def _check_all_message_passers_terminated() -> (bool, dict):
+        """
+        Helper function to check if all message passers are terminated
+
+        Returns
+        -------
+        bool, dict
+            result, dict of the names of the ones remaining and their appx queue size
+
+        """
+
+        result = _ALL_MESSAGE_PASSERS_LOCK.acquire(blocking=False)
+        if result is False:
+            return False, None
+
+        check = (len(_ALL_MESSAGE_PASSERS) == 0)
+        names_queue = {
+            item.__class__.__name__: item.get_approximate_message_passer_queue_size()
+            for item
+            in _ALL_MESSAGE_PASSERS
+        }
+        _ALL_MESSAGE_PASSERS_LOCK.release()
+        return check, names_queue
+
+    def terminate_all_message_passers(self, block: bool = True):
+        """
+        terminates all message passers.
+
+        Parameters
+        ----------
+        block : bool, optional
+            whether to block for all message passers to terminate
+
+        """
+
+        # send termination message
+        with _ALL_MESSAGE_PASSERS_LOCK:
+            for message_passer in _ALL_MESSAGE_PASSERS:
+                message_passer.__terminate_message_passing__()
+
+        if block:
+            import time
+
+            check, names_queue = self._check_all_message_passers_terminated()
+            if check is False:
+                i = 0
+                while i != self.number_of_retries:
+                    check, names_queue = self._check_all_message_passers_terminated()
+                    if check is True:
+                        break
+                    log_str = f'waiting on all message passers to terminate... it has been {i * 30} seconds.'
+                    if names_queue is not None:
+                        log_str += \
+                            f"the followings are still remaining with approximate queue sizes:\n\n\t - " + \
+                            '\n\t - '.join([f"{k}: {v}" for k, v in names_queue.items()]) + '\n\n'
+                    self._log.info(log_str)
+                    time.sleep(self.retry_interval if i != 0 else 5)
+                    i += 1
+                else:
+                    self._log.warning('giving up on waiting for the message passers to terminate.')
+
+            self._log.info('all message passers are terminated successfully')
+
+
+def terminate_all_message_passers(config: ConfigParser, block: bool = True):
+    """
+    function to terminate all message passers.
+
+    Parameters
+    ----------
+    config : ConfigParser
+        config for the instance
+    block : bool, optional
+        whether to block for all message passers to terminate
+
+    """
+
+    _MessagePasserTerminator(config).terminate_all_message_passers(block)

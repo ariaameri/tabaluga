@@ -124,6 +124,13 @@ class Trainer(base.BaseEventManager, ABC):
         # Everything is finished
         self.on_end()
 
+        # terminate all the message passers
+        from ..base.message_pass import terminate_all_message_passers
+        terminate_all_message_passers(
+            config=self._config.get_or_empty('_message_passer_terminator'),
+            block=True,
+        )
+
         return self.history
 
     def train(self) -> List[DataMuncher]:
