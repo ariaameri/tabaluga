@@ -10,7 +10,7 @@ import janus
 from ..util.result import Result, Err
 
 # type of message we accept
-MessageType = TypeVar("MessageType", bound="BaseMessage")
+MessageType = TypeVar("MessageType")
 MessagePasserBaseSubclass = TypeVar("MessagePasserBaseSubclass", bound="MessagePasserBase")
 
 # constants
