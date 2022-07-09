@@ -133,9 +133,26 @@ class DataManager(base.BaseEventManager, ABC):
         # Create workers
         self.create_workers()
 
+        # the shared multithreading pool
+        self._multithreading = self._config.get_or_else('multithreading', False)
+        self._multithreading_count = self._config.get_or_else('multithreading_count', 5)
+        self.thread_pool: Optional[ThreadPoolExecutor] = None
+        if self._multithreading is True:
+            self.thread_pool = ThreadPoolExecutor(
+                self._multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
+            )
+        self.distribute_shared_multithreading_pool()
+
         # set the batch sizes
         self.set_batch_size_report(self.batch_size_report)
         self.set_batch_size_effective(self._batch_size_effective)
+
+    def distribute_shared_multithreading_pool(self):
+        """distributes the shared multithreading pool among all workers."""
+
+        if self._multithreading:
+            for worker in self.workers:
+                worker.set_shared_multithreading_pool(self.thread_pool)
 
     def get_syncer(self):
 
@@ -183,15 +200,7 @@ class DataManager(base.BaseEventManager, ABC):
     def _check_process_config(self) -> None:
         """Reconfigures the config file for this class."""
 
-        # Spread multithreading one level down
-        # Didn't choose only one level down because 'train' and 'val' entries might not exist
-        if self._config.get_or_else('multithreading', False) is True:
-            self._config = self._config.update(
-                {},
-                {UO.SET_ON_INSERT: {
-                    'train.multithreading': self._config.get('multithreading'),
-                    'val.multithreading': self._config.get('multithreading'),
-                }})
+        pass
 
     def _build_folder_reader(self) -> 'FolderReader':
         """Builds and return the FolderReader instance for this instance."""
@@ -968,7 +977,7 @@ class Syncer(base.BaseWorker):
             self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
         # make a thread pool ot be used for loading the data
-        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-broadcast")
+        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-broadcast")
 
         # go over the data in batch_size chunks
         for start_idx in range(0, len(metadata), self.batch_size):
@@ -1117,12 +1126,15 @@ class Syncer(base.BaseWorker):
         """
 
         # make a thread pool to be used for the subthreads
-        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-selective")
+        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-selective")
 
         if self.distributor:
             # make a thread pool to be used for interacting with other ranks
             thread_communicator_pool = \
-                ThreadPoolExecutor(self.thread_count, thread_name_prefix="syncer-local-data-selective-distributor")
+                ThreadPoolExecutor(
+                    self.thread_count,
+                    thread_name_prefix="tabaluga-syncer-local-data-selective-distributor"
+                )
 
             list(
                 thread_communicator_pool.map(
@@ -1324,6 +1336,9 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Modify the metadata
         self.modify_metadata()
 
+        # placeholder for the shared multithreading pool
+        self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
+
         # bookkeeping for iterator, batch size and number of iterations (batches in an epoch)
         self._iterator_count = 0
         self.batch_size_report: int = -1
@@ -1336,6 +1351,21 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Create workers
         self.create_workers()
+
+    def set_shared_multithreading_pool(self, pool: ThreadPoolExecutor):
+        """
+        Sets the shared multithreading pool to be used for data loading and spreads it to the workers.
+
+        Parameters
+        ----------
+        pool : ThreadPoolExecutor
+            the thread pool
+
+        """
+
+        self._shared_multithreading_pool = pool
+        for worker in self.workers:
+            worker.set_shared_multithreading_pool(pool)
 
     def modify_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
@@ -1616,9 +1646,16 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         # Flag for if we should load the data with multithreading
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
+        self.use_own_multithreading: bool = self._config.get_or_else('use_own_multithreading', False)
         self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
-        if self.multithreading is True:
-            self.thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="dataloader-thread-pool")
+        self.use_shared_multithreading: bool = self._config.get_or_else('use_shared_multithreading', True)
+        # placeholder for the multithreading pool
+        self.thread_pool: Optional[ThreadPoolExecutor] = None
+        if self.use_own_multithreading is True:
+            self.thread_pool = ThreadPoolExecutor(
+                self.thread_count,
+                thread_name_prefix="tabaluga-dataloader-thread-pool"
+            )
 
         # bookkeeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size_report: int = -1
@@ -1633,6 +1670,19 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         # bookkeeping for iterator
         self._iterator_count = 0
+
+    def set_shared_multithreading_pool(self, pool: ThreadPoolExecutor):
+        """
+        Sets the shared multithreading pool to be used for data loading
+
+        Parameters
+        ----------
+        pool : ThreadPoolExecutor
+            the thread pool
+
+        """
+        if self.use_shared_multithreading:
+            self.thread_pool = pool
 
     def modify_metadata(self) -> None:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
@@ -1799,6 +1849,11 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Load the data
         # Load data with multithreading
         if self.multithreading is True:
+            if self.thread_pool is None:
+                self._log.error('multithreading is on but no multithreading pool is provided. maybe check the config')
+                raise RuntimeError(
+                    'multithreading is on but no multithreading pool is provided. maybe check the config'
+                )
             # Load the data with threads
             data = list(
                     self.thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
