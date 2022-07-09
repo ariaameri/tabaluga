@@ -94,12 +94,16 @@ class DataManager(base.BaseEventManager, ABC):
         self.workers['validation']: DataLoaderManager
         self.workers['test']: DataLoaderManager
 
+        # build the metadata generator
+        self.metadata_generator = self._build_metadata_generator()
+
         # if we are the main rank, we always want to create a metadata
         if mpi.mpi_communicator.is_main_rank():
             # Create and modify general and train, val, test metadata
             self.create_metadata()
-            self.modify_metadata()
+            self.metadata = self.modify_metadata()
             self._generate_train_val_test_metadata()
+            self._add_additional_metadata()
 
         # if in distributed mode, do the initial setup
         self.syncer: Optional[Syncer] = None
@@ -189,27 +193,41 @@ class DataManager(base.BaseEventManager, ABC):
                     'val.multithreading': self._config.get('multithreading'),
                 }})
 
-    def create_metadata(self) -> None:
-        """Checks how to create metadata from input source and create train, validation, and test metadata."""
+    def _build_folder_reader(self) -> 'FolderReader':
+        """Builds and return the FolderReader instance for this instance."""
+
+        return FolderReader(self._config.get_or_empty('folder_reader'))
+
+    def _build_metadata_generator(self):
+        """Builds and return the metadata generator"""
 
         # Read and create the data metadata
         if self._input_type == 'folder_path':
-            metadata_generator = FolderReader(self._config.get_or_empty('folder_reader'))
+            metadata_generator = self._build_folder_reader()
         elif self._input_type == 'mongo':
             raise NotImplementedError
         else:
             raise ValueError(f"input type of {self._input_type} not recognized")
 
-        # get the metadata
-        self.metadata = metadata_generator.build_and_get_metadata()
+        return metadata_generator
 
-    def modify_metadata(self) -> None:
+    def create_metadata(self) -> None:
+        """Checks how to create metadata from input source and create train, validation, and test metadata."""
+
+        # get the metadata
+        self.metadata = self.metadata_generator.build_and_get_metadata()
+
+    def modify_metadata(self, metadata: pd.DataFrame = None) -> pd.DataFrame:
         """Modifies the metadata that this instance holds."""
 
-        metadata_manipulator = MetadataManipulator(metadata=self.metadata)
+        metadata = metadata if metadata is not None else self.metadata
+
+        metadata_manipulator = MetadataManipulator(metadata=metadata)
 
         # regroup the metadata
-        self.metadata = metadata_manipulator.modify()
+        metadata = metadata_manipulator.modify()
+
+        return metadata
 
     def _generate_train_val_test_metadata(self) -> None:
         """The method creates train, validation, and test metadata."""
@@ -263,6 +281,60 @@ class DataManager(base.BaseEventManager, ABC):
 
         # restore the random generator state
         np.random.set_state(rng_state)
+
+    def _add_additional_metadata(self) -> None:
+        """Adds the additional metadata to the metadata within"""
+
+        def reindex(df: pd.DataFrame, index_begin: int) -> pd.DataFrame:
+            """Reindexes the 0 level indices of the given pandas dataframe so that the indexing starts from
+            the given value"""
+
+            return df.rename(
+                index={
+                    key: value
+                    for value, key
+                    in enumerate(df.index.get_level_values(0).unique(), start=index_begin)
+                },
+                level=0,
+            )
+
+        def add_original_index(df: pd.DataFrame) -> pd.DataFrame:
+            """adds `original_index` column to the dataframe."""
+
+            df['original_index'] = -1
+
+            return df
+
+        def process_df(new_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
+            """Processes the new df and concats it with the old one and returns the result."""
+
+            new_df = self.modify_metadata(new_df)
+            new_df = add_original_index(new_df)
+            new_df = reindex(new_df, len(old_df.index.get_level_values(0).unique()))
+            df = pd.concat([old_df, new_df])
+
+            return df
+
+        # get the new train metadata, process it and add it to the train metadata
+        self.train_metadata = \
+            process_df(
+                self.metadata_generator.build_and_get_add_train_metadata(),
+                self.train_metadata,
+            )
+
+        # get the new val metadata, process it and add it to the val metadata
+        self.val_metadata = \
+            process_df(
+                self.metadata_generator.build_and_get_add_val_metadata(),
+                self.val_metadata,
+            )
+
+        # get the new test metadata, process it and add it to the test metadata
+        self.test_metadata = \
+            process_df(
+                self.metadata_generator.build_and_get_add_test_metadata(),
+                self.test_metadata,
+            )
 
     def shuffle_each_metadata(self, rand_seed_add: int = 0) -> None:
         """
@@ -507,19 +579,33 @@ class FolderReader(base.BaseWorker):
             re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
         ]
 
-        # check and populate the folder metadata
-        self._check_populate_folder_metadata()
+        # Folders containing the data
+        self._folders: List[str] = self._config.get_value_option('folders').expect('folder config does not exist')
+        self._add_train_folders: List[str] = self._config.get_or_else('additional_train_folders', [])
+        self._add_val_folders: List[str] = self._config.get_or_else('additional_val_folders', [])
+        self._add_test_folders: List[str] = self._config.get_or_else('additional_test_folders', [])
+        self._add_train_folders = [] if self._add_train_folders == [None] else self._add_train_folders
+        self._add_val_folders = [] if self._add_val_folders == [None] else self._add_val_folders
+        self._add_test_folders = [] if self._add_test_folders == [None] else self._add_test_folders
 
-    def _check_populate_folder_metadata(self):
+        # File names in nested lists
+        self._deep_folders: bool = self._config.get_or_else('deep', False)
+
+        # check and populate the folder metadata
+        self._check_populate_folder_metadata(self._folders)
+        self._check_populate_folder_metadata(self._add_train_folders)
+        self._check_populate_folder_metadata(self._add_val_folders)
+        self._check_populate_folder_metadata(self._add_test_folders)
+
+    def _check_populate_folder_metadata(self, folders: List[str]):
         """Checks given folders for sanity and existence."""
 
-        # Folders containing the data
-        self._folders: List[str] = self._config.get('folders')
-
         # Check if folder list is given
-        if self._folders is None:
+        if folders is None:
             raise ValueError("No folders given to read files from!")
-        for folder in self._folders:
+        for folder in folders:
+            if not isinstance(folder, str):
+                raise ValueError(f"given folder {folder} is not string")
             if Path(folder).exists() is False:
                 raise FileNotFoundError(f'The folder {folder} does not exist!')
 
@@ -534,13 +620,83 @@ class FolderReader(base.BaseWorker):
 
         """
 
+        metadata = self._build_and_get_metadata_folders(self._folders)
+
+        return metadata
+
+    def build_and_get_add_train_metadata(self) -> pd.DataFrame:
+        """
+        This method goes over the specified folders for the additional train data folder, read files and creates
+        and returns a pandas data frame from them.
+
+        Returns
+        -------
+        pd.DataFrame
+            pandas dataframe of the information
+
+        """
+
+        metadata = self._build_and_get_metadata_folders(self._add_train_folders)
+
+        return metadata
+
+    def build_and_get_add_val_metadata(self) -> pd.DataFrame:
+        """
+        This method goes over the specified folders for the additional validation data folder, read files and creates
+        and returns a pandas data frame from them.
+
+        Returns
+        -------
+        pd.DataFrame
+            pandas dataframe of the information
+
+        """
+
+        metadata = self._build_and_get_metadata_folders(self._add_val_folders)
+
+        return metadata
+
+    def build_and_get_add_test_metadata(self) -> pd.DataFrame:
+        """
+        This method goes over the specified folders for the additional test data folder, read files and creates
+        and returns a pandas data frame from them.
+
+        Returns
+        -------
+        pd.DataFrame
+            pandas dataframe of the information
+
+        """
+
+        metadata = self._build_and_get_metadata_folders(self._add_test_folders)
+
+        return metadata
+
+    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pd.DataFrame:
+        """
+        This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
+
+        Parameters
+        ----------
+        folders : List[str], optional
+            list of folders to look into. if not given, the default folder is assumed
+
+        Returns
+        -------
+        pd.DataFrame
+            pandas dataframe of the information
+
+        """
+
+        folders = folders if folders is not None else self._folders
+
         # File names in nested lists
-        if self._config.get_or_else('deep', False) is False:
+        if self._deep_folders is False:
             # only one level deep
-            file_nested_paths = [list(Path(folder).iterdir()) for folder in self._folders]
+            file_nested_paths = [list(Path(folder).iterdir()) for folder in folders]
         else:
             # grab everything!
-            file_nested_paths = [list(Path(folder).glob('**/*')) for folder in self._folders]
+            file_nested_paths = [list(Path(folder).glob('**/*')) for folder in folders]
 
         # Flatten the file names and make absolute paths
         file_paths = [file_path
