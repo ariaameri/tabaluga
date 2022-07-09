@@ -1,3 +1,4 @@
+import concurrent.futures
 import math
 import pathlib
 import re
@@ -135,7 +136,16 @@ class DataManager(base.BaseEventManager, ABC):
 
         # the shared multithreading pool
         self._multithreading = self._config.get_or_else('multithreading', False)
-        self._multithreading_count = self._config.get_or_else('multithreading_count', 5)
+        self._find_best_multithreading_count = self._config.get_or_else('find_best_multithreading_count', False)
+        if self._find_best_multithreading_count:
+            paths = [pathlib.Path(path) for path in self.train_metadata['path']]
+            self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
+            self._multithreading_count = DataLoaderMultiThreadFinder(
+                paths=paths,
+                config=self._config.get_or_empty('multithread_count_finder'),
+            ).find_best_thread_count()
+        else:
+            self._multithreading_count = self._config.get_or_else('multithreading_count', 5)
         self.thread_pool: Optional[ThreadPoolExecutor] = None
         if self._multithreading is True:
             self.thread_pool = ThreadPoolExecutor(
@@ -1312,6 +1322,86 @@ class Syncer(base.BaseWorker):
             )
 
         return train_metadata, val_metadata, test_metadata
+
+
+class DataLoaderMultiThreadFinder(base.BaseWorker):
+
+    def __init__(self, paths: list[pathlib.Path], config: ConfigParser = None):
+
+        super().__init__(config)
+
+        self.paths = paths
+
+        # get the batch size for syncing
+        self.min_thread_count = self._config.get_or_else('min_thread_count', 1)
+        self.max_thread_count = self._config.get_or_else('max_thread_count', 50)
+        self.error_margin_allowed = self._config.get_or_else('error_margin_allowed', .1)
+        self.average_count = self._config.get_or_else('average_count', 10)
+
+    @staticmethod
+    def _load_file(path: pathlib.Path) -> bytes:
+        with open(path.as_posix(), mode='rb') as f:
+            return f.read()
+
+    def _loader(self, paths: list[pathlib.Path], multi_thread_count: int) -> list[concurrent.futures.Future]:
+
+        pool = ThreadPoolExecutor(
+            max_workers=multi_thread_count,
+        )
+
+        tasks = [pool.submit(self._load_file, item) for item in paths]
+
+        [task.result() for task in tasks]
+
+        return tasks
+
+    def _runner(self, multithread_count: int) -> float:
+
+        import time
+        start_time = time.time()
+        for _ in range(self.average_count):
+            self._loader(self.paths, multithread_count)
+        delta_time_sync = time.time() - start_time
+        self._log.info(
+            f"elapsed time for loading files with thread count of {multithread_count: 4} "
+            f"is {delta_time_sync / self.average_count * 1e3: 10.2f} ms")
+
+        return delta_time_sync
+
+    def find_best_thread_count(self) -> int:
+
+        result = [
+            {
+                'thread_count': thread_count,
+                'time': self._runner(
+                    multithread_count=thread_count,
+                ),
+            }
+            for thread_count
+            in range(self.min_thread_count, self.max_thread_count)
+        ]
+
+        # find the minimum time taken
+        min_time = min([res['time'] for res in result])
+        # now, allow up to some percentage of the time taken then choose the one with the lowest thread count
+        sorted_result = sorted(
+            [
+                res
+                for res
+                in result
+                if res['time'] / min_time <= (1 + self.error_margin_allowed)
+            ],
+            key=lambda x: x['thread_count']
+        )
+        best_thread_count = sorted_result[0]['thread_count']
+        best_thread_count_time = sorted_result[0]['time']
+        self._log.info(
+            f"best thread count found is {best_thread_count} "
+            f"with time of {best_thread_count_time / self.average_count * 1e3:5.3f} ms to load all the data"
+        )
+
+        # return the one with minimum thread count
+        return best_thread_count
 
 
 class DataLoaderManager(base.BaseEventManager, ABC):
