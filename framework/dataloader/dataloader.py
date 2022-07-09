@@ -138,7 +138,7 @@ class DataManager(base.BaseEventManager, ABC):
         self._multithreading = self._config.get_or_else('multithreading', False)
         self._find_best_multithreading_count = self._config.get_or_else('find_best_multithreading_count', False)
         if self._find_best_multithreading_count:
-            paths = [pathlib.Path(path) for path in self.train_metadata['path']]
+            paths = [pathlib.Path(path) for path in self.train_metadata[metadata_columns['path']]]
             self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
             self._multithreading_count = DataLoaderMultiThreadFinder(
                 paths=paths,
@@ -320,7 +320,7 @@ class DataManager(base.BaseEventManager, ABC):
         def add_original_index(df: pd.DataFrame) -> pd.DataFrame:
             """adds `original_index` column to the dataframe."""
 
-            df['original_index'] = -1
+            df[metadata_columns['original_index']] = -1
 
             return df
 
