@@ -193,6 +193,7 @@ class Reset(Command):
     """Resets."""
 
     return_to_line_number: int
+    print_progress_bar: bool
 
 
 @dataclass
@@ -924,13 +925,15 @@ class TheProgressBarBase(ABC, BaseWorker):
         # notify the sleeping timer
         self._notify_sleep()
 
-    def reset(self, return_to_line_number: int = -1) -> 'TheProgressBarBase':
+    def reset(self, return_to_line_number: int = -1, print_progress_bar: bool = True) -> 'TheProgressBarBase':
         """Resets the progress bar and returns its instance.
 
         Parameters
         ----------
         return_to_line_number: int, optional
             The line number to return to
+        print_progress_bar : bool, optional
+            Whether to ask to print the progress bar
 
         Returns
         -------
@@ -939,17 +942,19 @@ class TheProgressBarBase(ABC, BaseWorker):
         """
 
         # send message to do the reset
-        self._send_message_to_self(Reset(return_to_line_number=return_to_line_number))
+        self._send_message_to_self(Reset(return_to_line_number=return_to_line_number, print_progress_bar=print_progress_bar))
 
         return self
 
-    def _reset(self, return_to_line_number: int = -1) -> 'TheProgressBarBase':
+    def _reset(self, return_to_line_number: int = -1, print_progress_bar: bool = True) -> 'TheProgressBarBase':
         """Resets the progress bar and returns its instance.
 
         Parameters
         ----------
         return_to_line_number: int, optional
             The line number to return to
+        print_progress_bar : bool, optional
+            Whether to print the progress bar if necessary
 
         Returns
         -------
@@ -965,7 +970,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         self._reset_communication()
 
         # Print the progress bar and leave it if we have done any progress
-        if self.state_info.get('item.current_item_index') != 0:
+        if self.state_info.get('item.current_item_index') != 0 and print_progress_bar is True:
             self._print_progress_bar(return_to_line_number=return_to_line_number)
 
         # do the rest of resetting
