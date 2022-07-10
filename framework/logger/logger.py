@@ -124,7 +124,8 @@ class TheProgressBarLogger(Logger):
             self,
             total: int = -np.inf,
             return_to_line_number: int = 0,
-            sync: bool = True
+            sync: bool = True,
+            print_progress_bar: bool = True
     ) -> TheProgressBarLogger:
         """Set the total number of iterations and resets the the_progress_bar.
 
@@ -136,6 +137,8 @@ class TheProgressBarLogger(Logger):
             The number of the line to return to the beginning of, after the progress bar
         sync : bool, optional
             Whether to sync the workers before resetting
+        print_progress_bar : bool, optional
+            Whether to ask to print the progress bar
 
         """
 
@@ -143,7 +146,10 @@ class TheProgressBarLogger(Logger):
         if mpi.mpi_communicator.is_distributed() and sync is True:
             mpi.mpi_communicator.barrier()
 
-        self._the_progress_bar.reset(return_to_line_number=return_to_line_number)
+        self._the_progress_bar.reset(
+            return_to_line_number=return_to_line_number, 
+            print_progress_bar=print_progress_bar
+        )
         self._the_progress_bar.set_number_items(total)
 
         # wait for all workers to be reset
@@ -160,7 +166,7 @@ class TheProgressBarLogger(Logger):
 
         return self
 
-    def reset(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
+    def reset(self, total: int = -np.inf, sync: bool = True, print_progress_bar: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and prints and resets the the_progress_bar.
 
         Parameters
@@ -169,12 +175,14 @@ class TheProgressBarLogger(Logger):
             the total number of items expected. if not set, will be set to the default value.
         sync : bool, optional
             Whether to sync the workers before resetting
+        print_progress_bar : bool, optional
+            Whether to ask to print the progress bar
 
         """
 
         return self._custom_reset(total=total, return_to_line_number=-1, sync=sync)
 
-    def reset_bar_only(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
+    def reset_bar_only(self, total: int = -np.inf, sync: bool = True, print_progress_bar: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and resets only the bar of the the_progress_bar.
 
         Parameters
@@ -183,12 +191,14 @@ class TheProgressBarLogger(Logger):
             the total number of items expected. if not set, will be set to the default value.
         sync : bool, optional
             Whether to sync the workers before resetting
+        print_progress_bar : bool, optional
+            Whether to ask to print the progress bar
 
         """
 
-        return self._custom_reset(total=total, return_to_line_number=0, sync=sync)
+        return self._custom_reset(total=total, return_to_line_number=0, sync=sync, print_progress_bar=print_progress_bar)
 
-    def reset_to_next_line(self, total: int = -np.inf, sync: bool = True) -> TheProgressBarLogger:
+    def reset_to_next_line(self, total: int = -np.inf, sync: bool = True, print_progress_bar: bool = True) -> TheProgressBarLogger:
         """Set the total number of iterations and resets only the bar of the the_progress_bar.
 
         Parameters
@@ -197,10 +207,12 @@ class TheProgressBarLogger(Logger):
             the total number of items expected. if not set, will be set to the default value.
         sync : bool, optional
             Whether to sync the workers before resetting
+        print_progress_bar : bool, optional
+            Whether to ask to print the progress bar
 
         """
 
-        return self._custom_reset(total=total, return_to_line_number=1, sync=sync)
+        return self._custom_reset(total=total, return_to_line_number=1, sync=sync, print_progress_bar=print_progress_bar)
 
     def close(self) -> None:
         """Finishes and closes the TheProgressBar instance."""
