@@ -3,10 +3,37 @@ import pathlib
 import subprocess
 import sys
 import re
+from enum import Enum
 
 REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
 
+
+class EventTime(Enum):
+    EpochBegin: str = 'epoch_begin'
+    EpochEnd: str = 'epoch_end'
+    Begin: str = 'begin'
+    End: str = 'end'
+    TrainBegin: str = 'train_begin'
+    TrainEnd: str = 'train_end'
+    TrainEpochBegin: str = 'train_epoch_begin'
+    TrainEpochEnd: str = 'train_epoch_end'
+    BatchBegin: str = 'batch_begin'
+    BatchEnd: str = 'batch_end'
+    TrainBatchBegin: str = 'train_batch_begin'
+    TrainBatchEnd: str = 'train_batch_end'
+    ValBegin: str = 'val_begin'
+    ValEnd: str = 'val_end'
+    ValEpochBegin: str = 'val_epoch_begin'
+    ValEpochEnd: str = 'val_epoch_end'
+    ValBatchBegin: str = 'val_batch_begin'
+    ValBatchEnd: str = 'val_batch_end'
+    TestBegin: str = 'test_begin'
+    TestEnd: str = 'test_end'
+    TestBatchBegin: str = 'test_batch_begin'
+    TestBatchEnd: str = 'test_batch_end'
+    TestEpochBegin: str = 'test_epoch_begin'
+    TestEpochEnd: str = 'test_epoch_end'
 
 def check_terminal_focused() -> bool:
     """
