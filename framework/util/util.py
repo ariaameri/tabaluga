@@ -9,6 +9,13 @@ REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
 
 
+class EventMode(Enum):
+
+    train: str = "train"
+    validation: str = "validation"
+    test: str = "test"
+
+
 class EventTime(Enum):
     EpochBegin: str = 'epoch_begin'
     EpochEnd: str = 'epoch_end'
@@ -34,6 +41,7 @@ class EventTime(Enum):
     TestBatchEnd: str = 'test_batch_end'
     TestEpochBegin: str = 'test_epoch_begin'
     TestEpochEnd: str = 'test_epoch_end'
+
 
 def check_terminal_focused() -> bool:
     """
