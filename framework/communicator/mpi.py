@@ -433,30 +433,22 @@ class _MPICommunicatorSingletonClass(BaseWorker):
     def get_local_rank(self) -> int:
         """Returns the local rank."""
 
-        with self._lock_read:
-            return self._local_rank
+        return self._local_rank
 
     def get_local_size(self) -> int:
         """Returns the local size."""
 
-        with self._lock_read:
-            return self._local_size
+        return self._local_size
 
     def get_rank(self) -> int:
         """Returns the rank."""
 
-        # return 0
-
-        with self._lock_read:
-            return self._rank
+        return self._rank
 
     def get_size(self) -> int:
         """Returns the size."""
 
-        # return 0
-
-        with self._lock_read:
-            return self._size
+        return self._size
 
 
 def init_with_config(config: ConfigParser):
