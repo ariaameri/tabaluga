@@ -513,8 +513,20 @@ class MetadataManipulator(base.BaseWorker):
     def modify(self) -> pd.DataFrame:
         """Runs the whole modification pipeline and returns the result."""
 
-        # regroup based on the file name
-        metadata = self.regroup_metadata(criterion=metadata_columns['file_name'])
+        metadata = self.metadata
+
+        if len(self.metadata) > 0:
+            # we create a criterion helper column based on the data that we have to assist the groupby call of pandas
+            # to groupby int instead of anything else
+            criterion = metadata_columns['file_name']
+            criterion_set = set(self.metadata[criterion])
+            mapping = {criterion: idx_groupby for idx_groupby, criterion in enumerate(criterion_set)}
+            self.metadata['__criterion_help'] = \
+                self.metadata.apply(lambda row: mapping[row[criterion]], axis=1)
+
+            # regroup based on the file name
+            metadata = self.regroup_metadata(criterion='__criterion_help')
+            self.metadata = metadata = metadata.drop(['__criterion_help'], axis=1)
 
         return metadata
 
