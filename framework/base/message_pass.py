@@ -5,7 +5,7 @@ from ..asyncer.asyncer import asyncer
 from .base import ConfigReader, Logger, BaseWorker
 from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic, Optional, Callable, Any
+from typing import TypeVar, Generic, Optional, Callable, Any, Set
 import janus
 from ..util.result import Result, Err
 
@@ -19,7 +19,7 @@ MESSAGE_PASSER_CONFIG_PREFIX = "_message_passer"
 # global variables
 # keep a list of all message passers so that we can in the end send a message to all to terminate
 _ALL_MESSAGE_PASSERS_LOCK = Lock()
-_ALL_MESSAGE_PASSERS: set['MessagePasserBase'] = set()
+_ALL_MESSAGE_PASSERS: Set['MessagePasserBase'] = set()
 
 
 class BaseMessage:
