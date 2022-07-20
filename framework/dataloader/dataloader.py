@@ -2,13 +2,16 @@ import concurrent.futures
 import math
 import pathlib
 import re
+import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
 import colored
 from ..base import base
 from ..util.config import ConfigParser
+from ..util.data_muncher import DataMuncher
 from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
 from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
+from ..util.option import Some
 from ..communicator import mpi
 from typing import List, Optional
 import pandas as pd
@@ -1759,6 +1762,25 @@ class DataLoader(base.BaseEventWorker, ABC):
                 thread_name_prefix="tabaluga-dataloader-thread-pool"
             )
 
+        # for loading ahead batches
+        self._loaded_data_mu = threading.Lock()
+        self._loaded_data = DataMuncher()  # will be a mapping from str(batch) to the loaded data
+        self._load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 0)
+        self._load_ahead_enabled = self._load_ahead_batch_count > 0
+        import multiprocessing
+        self._r_data_load_ahead: Optional[multiprocessing.connection.Connection] = None
+        self._w_data_load_ahead: Optional[multiprocessing.connection.Connection] = None
+        self._load_ahead_thread: Optional[threading.Thread] = None
+        if self._load_ahead_enabled:
+            self._log.info(f"loading batches ahead with size of {self._load_ahead_batch_count}")
+            self._r_data_load_ahead, self._w_data_load_ahead = multiprocessing.Pipe(duplex=False)
+            self._load_ahead_thread = threading.Thread(
+                name='tabaluga-dataloader-batch-ahead-load',
+                target=self._load_ahead_batch_thread,
+                daemon=True,
+            )
+            self._load_ahead_thread.start()
+
         # bookkeeping for the batch size and thus the number of iterations (batches) in each epoch
         self.batch_size_report: int = -1
         self.number_of_iterations_report: int = -1
@@ -2003,6 +2025,98 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         raise NotImplementedError
 
+    def load_batch(self, item: int):
+        """
+        loads a batch and returns the result
+
+        Parameters
+        ----------
+        item : int
+            batch number
+
+        Returns
+        -------
+        result
+
+        """
+
+        # Check if item count is sensible
+        if item >= self.get_number_of_iterations() and self._data_loading_wrap_around is False:
+            raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
+
+        # Find the corresponding metadata
+        begin_index = (item * self._batch_size_effective) % len(self.metadata)
+        end_index = begin_index + self._batch_size_effective
+        metadata = self.metadata.iloc[begin_index:end_index]
+        if end_index > len(self.metadata) - 1 and self._data_loading_wrap_around is True:
+            remainder = self._batch_size_effective - (len(self.metadata) - 1 - begin_index)
+            metadata2 = self.metadata.iloc[:remainder]
+            metadata = pd.concat([metadata, metadata2])
+
+        # Load the images
+        data = self.load_data(metadata)
+
+        return data
+
+    def _load_ahead_batches(self, batches: List[int]) -> None:
+        """
+        loads the batches given as input and stores them. This method is used in the look ahead loading.
+
+        Parameters
+        ----------
+        batches : List[int]
+            list of batches that has to be loaded
+
+        """
+
+        # look for the batches we have and load the ones we do not
+        already_loaded_data_option = [
+            (batch, self._loaded_data.get_value_option(str(batch)))
+            for batch
+            in batches
+        ]
+
+        # the batches that we will need
+        old_loaded_data = {
+            str(loaded_data[0]): loaded_data[1].get()
+            for loaded_data
+            in already_loaded_data_option
+            if loaded_data[1].is_defined()
+        }
+
+        # load the batches that are not already loaded
+        new_data = {
+            str(loaded_data[0]): self.load_batch(loaded_data[0])
+            for loaded_data
+            in already_loaded_data_option
+            if loaded_data[1].is_empty()
+        }
+
+        # set the result
+        new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
+        with self._loaded_data_mu:
+            self._loaded_data = new_loaded_data
+
+    def _load_ahead_batch_thread(self) -> None:
+        """method for the load ahead thread to run"""
+
+        while True:
+
+            # get the batch size that was loaded
+            batch = self._r_data_load_ahead.recv()
+
+            # find the batch sizes that should be loaded
+            start_idx = batch + 1
+            end_idx = batch + 1 + self._load_ahead_batch_count
+            batches_to_be_loaded = list(range(start_idx, end_idx))
+
+            # correct the batch indices if necessary
+            if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
+                batches_to_be_loaded = [i % self.get_number_of_iterations() for i in batches_to_be_loaded]
+
+            # do the batch ahead loading
+            self._load_ahead_batches(batches_to_be_loaded)
+
     def __len__(self) -> int:
         """Gives the total number of iterations this data loader will go through.
 
@@ -2055,21 +2169,21 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         """
 
-        # Check if item count is sensible
-        if item >= self.get_number_of_iterations() and self._data_loading_wrap_around is False:
-            raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
+        if self._load_ahead_enabled:
+            # try to load from the already loaded data and if not exist, load manually
 
-        # Find the corresponding metadata
-        begin_index = (item * self._batch_size_effective) % len(self.metadata)
-        end_index = begin_index + self._batch_size_effective
-        metadata = self.metadata.iloc[begin_index:end_index]
-        if end_index > len(self.metadata) - 1 and self._data_loading_wrap_around is True:
-            remainder = self._batch_size_effective - (len(self.metadata) - 1 - begin_index)
-            metadata2 = self.metadata.iloc[:remainder]
-            metadata = pd.concat([metadata, metadata2])
+            with self._loaded_data_mu:
 
-        # Load the images
-        data = self.load_data(metadata)
+                data = self._loaded_data\
+                    .get_value_option(str(item))\
+                    .or_else(Some(item).map(lambda x: self.load_batch(x)))\
+                    .get()
+
+            # now, let the load ahead know
+            self._w_data_load_ahead.send(item)
+
+        else:
+            data = self.load_batch(item)
 
         return data
 
