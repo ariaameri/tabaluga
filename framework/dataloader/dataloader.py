@@ -1341,7 +1341,7 @@ class Syncer(base.BaseWorker):
 
 class DataLoaderMultiThreadFinder(base.BaseWorker):
 
-    def __init__(self, paths: list[pathlib.Path], config: ConfigParser = None):
+    def __init__(self, paths: List[pathlib.Path], config: ConfigParser = None):
 
         super().__init__(config)
 
@@ -1358,7 +1358,7 @@ class DataLoaderMultiThreadFinder(base.BaseWorker):
         with open(path.as_posix(), mode='rb') as f:
             return f.read()
 
-    def _loader(self, paths: list[pathlib.Path], multi_thread_count: int) -> list[concurrent.futures.Future]:
+    def _loader(self, paths: List[pathlib.Path], multi_thread_count: int) -> List[concurrent.futures.Future]:
 
         pool = ThreadPoolExecutor(
             max_workers=multi_thread_count,
