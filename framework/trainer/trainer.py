@@ -72,6 +72,12 @@ class Trainer(base.BaseEventManager, ABC):
         self._universal_logger = self._create_universal_logger()
         self.set_universal_logger(self._universal_logger)
 
+        # some switches to know what we should do
+        self._switch_training: bool = True  # whether we should perform the training
+        self._switch_training_optimization: bool = True  # whether we should perform model optimization while training
+        self._switch_val: bool = True
+        self._switch_test: bool = True
+
         # Register OS signals to be caught
         self._register_signal_catch()
 
@@ -100,6 +106,23 @@ class Trainer(base.BaseEventManager, ABC):
         logger = Logger(self._config.get('universal_logger'))
 
         return logger
+
+    def set_training_switch(self, switch: bool = True, training_optimization: bool = True):
+
+        self._switch_training = switch
+        self._switch_training_optimization = training_optimization
+
+    def set_val_switch(self, switch: bool = True):
+
+        self._switch_val = switch
+
+    def set_test_switch(self, switch: bool = True):
+
+        self._switch_test = switch
+
+    def set_epochs(self, epochs: int):
+
+        self.epochs = epochs
 
     def train_and_test(self) -> List[DataMuncher]:
         """Performs the training, validation, and testing.
@@ -172,32 +195,36 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Empty out the train statistics
         self.train_current_statistics = DataMuncher()
+        self.train_epoch_info = []
+        self.val_epoch_info = []
 
-        # Training
-        if self.epoch == 0:
-            self.on_train_begin()
+        if self._switch_training:
+            # Training
+            if self.epoch == 0:
+                self.on_train_begin()
 
-        self.on_train_epoch_begin()
-        self.train_epoch_info: List[DataMuncher] = self.train_one_epoch()
-        # bookkeeping
-        self.train_life_info.append(self.train_epoch_info)
-        self.on_train_epoch_end()
+            self.on_train_epoch_begin()
+            self.train_epoch_info: List[DataMuncher] = self.train_one_epoch()
+            # bookkeeping
+            self.train_life_info.append(self.train_epoch_info)
+            self.on_train_epoch_end()
 
-        if self.epoch == (self.epochs - 1):
-            self.on_train_end()
+            if self.epoch == (self.epochs - 1):
+                self.on_train_end()
 
-        # Validation
-        if self.epoch == 0:
-            self.on_val_begin()
+        if self._switch_val:
+            # Validation
+            if self.epoch == 0:
+                self.on_val_begin()
 
-        self.on_val_epoch_begin()
-        self.val_epoch_info: List[DataMuncher] = self.val_one_epoch()
-        # bookkeeping
-        self.val_life_info.append(self.val_epoch_info)
-        self.on_val_epoch_end()
+            self.on_val_epoch_begin()
+            self.val_epoch_info: List[DataMuncher] = self.val_one_epoch()
+            # bookkeeping
+            self.val_life_info.append(self.val_epoch_info)
+            self.on_val_epoch_end()
 
-        if self.epoch == (self.epochs - 1):
-            self.on_val_end()
+            if self.epoch == (self.epochs - 1):
+                self.on_val_end()
 
         epoch_info = DataMuncher({
             'epoch': self.epoch,
@@ -310,28 +337,30 @@ class Trainer(base.BaseEventManager, ABC):
 
         """
 
-        # test is beginning
-        self.on_test_begin()
+        if self._switch_test:
 
-        # the only test epoch is beginning
-        self.on_test_epoch_begin()
+            # test is beginning
+            self.on_test_begin()
 
-        # do one epoch of test
-        self.test_epoch_info: List[DataMuncher] = self.test_one_epoch()
+            # the only test epoch is beginning
+            self.on_test_epoch_begin()
 
-        # bookkeeping
-        self.test_life_info.append(self.test_epoch_info)
-        epoch_info = DataMuncher({
-            'epoch': self.epoch,
-            'test': self.test_epoch_info,
-        })
-        self.history.append(epoch_info)
+            # do one epoch of test
+            self.test_epoch_info: List[DataMuncher] = self.test_one_epoch()
 
-        # the only test epoch is beginning
-        self.on_test_epoch_end()
+            # bookkeeping
+            self.test_life_info.append(self.test_epoch_info)
+            epoch_info = DataMuncher({
+                'epoch': self.epoch,
+                'test': self.test_epoch_info,
+            })
+            self.history.append(epoch_info)
 
-        # test is done
-        self.on_test_end()
+            # the only test epoch is beginning
+            self.on_test_epoch_end()
+
+            # test is done
+            self.on_test_end()
 
         return self.history
 
