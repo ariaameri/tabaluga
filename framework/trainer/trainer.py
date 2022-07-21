@@ -14,7 +14,7 @@ import os
 import traceback
 
 BATCH_STRING = 'batch'
-EPOCH_STRING = 'batch'
+EPOCH_STRING = 'epoch'
 
 
 class Trainer(base.BaseEventManager, ABC):
