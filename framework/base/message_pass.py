@@ -439,7 +439,20 @@ class _MessagePasserTerminator(BaseWorker):
                     check, names_queue = self._check_all_message_passers_terminated()
                     if check is True:
                         break
-                    log_str = f'waiting on all message passers to terminate... it has been {i * 30} seconds. '
+                    # construct the wait time in good format
+                    wait_time = i * self.retry_interval
+                    wait_time_list = [wait_time // 3600, (wait_time // 60) % 60, wait_time % 60]
+                    # find the first non-zero time and remove the previous ones
+                    first_nonzero_idx = next((i for i, x in enumerate(wait_time_list) if x), len(wait_time_list) - 1)
+                    wait_str = " and ".join([
+                        f"{wait_time_list[0]} hours",
+                        f"{wait_time_list[1]} minutes",
+                        f"{wait_time_list[2]} seconds",
+                    ][first_nonzero_idx:])
+
+                    log_str = f'waiting on all message passers to terminate... ' \
+                              f'this is retry number {i}/{self.number_of_retries} and ' \
+                              f'it has been {wait_str}. '
                     if names_queue is not None:
                         log_str += \
                             f"the followings are still remaining with approximate queue sizes:\n\n\t - " + \
@@ -449,6 +462,7 @@ class _MessagePasserTerminator(BaseWorker):
                     i += 1
                 else:
                     self._log.warning('giving up on waiting for the message passers to terminate.')
+                    return
 
             self._log.info('all message passers are terminated successfully')
 
