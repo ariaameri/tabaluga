@@ -2,7 +2,6 @@ import colored
 from .process import Process
 from ..util.config import ConfigParser
 from ..communicator import mpi
-import pynvml
 
 
 class CUDAInformation(Process):
@@ -17,6 +16,7 @@ class CUDAInformation(Process):
             return
 
         try:
+            import pynvml
             # initialize the cuda nvml library
             pynvml.nvmlInit()
         except:
@@ -47,6 +47,7 @@ class CUDAInformation(Process):
 
         try:
             # initialize the cuda nvml library
+            import pynvml
             pynvml.nvmlInit()
         except:
             self._log.warning("could not initialize the pynvml library to report CUDA information.")
