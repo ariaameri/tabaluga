@@ -6,7 +6,14 @@ from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Option
 from typing import Optional, Any, Sequence, List
-from mpi4py import MPI
+
+from ..util.result import Result
+
+try:
+    from mpi4py import MPI
+except Exception as e:
+    import sys
+    print(f'could not import mpi4py with error of {e}', file=sys.stderr)
 import os
 from readerwriterlock import rwlock
 from . import config
@@ -32,26 +39,47 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         super().__init__(config)
 
+        # check if we have mpi4py
+        try:
+            from mpi4py import MPI
+            self._mpi4py_loaded = True
+
+            # keep communicators
+            self._communicators: DataMuncher = DataMuncher({
+                "world": MPI.COMM_WORLD,
+            })
+
+        except Exception as e:
+            self._mpi4py_loaded = False
+
         # lock for accessing elements
         _lock = rwlock.RWLockFair()
         self._lock_read = _lock.gen_rlock()
         self._lock_write = _lock.gen_wlock()
 
-        # keep communicators
-        self._communicators: DataMuncher = DataMuncher({
-            "world": MPI.COMM_WORLD,
-        })
+        # set the env vars
+        self._rank: int = 0
+        self._size: int = 1
+        self._local_rank: int = 0
+        self._local_size: int = 1
+        self._universe_size: int = 1
+        self._node_rank: int = 0
+        self.update_env_vars()
 
-        # get the rank and size
-        # and get the env vars
-        self._rank: int = MPI.COMM_WORLD.Get_rank()
-        self._size: int = MPI.COMM_WORLD.Get_size()
-        self._local_rank: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_RANK") or 0)
-        self._local_size: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE") or 1)
-        self._universe_size: int = int(os.getenv("OMPI_UNIVERSE_SIZE") or 1)
-        self._node_rank: int = int(os.getenv("OMPI_COMM_WORLD_NODE_RANK") or 0)
+        # check if we have run by mpi and get real tty
+        self.is_mpi_run, self.mpi_tty_fd = self._is_run_mpi()
 
-        # check if we have run by mpirun and get real tty
+    def _is_run_mpi(self) -> (bool, Option[pathlib.Path]):
+        """
+        Check if we are running mpi and return some info.
+
+        Returns
+        -------
+        bool, Option[pathlib.Path]
+            whether we are running with mpi, mpi tty path in linux
+
+        """
+
         try:
             if os.getppid() > 0:
                 parent_command = \
@@ -62,13 +90,26 @@ class _MPICommunicatorSingletonClass(BaseWorker):
                 parent_command = ''
         except:
             parent_command = ''
-        self.is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
-        self.mpi_tty_fd: pathlib.Path = \
-            pathlib.Path(subprocess.check_output(
-                ['readlink', '-f', f'/proc/{os.getppid()}/fd/1']
-            ).decode('utf-8').strip()) \
-            if self.is_mpi_run is True \
+        is_mpi_run = True if parent_command in ['mpirun', 'mpiexec'] else False
+
+        if self._mpi4py_loaded is False:
+            if is_mpi_run:
+                raise RuntimeError('detected an mpi run but mpi4py is not loaded')
+
+        mpi_tty_fd: Option[pathlib.Path] = \
+            Result\
+            .from_func(
+                subprocess.check_output,
+                ['readlink', '-f', f'/proc/{os.getppid()}/fd/1'],
+                stderr=subprocess.DEVNULL,
+            )\
+            .map(lambda x: x.decode('utf-8').strip())\
+            .map(lambda x: pathlib.Path(x))\
+            .ok() \
+            if is_mpi_run is True \
             else util.get_tty_fd()
+
+        return is_mpi_run, mpi_tty_fd
 
     def _create_logger(self):
         """
@@ -96,15 +137,28 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         """Updates the internal representation of the OpenMPI related environmental variables"""
 
         with self._lock_write:
-            self._rank: int = MPI.COMM_WORLD.Get_rank()
-            self._size: int = MPI.COMM_WORLD.Get_size()
-            self._local_rank: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_RANK") or 0)
-            self._local_size: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE") or 1)
-            self._universe_size: int = int(os.getenv("OMPI_UNIVERSE_SIZE") or 1)
-            self._node_rank: int = int(os.getenv("OMPI_COMM_WORLD_NODE_RANK") or 0)
+            if self._mpi4py_loaded:
+                self._rank: int = MPI.COMM_WORLD.Get_rank()
+                self._size: int = MPI.COMM_WORLD.Get_size()
+                self._local_rank: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_RANK") or 0)
+                self._local_size: int = int(os.getenv("OMPI_COMM_WORLD_LOCAL_SIZE") or 1)
+                self._universe_size: int = int(os.getenv("OMPI_UNIVERSE_SIZE") or 1)
+                self._node_rank: int = int(os.getenv("OMPI_COMM_WORLD_NODE_RANK") or 0)
+            else:
+                self._rank: int = 0
+                self._size: int = 1
+                self._local_rank: int = 0
+                self._local_size: int = 1
+                self._universe_size: int = 1
+                self._node_rank: int = 0
 
-    @staticmethod
-    def clone(communicator: MPI.Comm = None) -> MPI.Comm:
+    def _check_mpi4py_loaded(self) -> None:
+        """Helper method to check if mpi4py is loaded and raise exception if not."""
+
+        if self._mpi4py_loaded is False:
+            raise RuntimeError("mpi4py not loaded but mpi-requiring method called")
+
+    def clone(self, communicator: 'MPI.Comm' = None) -> 'MPI.Comm':
         """
         Clones a communicator and returns it.
 
@@ -119,11 +173,13 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             The cloned communicator
         """
 
+        self._check_mpi4py_loaded()
+
         communicator = communicator if communicator is not None else MPI.COMM_WORLD
 
         return communicator.Clone()
 
-    def split(self,  communicator: MPI.Comm = None, color: int = 0, key: int = 0) -> MPI.Comm:
+    def split(self,  communicator: 'MPI.Comm' = None, color: int = 0, key: int = 0) -> 'MPI.Comm':
         """
         Splits a communicator and returns it.
 
@@ -142,11 +198,13 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             The cloned communicator
         """
 
+        self._check_mpi4py_loaded()
+
         communicator = communicator if communicator is not None else MPI.COMM_WORLD
 
         return communicator.Split(color=color, key=key)
 
-    def register_communicator(self, communicator: MPI.Comm, name: str) -> bool:
+    def register_communicator(self, communicator: 'MPI.Comm', name: str) -> bool:
         """
         Saves the given communicator with the name provided.
 
@@ -163,6 +221,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             whether or not the save was successful
 
         """
+
+        self._check_mpi4py_loaded()
 
         # if already exist, skip
         if self._communicators.get_option(name).is_defined():
@@ -191,7 +251,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return self.get_local_rank() == 0
 
-    def get_communicator_option(self, name: str) -> Option[MPI.Comm]:
+    def get_communicator_option(self, name: str) -> Option['MPI.Comm']:
         """
         Returns an Option with the communicator.
 
@@ -206,12 +266,14 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
         with self._lock_read:
             comm = self._communicators.get_value_option(name)
 
         return comm
 
-    def get_communicator(self, name: str) -> MPI.Comm:
+    def get_communicator(self, name: str) -> 'MPI.Comm':
         """
         Returns the communicator. The communicator must exist, otherwise, will raise error.
 
@@ -226,6 +288,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
         comm = self._communicators.get_value_option(name)
 
         if comm.is_empty():
@@ -233,7 +297,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return comm.get()
 
-    def get_or_create_communicator(self, name: str) -> MPI.Comm:
+    def get_or_create_communicator(self, name: str) -> 'MPI.Comm':
         """
         Returns the communicator.
         If the communicator exists, returns it. If not, create it by cloning the world, save it, and return it.
@@ -248,6 +312,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         Option[MPI.Comm]
 
         """
+
+        self._check_mpi4py_loaded()
 
         comm_opt = self.get_communicator_option(name)
 
@@ -281,6 +347,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
         communicator.send(obj=data, dest=destination, tag=tag)
@@ -288,9 +356,9 @@ class _MPICommunicatorSingletonClass(BaseWorker):
     def p2p_receive(
             self,
             buffer: Optional[memoryview] = None,
-            source: int = MPI.ANY_SOURCE,
-            tag: int = MPI.ANY_TAG,
-            status: Optional[MPI.Status] = None,
+            source: int = None,
+            tag: int = None,
+            status: Optional['MPI.Status'] = None,
             name: str = None
     ) -> Any:
         """
@@ -315,6 +383,11 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
+        source = MPI.ANY_SOURCE if source is None else source
+        tag = MPI.ANY_TAG if tag is None else tag
+
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
         return communicator.recv(buf=buffer, source=source, tag=tag, status=status)
@@ -331,6 +404,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             the name of the communicator to use for barrier. if not given, world will be used
 
         """
+
+        self._check_mpi4py_loaded()
 
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
@@ -356,6 +431,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
         return communicator.bcast(obj=data, root=root_rank)
@@ -379,6 +456,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             the received data, used for non-root ranks
 
         """
+
+        self._check_mpi4py_loaded()
 
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
@@ -404,12 +483,13 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         """
 
+        self._check_mpi4py_loaded()
+
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
         return communicator.gather(sendobj=data, root=root_rank)
 
-    @staticmethod
-    def get_rank_size(communicator: MPI.Comm) -> (int, int):
+    def get_rank_size(self, communicator: 'MPI.Comm') -> (int, int):
         """
         Gets the rank and size given an MPI communicator.
 
@@ -424,6 +504,8 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             tuple of (rank, size)
 
         """
+
+        self._check_mpi4py_loaded()
 
         rank: int = communicator.Get_rank()
         size: int = communicator.Get_size()

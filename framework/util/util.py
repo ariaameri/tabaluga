@@ -4,6 +4,8 @@ import subprocess
 import sys
 import re
 from enum import Enum
+from tabaluga.framework.util.option import Option, Some
+from tabaluga.framework.util.result import Result
 
 REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
@@ -103,20 +105,24 @@ def check_terminal_atty() -> bool:
     return result
 
 
-def get_tty_fd() -> pathlib.Path:
+def get_tty_fd() -> Option[pathlib.Path]:
     """
     Returns the tty file descriptor.
 
     Returns
     -------
-    pathlib.Path
-        file descriptor path
+    Option[pathlib.Path]
+        Option-wrapped file descriptor path, will be full if found
     """
 
     try:
-        return pathlib.Path(os.ttyname(sys.stdout.fileno()))
+        return Some(pathlib.Path(os.ttyname(sys.stdout.fileno())))
     except:
-        out = subprocess.check_output(
-                ['readlink', '-f', f'/proc/{os.getpid()}/fd/1']
-                ).decode('utf-8').strip()
-        return pathlib.Path(out)
+        out = Result\
+            .from_func(
+                subprocess.check_output,
+                ['readlink', '-f', f'/proc/{os.getpid()}/fd/1'],
+                stderr=subprocess.DEVNULL,
+            )\
+            .map(lambda x: x.decode('utf-8').strip()).map(lambda x: pathlib.Path(x))
+        return out.ok()
