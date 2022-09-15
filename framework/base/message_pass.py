@@ -127,12 +127,41 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         self._message_pass_queue_sync: janus.SyncQueue = self._message_pass_queue.sync_q
         self._message_pass_queue_async: janus.AsyncQueue = self._message_pass_queue.async_q
 
+        # make a queue for storing the messages that will be processed later
+        from collections import deque
+        self._inbox_storage: deque[MessageType] = deque()
+
         # bookkeeping to know we are operational
         self._message_pass_working = True
 
         # add us to the list of all message passers
         with _ALL_MESSAGE_PASSERS_LOCK:
             _ALL_MESSAGE_PASSERS.add(self)
+
+    def _message_store(self, message: MessageType) -> None:
+        """
+        Stores the message provided.
+
+        Parameters
+        ----------
+        message : MessageType
+            the message
+
+        """
+
+        self._inbox_storage.append(message)
+
+    def _resend_first_stored_message(self) -> None:
+        """Resends the first stored message to self. If no message is saved, does nothing."""
+
+        if len(self._inbox_storage) > 0:
+            self.tell(self._inbox_storage.popleft())
+
+    def _resend_stored_messages(self) -> None:
+        """Resends all the stored message to self. If no messages are saved, does nothing."""
+
+        while self._inbox_storage:
+            self.tell(self._inbox_storage.popleft())
 
     def get_approximate_message_passer_queue_size(self) -> int:
         """Returns the approximate size of the message passing queue."""
