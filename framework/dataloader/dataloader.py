@@ -522,7 +522,7 @@ class MetadataManipulator(base.BaseWorker):
             # we create a criterion helper column based on the data that we have to assist the groupby call of pandas
             # to groupby int instead of anything else
             criterion = metadata_columns['file_name']
-            criterion_set = set(self.metadata[criterion])
+            criterion_set = self.metadata[criterion].unique()
             mapping = {criterion: idx_groupby for idx_groupby, criterion in enumerate(criterion_set)}
             self.metadata['__criterion_help'] = \
                 self.metadata.apply(lambda row: mapping[row[criterion]], axis=1)
