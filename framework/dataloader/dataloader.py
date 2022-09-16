@@ -30,6 +30,7 @@ class ContentTypes(Enum):
 # a mapping between the column concepts and their names
 metadata_columns = {
     'folder_path': 'folder_path',
+    'folder_parent_path': 'folder_parent_path',
     'folder_name': 'folder_name',
     'file_name': 'file_name',
     'file_extension': 'file_extension',
@@ -740,6 +741,7 @@ class FolderReader(base.BaseWorker):
         file_paths = [file_path for file_path in file_paths if self._check_file(file_path)]
         # Retrieve the folder path and file names
         folder_paths = [file_name.parent for file_name in file_paths]
+        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
         folder_names = [folder_path.name for folder_path in folder_paths]
         file_names = [file_path.stem for file_path in file_paths]
         file_extensions = [file_path.suffix.lower() for file_path in file_paths]
@@ -747,6 +749,7 @@ class FolderReader(base.BaseWorker):
         # Create data frame of all the files in the folder
         metadata = pd.DataFrame({
             metadata_columns['folder_path']: [str(item) for item in folder_paths],
+            metadata_columns['folder_parent_path']: [str(item) for item in folder_parent_paths],
             metadata_columns['folder_name']: folder_names,
             metadata_columns['file_name']: file_names,
             metadata_columns['file_extension']: file_extensions,
