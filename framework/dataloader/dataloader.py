@@ -145,6 +145,7 @@ class DataManager(base.BaseEventManager, ABC):
         self._multithreading = self._config.get_or_else('multithreading', False)
         self._find_best_multithreading_count = self._config.get_or_else('find_best_multithreading_count', False)
         if self._find_best_multithreading_count:
+            # TODO: move this to FolderReader
             paths = [pathlib.Path(path) for path in self.train_metadata[metadata_columns['path']]]
             self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
             self._multithreading_count = DataLoaderMultiThreadFinder(
@@ -881,7 +882,8 @@ class FolderReader(base.BaseWorker):
 
         return True
 
-
+# TODO: move Syncer to FolderReader
+# TODO: separate to two: filesyncer and metadatasyncer
 class Syncer(base.BaseWorker):
     """Class to synchronize the data among processes in distributed mode."""
 
