@@ -4209,9 +4209,9 @@ class TheProgressBarParallelManager(TheProgressBarBase):
 
         # if we are in distributed mode running with mpirun, we have to check for the stdout file descriptor of our
         # parent process, which is the mpirun process itself
-        parent_stdout_fd = mpi.mpi_communicator.mpi_tty_fd
+        parent_stdout_fd_option = mpi.mpi_communicator.mpi_tty_fd
         # if mpirun is connected to a tty, then the file descriptor 1 of it has to have a group owner of 'tty' on Linux
-        if parent_stdout_fd.group() == 'tty':
+        if parent_stdout_fd_option.is_defined() and parent_stdout_fd_option.get().group() == 'tty':
             return lambda: True
         else:
             return lambda: False
