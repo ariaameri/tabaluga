@@ -28,7 +28,11 @@ class Horovod(BaseWorker, ABC):
 
         # get a new mpi group for horovod
         self.mpi_comm_name = 'horovod'
-        self.mpi_comm = mpi.mpi_communicator.get_or_create_communicator(self.mpi_comm_name)
+        mpi_comm_res = mpi.mpi_communicator.get_or_create_communicator(self.mpi_comm_name)
+        if mpi_comm_res.is_err():
+            self._log.error(f"encountered error while getting mpi communicator with error of {mpi_comm_res.get_err()}")
+            raise RuntimeError("encountered error while getting mpi communicator")
+        self.mpi_comm = mpi_comm_res.get()
 
         self.rank, self.size = mpi.mpi_communicator.get_rank_size(self.mpi_comm)
 
