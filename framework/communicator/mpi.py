@@ -6,9 +6,7 @@ from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Option
 from typing import Optional, Any, Sequence, List
-
-from ..util.result import Result
-
+from ..util.result import Result, Ok, Err
 try:
     from mpi4py import MPI
 except Exception as e:
@@ -158,7 +156,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         if self._mpi4py_loaded is False:
             raise RuntimeError("mpi4py not loaded but mpi-requiring method called")
 
-    def clone(self, communicator: 'MPI.Comm' = None) -> 'MPI.Comm':
+    def clone(self, communicator: 'MPI.Comm' = None) -> Result['MPI.Comm', Exception]:
         """
         Clones a communicator and returns it.
 
@@ -169,7 +167,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        MPI.Comm
+        Result['MPI.Comm', Exception]
             The cloned communicator
         """
 
@@ -177,9 +175,9 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         communicator = communicator if communicator is not None else MPI.COMM_WORLD
 
-        return communicator.Clone()
+        return Result.from_func(communicator.Clone)
 
-    def split(self,  communicator: 'MPI.Comm' = None, color: int = 0, key: int = 0) -> 'MPI.Comm':
+    def split(self,  communicator: 'MPI.Comm' = None, color: int = 0, key: int = 0) -> Result['MPI.Comm', Exception]:
         """
         Splits a communicator and returns it.
 
@@ -194,7 +192,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        MPI.Comm
+        Result['MPI.Comm', Exception]
             The cloned communicator
         """
 
@@ -202,7 +200,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         communicator = communicator if communicator is not None else MPI.COMM_WORLD
 
-        return communicator.Split(color=color, key=key)
+        return Result.from_func(communicator.Split, color=color, key=key)
 
     def register_communicator(self, communicator: 'MPI.Comm', name: str) -> bool:
         """
@@ -297,7 +295,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return comm.get()
 
-    def get_or_create_communicator(self, name: str) -> 'MPI.Comm':
+    def get_or_create_communicator(self, name: str) -> Result['MPI.Comm', Exception]:
         """
         Returns the communicator.
         If the communicator exists, returns it. If not, create it by cloning the world, save it, and return it.
@@ -309,7 +307,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        Option[MPI.Comm]
+        Result['MPI.Comm', Exception]
 
         """
 
@@ -319,18 +317,20 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         # if exists, return
         if comm_opt.is_defined():
-            return comm_opt.get()
+            return Ok(comm_opt.get())
 
         # if not exist
         # create, save, return
         comm = self.clone()
-        self.register_communicator(comm, name)
+        if comm.is_err():
+            return comm
+        self.register_communicator(comm.get(), name)
 
         return comm
 
     # point to point communication
 
-    def p2p_send(self, data: Any, destination, tag: int = 0, name: str = None) -> None:
+    def p2p_send(self, data: Any, destination, tag: int = 0, name: str = None) -> Result[None, Exception]:
         """
         point-to-point communication for sending data
 
@@ -345,13 +345,16 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         name : str, optional
             the name of the communicator to used. if not given, world will be used
 
+        Returns
+        -------
+        Result[None, Exception]
         """
 
         self._check_mpi4py_loaded()
 
         communicator: MPI.Comm = self._communicators.get(name or 'world')
 
-        communicator.send(obj=data, dest=destination, tag=tag)
+        return Result.from_func(communicator.send, obj=data, dest=destination, tag=tag)
 
     def p2p_receive(
             self,
@@ -360,7 +363,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
             tag: int = None,
             status: Optional['MPI.Status'] = None,
             name: str = None
-    ) -> Any:
+    ) -> Result[Any, Exception]:
         """
         point-to-point communication for receiving data
 
@@ -378,7 +381,7 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        Any
+        Result[Any, Exception]
             the received data
 
         """
@@ -388,13 +391,15 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         source = MPI.ANY_SOURCE if source is None else source
         tag = MPI.ANY_TAG if tag is None else tag
 
-        communicator: MPI.Comm = self._communicators.get(name or 'world')
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
 
-        return communicator.recv(buf=buffer, source=source, tag=tag, status=status)
+        return Result.from_func(communicator.get().recv, buf=buffer, source=source, tag=tag, status=status)
 
     # collective communications
 
-    def barrier(self, name: str = None) -> None:
+    def barrier(self, name: str = None) -> Result[None, Exception]:
         """
         implements the call to the barrier method to wait for synchronization.
 
@@ -403,15 +408,20 @@ class _MPICommunicatorSingletonClass(BaseWorker):
         name : str, optional
             the name of the communicator to use for barrier. if not given, world will be used
 
+        Returns
+        -------
+        Result[None, Exception]
         """
 
         self._check_mpi4py_loaded()
 
-        communicator: MPI.Comm = self._communicators.get(name or 'world')
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
 
-        communicator.barrier()
+        return Result.from_func(communicator.get().barrier)
 
-    def collective_bcast(self, data: Any, root_rank: int = 0, name: str = None) -> Any:
+    def collective_bcast(self, data: Any, root_rank: int = 0, name: str = None) -> Result[Any, Exception]:
         """
         collective communication for broadcasting
 
@@ -426,18 +436,20 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        Any
+        Result[Any, Exception]
             the received data, used for non-root ranks
 
         """
 
         self._check_mpi4py_loaded()
 
-        communicator: MPI.Comm = self._communicators.get(name or 'world')
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
 
-        return communicator.bcast(obj=data, root=root_rank)
+        return Result.from_func(communicator.get().bcast, obj=data, root=root_rank)
 
-    def collective_scatter(self, data: Sequence[Any], root_rank: int = 0, name: str = None) -> Any:
+    def collective_scatter(self, data: Sequence[Any], root_rank: int = 0, name: str = None) -> Result[Any, Exception]:
         """
         collective communication for scattering
 
@@ -452,18 +464,21 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        Any
+        Result[Any, Exception]
             the received data, used for non-root ranks
 
         """
 
         self._check_mpi4py_loaded()
 
-        communicator: MPI.Comm = self._communicators.get(name or 'world')
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
 
-        return communicator.scatter(sendobj=data, root=root_rank)
+        return Result.from_func(communicator.get().scatter, sendobj=data, root=root_rank)
 
-    def collective_gather(self, data: Any, root_rank: int = 0, name: str = None) -> Optional[List[Any]]:
+    def collective_gather(self, data: Any, root_rank: int = 0, name: str = None) \
+            -> Result[Optional[List[Any]], Exception]:
         """
         collective communication for gathering
 
@@ -478,16 +493,18 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         Returns
         -------
-        Optional[List[Any]]
+        Result[Optional[List[Any]], Exception]
             the received data, used for the root rank
 
         """
 
         self._check_mpi4py_loaded()
 
-        communicator: MPI.Comm = self._communicators.get(name or 'world')
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
 
-        return communicator.gather(sendobj=data, root=root_rank)
+        return Result.from_func(communicator.get().gather, sendobj=data, root=root_rank)
 
     def get_rank_size(self, communicator: 'MPI.Comm') -> (int, int):
         """
