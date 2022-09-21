@@ -13,11 +13,12 @@ from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO,
 from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.option import Some
 from ..communicator import mpi
-from typing import List, Optional, Callable
+from typing import List, Optional, Callable, Any
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
+from ..util.result import Result, Err, Ok
 
 
 # an enum to hold the content type of data to be loaded
@@ -1407,6 +1408,219 @@ class Syncer(base.BaseWorker):
             )
 
         return train_metadata, val_metadata, test_metadata
+
+
+class MetadataSyncer(base.BaseWorker):
+
+    def __init__(self, config: ConfigParser = None):
+        super().__init__(config)
+
+        # cache some distributed-mode-related data
+        self.rank: int = mpi.mpi_communicator.get_rank()
+        self.dist_size: int = mpi.mpi_communicator.get_size()
+        self.is_main_rank: bool = mpi.mpi_communicator.is_main_rank()
+        self.distributor = True if self.is_main_rank is True else False
+        self.receiver = True if self.is_main_rank is False else False
+
+        # whether we should split the train data among nodes
+        self.all_nodes_all_train_data = self._config.get_or_else('all_nodes_all_train_data', False)
+
+        # placeholder for the metadata
+        self.metadata: Optional[pd.DataFrame] = None
+        self.train_metadata: Optional[pd.DataFrame] = None
+        self.validation_metadata: Optional[pd.DataFrame] = None
+        self.test_metadata: Optional[pd.DataFrame] = None
+
+        # get a new mpi communicator
+        self.mpi_comm_name = 'metadata_syncer'
+        if (
+                mpi_comm_res := mpi.mpi_communicator.get_or_create_communicator('metadata_syncer')
+        ).is_err():
+            self._log.error(f"could not get the mpi communicator with error of {mpi_comm_res.get_err()}")
+            raise RuntimeError("could not get the mpi communicator")
+
+    def is_distributor(self) -> bool:
+        """Returns a boolean regarding whether we are the distributor."""
+
+        return self.distributor
+
+    def is_receiver(self) -> bool:
+        """Returns a boolean regarding whether we are a receiver."""
+
+        return self.receiver
+
+    def set_metadata(self, metadata: pd.DataFrame):
+        """
+        Sets the complete metadata to be used for initial synchronization.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata data frame
+
+        Returns
+        -------
+        self
+
+        """
+
+        self.metadata = metadata
+
+        return self
+
+    def set_train_val_test_metadata(
+            self,
+            train_metadata: pd.DataFrame,
+            validation_metadata: pd.DataFrame,
+            test_metadata: pd.DataFrame,
+    ):
+        """
+        Sets the train/val/test metadata..
+
+        Parameters
+        ----------
+        train_metadata : pd.DataFrame
+            the train metadata data frame
+        validation_metadata : pd.DataFrame
+            the validation metadata data frame
+        test_metadata : pd.DataFrame
+            the test metadata data frame
+
+        Returns
+        -------
+        self
+
+        """
+
+        self.train_metadata = train_metadata
+        self.validation_metadata = validation_metadata
+        self.test_metadata = test_metadata
+
+        return self
+
+    def _generate_train_val_test_metadata(self) -> \
+            Result[Any, Exception]:
+        """
+        Generates and returns train/val/test metadata for each of the ranks.
+
+        Returns
+        -------
+        Result[(List[pd.DataFrame], List[pd.DataFrame], List[pd.DataFrame]), Exception]
+            resulting dataframes
+        """
+
+        if self.is_distributor():
+
+            if any([item is None for item in [self.train_metadata, self.validation_metadata, self.test_metadata]]):
+                return Err(
+                    ValueError(
+                        "metadata are not set in the main rank. please set them before calling this function."
+                    )
+                )
+
+            # if we should not split the train data
+            if self.all_nodes_all_train_data is True:
+
+                # make the train data
+                train_split_metadata = [self.train_metadata]
+                train_split_metadata.extend([
+                    self.train_metadata  # make copies of the train metadata
+                    for _
+                    in range(1, self.dist_size)
+                ])
+
+            # if we should split the train data among the nodes
+            else:
+                # split the training metadata
+                train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
+                chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
+                # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped
+                # and not synced
+                train_split_indices = \
+                    [
+                        train_zero_level_indices[start_idx:(start_idx+chunk_size)]
+                        for start_idx
+                        in range(0, train_zero_level_indices.size, chunk_size)
+                    ]
+                train_split_metadata = \
+                    [
+                        self.train_metadata.loc[chunk_indices]
+                        for chunk_indices
+                        in train_split_indices
+                    ]
+                # remove the extra training data
+                train_split_metadata = train_split_metadata[:self.dist_size]
+
+            # split the validation metadata
+            # we only want the distributor to have the validation data and not the others
+            val_split_metadata = [self.validation_metadata]
+            val_split_metadata.extend([
+                self.validation_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                for _
+                in range(1, self.dist_size)
+            ])
+
+            # split the test metadata
+            # we only want the distributor to have the test data and not the others
+            test_split_metadata = [self.test_metadata]
+            test_split_metadata.extend([
+                self.test_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                for _
+                in range(1, self.dist_size)
+            ])
+
+        else:
+            train_split_metadata = None
+            val_split_metadata = None
+            test_split_metadata = None
+
+        return Ok((train_split_metadata, val_split_metadata, test_split_metadata))
+
+    def sync_train_val_test_metadata(self) -> Result[Any, Exception]:
+        """
+        Splits the train/val/test metadata into chunks for each process, scatters them, and returns each chunk.
+        It should be noted that after this operation, all nodes will have exactly the same amount of data.
+
+        Returns
+        -------
+        Result[(pd.DataFrame, pd.DataFrame, pd.DataFrame), Exception]
+            the data frames for the metadata of train, val, and test
+
+        """
+
+        if (res := self._generate_train_val_test_metadata()).is_err():
+            return res
+        train_split_metadata, val_split_metadata, test_split_metadata = res.get()
+
+        # scatter all the metadata
+        if (
+                train_metadata_res := mpi.mpi_communicator.collective_scatter(
+                    data=train_split_metadata,
+                    root_rank=0,
+                    name=self.mpi_comm_name
+                )
+        ).is_err():
+            return train_metadata_res
+
+        if (
+                val_metadata_res := mpi.mpi_communicator.collective_scatter(
+                    data=val_split_metadata,
+                    root_rank=0,
+                    name=self.mpi_comm_name
+                )
+        ).is_err():
+            return val_metadata_res
+
+        if (
+                test_metadata_res := mpi.mpi_communicator.collective_scatter(
+                    data=test_split_metadata,
+                    root_rank=0,
+                    name=self.mpi_comm_name
+                )
+        ).is_err():
+            return test_metadata_res
+
+        return Ok((train_metadata_res.get(), val_metadata_res.get(), test_metadata_res.get()))
 
 
 class DataLoaderMultiThreadFinder(base.BaseWorker):
