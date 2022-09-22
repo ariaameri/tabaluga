@@ -500,6 +500,8 @@ class DataManager(base.BaseEventManager, ABC):
         for worker in self.workers:
             worker.set_batch_size_report(batch_size)
 
+        self._log.info(f"batch size report set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
+
     def set_batch_size_effective(self, batch_size: int) -> None:
         """Sets the batch size that is used to actually load the data with
 
@@ -515,6 +517,8 @@ class DataManager(base.BaseEventManager, ABC):
         # Set batch size of all the workers
         for worker in self.workers:
             worker.set_batch_size_effective(batch_size)
+
+        self._log.info(f"batch size effective set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
 
 
 class MetadataManipulator(base.BaseWorker):
