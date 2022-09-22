@@ -342,6 +342,8 @@ class Logger:
                            f'{colored.fg("grey_50")}/' \
                            f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_size()}' \
                            f'{colored.fg("grey_50")}-' \
+                           f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_node_rank()}' \
+                           f'{colored.fg("grey_50")}-' \
                            f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_local_rank()}' \
                            f'{colored.fg("grey_50")}/' \
                            f'{colored.fg("dodger_blue_2")}{mpi.mpi_communicator.get_local_size()}' \
