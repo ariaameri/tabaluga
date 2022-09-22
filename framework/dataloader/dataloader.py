@@ -129,22 +129,17 @@ class DataManager(base.BaseEventManager, ABC):
 
         # the shared multithreading pool
         self._multithreading = self._config.get_or_else('multithreading', False)
-        self._find_best_multithreading_count = self._config.get_or_else('find_best_multithreading_count', False)
-        if self._find_best_multithreading_count:
-            # TODO: move this to FolderReader
-            paths = [pathlib.Path(path) for path in self.train_metadata[metadata_columns['path']]]
-            self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
-            self._multithreading_count = DataLoaderMultiThreadFinder(
-                paths=paths,
-                config=self._config.get_or_empty('multithread_count_finder'),
-            ).find_best_thread_count()
-        else:
-            self._multithreading_count = self._config.get_or_else('multithreading_count', 5)
         self.thread_pool: Optional[ThreadPoolExecutor] = None
-        if self._multithreading is True:
-            self.thread_pool = ThreadPoolExecutor(
-                self._multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
-            )
+
+        if self._multithreading:
+            self._multithreading_count = \
+                self.metadata_generator.get_best_multithreading_count(self.train_metadata)\
+                    .get_or_else(self._config.get_or_else('multithreading_count', 5))
+
+            if self._multithreading is True:
+                self.thread_pool = ThreadPoolExecutor(
+                    self._multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
+                )
         self.distribute_shared_multithreading_pool()
 
         # set the batch sizes
@@ -651,11 +646,8 @@ class FolderReader(base.BaseWorker):
         # File names in nested lists
         self._deep_folders: bool = self._config.get_or_else('deep', False)
 
-        # check and populate the folder metadata
-        self._check_populate_folder_metadata(self._folders)
-        self._check_populate_folder_metadata(self._add_train_folders)
-        self._check_populate_folder_metadata(self._add_val_folders)
-        self._check_populate_folder_metadata(self._add_test_folders)
+        # whether we want to find the best multithreading count
+        self._find_best_multithreading_count_enabled = self._config.get_or_else('find_best_multithreading_count', False)
 
     def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
         """Checks if the given criterion is ok"""
@@ -899,6 +891,34 @@ class FolderReader(base.BaseWorker):
             return False
 
         return True
+
+    def get_best_multithreading_count(self, metadata: pd.DataFrame) -> Option[int]:
+        """
+        Finds the best number of threads to load the data.
+        Will return `nothing` if not enabled
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            metadata to test with
+
+        Returns
+        -------
+        Option[int]
+            returns Some[int] if enabled and `nothing` if not
+        """
+
+        if self._find_best_multithreading_count_enabled:
+            paths = [pathlib.Path(path) for path in metadata[metadata_columns['path']]]
+            self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
+            multithreading_count = DataLoaderMultiThreadFinder(
+                paths=paths,
+                config=self._config.get_or_empty('multithread_count_finder'),
+            ).find_best_thread_count()
+
+            return Some(multithreading_count)
+
+        return nothing
 
     def sync(self, metadata: pd.DataFrame = None) -> Result[None, Exception]:
         """Syncs the data across nodes."""
