@@ -6,12 +6,13 @@ import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
 import colored
+from jointstemplant.util.util import OnAndEnabled
 from ..base import base
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
 from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
-from ..util.option import Some
+from ..util.option import Some, Option, nothing
 from ..communicator import mpi
 from typing import List, Optional, Callable, Any
 import pandas as pd
@@ -92,49 +93,33 @@ class DataManager(base.BaseEventManager, ABC):
                            f"while performing data loading with batch size of "
                            f"{colored.fg('cyan')}{self._batch_size_effective}{colored.attr('reset')}")
 
+        # build the metadata generator
+        self.metadata_generator = self._build_metadata_generator()
+
         # Pandas data frame to hold the metadata of the data
-        self.metadata: pd.DataFrame
         self.test_metadata: pd.DataFrame
         self.val_metadata: pd.DataFrame
         self.train_metadata: pd.DataFrame
+        if (res := self.create_metadata()).is_err():
+            raise res.get_err()
+        self.train_metadata, self.val_metadata, self.test_metadata = res.get()
 
         # Train, val, and test DataLoaderManager placeholders
         self.workers['train']: DataLoaderManager
         self.workers['validation']: DataLoaderManager
         self.workers['test']: DataLoaderManager
 
-        # build the metadata generator
-        self.metadata_generator = self._build_metadata_generator()
-
-        # if we are the main rank, we always want to create a metadata
-        if mpi.mpi_communicator.is_main_rank():
-            # Create and modify general and train, val, test metadata
-            self.create_metadata()
-            self.metadata = self.modify_metadata()
-            self._generate_train_val_test_metadata()
-            self._add_additional_metadata()
-
         # if in distributed mode, do the initial setup
-        self.syncer: Optional[Syncer] = None
         if mpi.mpi_communicator.is_distributed():
 
-            # make a syncer to sync metadata and data among processes
-            self.syncer: Syncer = Syncer(self._config.get_or_empty('syncer'))
+            # make a syncer to sync metadata among processes
+            self._metadata_syncer: MetadataSyncer = MetadataSyncer(self._config.get_or_empty('metadata_syncer'))
 
             if mpi.mpi_communicator.is_main_rank():
                 # if we are the main rank, keep a copy of the original metadata
-                self.metadata_original = self.metadata
                 self.test_metadata_original = self.test_metadata
                 self.val_metadata_original = self.val_metadata
                 self.train_metadata_original = self.train_metadata
-
-                # also, set the metadata for the syncer
-                self.syncer.set_metadata(
-                    metadata=self.metadata_original,
-                )
-
-            # first, run the initial synchronization between processes
-            self.syncer.sync_initial()
 
             # now, sync the train/val/test metadata
             self.sync_train_val_test_metadata()
@@ -175,7 +160,7 @@ class DataManager(base.BaseEventManager, ABC):
 
     def get_syncer(self):
 
-        return self.syncer
+        return self._metadata_syncer
 
     def sync_train_val_test_metadata(self, rand_seed_add: int = 0):
         """
@@ -191,21 +176,23 @@ class DataManager(base.BaseEventManager, ABC):
         if mpi.mpi_communicator.is_distributed() is False:
             raise RuntimeError("not in distributed mode to sync train/val/test metadata.")
 
-        if self.syncer.is_distributor():
+        if self._metadata_syncer.is_distributor():
 
             # if we have to shuffle, shuffle
             if self._shuffle is True:
                 self._shuffle_each_original_metadata(rand_seed_add=rand_seed_add)
 
             # now pass the metadata to the syncer
-            self.syncer.set_train_val_test_metadata(
+            self._metadata_syncer.set_train_val_test_metadata(
                 train_metadata=self.train_metadata_original,
                 validation_metadata=self.val_metadata_original,
                 test_metadata=self.test_metadata_original,
             )
 
         # get the metadata from the syncer
-        train_metadata, val_metadata, test_metadata = self.syncer.sync_train_val_test_metadata()
+        if (res := self._metadata_syncer.sync_train_val_test_metadata()).is_err():
+            self._log.error(f"error happened while syncing the metadata between nodes with error of {res.get_err()}")
+        train_metadata, val_metadata, test_metadata = res.get()
 
         # reset the indices
         train_metadata = MetadataManipulator.reset_level_0_indices(train_metadata)
@@ -239,16 +226,33 @@ class DataManager(base.BaseEventManager, ABC):
 
         return metadata_generator
 
-    def create_metadata(self) -> None:
+    def create_metadata(self) -> Result[Any, Exception]:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
-        # get the metadata
-        self.metadata = self.metadata_generator.build_and_get_metadata()
+        train_metadata = val_metadata = test_metadata = None
 
-    def modify_metadata(self, metadata: pd.DataFrame = None) -> pd.DataFrame:
+        if mpi.mpi_communicator.is_main_rank():
+            # get the metadata
+            metadata = self.metadata_generator.build_and_get_metadata()
+            metadata = self.modify_metadata(metadata)
+            train_metadata, val_metadata, test_metadata = \
+                self._generate_train_val_test_metadata(metadata)
+            train_metadata, val_metadata, test_metadata = \
+                self._add_additional_metadata(
+                    train_metadata,
+                    val_metadata,
+                    test_metadata
+                )
+        # ask the metadata generator to sync among the nodes
+        for md in [train_metadata, val_metadata, test_metadata]:
+            if (res := self.metadata_generator.sync(md)).is_err():
+                self._log.error(f"error while asking the metadata generator to sync with error of {res.get_err()}")
+                return res
+
+        return Ok((train_metadata, val_metadata, test_metadata))
+
+    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Modifies the metadata that this instance holds."""
-
-        metadata = metadata if metadata is not None else self.metadata
 
         metadata_manipulator = MetadataManipulator(metadata=metadata)
 
@@ -257,11 +261,11 @@ class DataManager(base.BaseEventManager, ABC):
 
         return metadata
 
-    def _generate_train_val_test_metadata(self) -> None:
+    def _generate_train_val_test_metadata(self, metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """The method creates train, validation, and test metadata."""
 
         # Get count of each set
-        total_data_count = self.metadata.index.get_level_values(0).unique().size
+        total_data_count = metadata.index.get_level_values(0).unique().size
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -285,13 +289,13 @@ class DataManager(base.BaseEventManager, ABC):
         train_indices = indices[(test_count+val_count):]
 
         # Create the train, validation, and test metadata
-        self.test_metadata = self.metadata.loc[test_indices]
-        self.val_metadata = self.metadata.loc[val_indices]
-        self.train_metadata = self.metadata.loc[train_indices]
+        test_metadata = metadata.loc[test_indices]
+        val_metadata = metadata.loc[val_indices]
+        train_metadata = metadata.loc[train_indices]
 
         # Update the column names of the data frames
         assert(_metadata_columns_internal['original_index'] == 'original_index')  # this is because df.assign can only get kwargs
-        [self.train_metadata, self.val_metadata, self.test_metadata] = \
+        [train_metadata, val_metadata, test_metadata] = \
             [
                 df
                 .assign(original_index=df.index.get_level_values(0))
@@ -304,13 +308,20 @@ class DataManager(base.BaseEventManager, ABC):
                     level=0,
                 )
                 for df
-                in [self.train_metadata, self.val_metadata, self.test_metadata]
+                in [train_metadata, val_metadata, test_metadata]
             ]
 
         # restore the random generator state
         np.random.set_state(rng_state)
 
-    def _add_additional_metadata(self) -> None:
+        return train_metadata, val_metadata, test_metadata
+
+    def _add_additional_metadata(
+            self,
+            train_metadata,
+            val_metadata,
+            test_metadata
+    ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """Adds the additional metadata to the metadata within"""
 
         def reindex(df: pd.DataFrame, index_begin: int) -> pd.DataFrame:
@@ -344,25 +355,27 @@ class DataManager(base.BaseEventManager, ABC):
             return df
 
         # get the new train metadata, process it and add it to the train metadata
-        self.train_metadata = \
+        train_metadata = \
             process_df(
                 self.metadata_generator.build_and_get_add_train_metadata(),
-                self.train_metadata,
+                train_metadata,
             )
 
         # get the new val metadata, process it and add it to the val metadata
-        self.val_metadata = \
+        val_metadata = \
             process_df(
                 self.metadata_generator.build_and_get_add_val_metadata(),
-                self.val_metadata,
+                val_metadata,
             )
 
         # get the new test metadata, process it and add it to the test metadata
-        self.test_metadata = \
+        test_metadata = \
             process_df(
                 self.metadata_generator.build_and_get_add_test_metadata(),
-                self.test_metadata,
+                test_metadata,
             )
+
+        return train_metadata, val_metadata, test_metadata
 
     def shuffle_each_metadata(self, rand_seed_add: int = 0) -> None:
         """
@@ -697,6 +710,7 @@ class FolderReader(base.BaseWorker):
 
         """
 
+        self._check_populate_folder_metadata(self._folders)
         metadata = self._build_and_get_metadata_folders(self._folders)
 
         return metadata
@@ -713,6 +727,7 @@ class FolderReader(base.BaseWorker):
 
         """
 
+        self._check_populate_folder_metadata(self._add_train_folders)
         metadata = self._build_and_get_metadata_folders(self._add_train_folders)
 
         return metadata
@@ -729,6 +744,7 @@ class FolderReader(base.BaseWorker):
 
         """
 
+        self._check_populate_folder_metadata(self._add_val_folders)
         metadata = self._build_and_get_metadata_folders(self._add_val_folders)
 
         return metadata
@@ -745,6 +761,7 @@ class FolderReader(base.BaseWorker):
 
         """
 
+        self._check_populate_folder_metadata(self._add_test_folders)
         metadata = self._build_and_get_metadata_folders(self._add_test_folders)
 
         return metadata
@@ -883,99 +900,51 @@ class FolderReader(base.BaseWorker):
 
         return True
 
-# TODO: move Syncer to FolderReader
-# TODO: separate to two: filesyncer and metadatasyncer
-class Syncer(base.BaseWorker):
-    """Class to synchronize the data among processes in distributed mode."""
+    def sync(self, metadata: pd.DataFrame = None) -> Result[None, Exception]:
+        """Syncs the data across nodes."""
+
+        if not mpi.mpi_communicator.is_distributed():
+            return Ok(None)
+
+        # make a syncer to sync the files
+        file_syncer: FileSyncer = FileSyncer(self._config.get_or_empty('file_syncer'))
+        res = file_syncer.sync(metadata)
+
+        return res
+
+
+class FileSyncer(OnAndEnabled):
 
     def __init__(self, config: ConfigParser = None):
 
         super().__init__(config)
 
+        # make a new communicator for broadcasting
+        self.mpi_comm_main_local_name = 'file_syncer_main_local'
+        if (
+                mpi_comm_main_local_res := mpi.mpi_communicator.split(
+                    # communicator=mpi_comm_res.get(),
+                    color=0 if mpi.mpi_communicator.is_main_local_rank() is True else 1
+                )
+        ).is_err():
+            self._log.error(f"could not get the mpi split with error of {mpi_comm_main_local_res.get_err()}")
+            raise RuntimeError("could not get the mpi split")
+        self.mpi_comm_main_local = mpi_comm_main_local_res.get()
+        mpi.mpi_communicator.register_communicator(self.mpi_comm_main_local, name=self.mpi_comm_main_local_name)
+
         # cache some distributed-mode-related data
-        self.rank: int = mpi.mpi_communicator.get_rank()
-        self.dist_size: int = mpi.mpi_communicator.get_size()
-        self.is_main_rank: bool = mpi.mpi_communicator.is_main_rank()
+        self.rank, self.dist_size = mpi.mpi_communicator.get_rank_size(self.mpi_comm_main_local)
+        self.is_main_rank: bool = self.rank == 0
         self.distributor = True if self.is_main_rank is True else False
         self.receiver = True if self.is_main_rank is False else False
 
         # get the batch size for syncing
         self.batch_size = self._config.get_or_else('batch_size', 16)
 
-        # whether we should split the train data among nodes
-        self.all_nodes_all_train_data = self._config.get_or_else('all_nodes_all_train_data', False)
-
-        # book keeping
+        # bookkeeping
         self.thread_count: int = self._config.get_or_else('multithreading_count', 10)
         # whether we should force the data syncing initially
         self.force_sync = self._config.get_or_else('force_sync', False)
-
-        # placeholder for the metadata
-        self.metadata: Optional[pd.DataFrame] = None
-        self.train_metadata: Optional[pd.DataFrame] = None
-        self.validation_metadata: Optional[pd.DataFrame] = None
-        self.test_metadata: Optional[pd.DataFrame] = None
-
-        # get a new mpi communicator
-        self.mpi_comm_name = 'data_manager'
-        mpi_comm = mpi.mpi_communicator.get_or_create_communicator('data_manager')
-
-        # make a new communicator for broadcasting
-        self.mpi_comm_main_local_name = 'data_manager_main_local'
-        self.mpi_comm_main_local = mpi.mpi_communicator.split(
-            communicator=mpi_comm,
-            color=0 if mpi.mpi_communicator.is_main_local_rank() is True else 1
-        )
-        mpi.mpi_communicator.register_communicator(self.mpi_comm_main_local, name=self.mpi_comm_main_local_name)
-
-    def set_metadata(self, metadata: pd.DataFrame):
-        """
-        Sets the complete metadata to be used for initial synchronization.
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata data frame
-
-        Returns
-        -------
-        self
-
-        """
-
-        self.metadata = metadata
-
-        return self
-
-    def set_train_val_test_metadata(
-            self,
-            train_metadata: pd.DataFrame,
-            validation_metadata: pd.DataFrame,
-            test_metadata: pd.DataFrame,
-    ):
-        """
-        Sets the train/val/test metadata..
-
-        Parameters
-        ----------
-        train_metadata : pd.DataFrame
-            the train metadata data frame
-        validation_metadata : pd.DataFrame
-            the validation metadata data frame
-        test_metadata : pd.DataFrame
-            the test metadata data frame
-
-        Returns
-        -------
-        self
-
-        """
-
-        self.train_metadata = train_metadata
-        self.validation_metadata = validation_metadata
-        self.test_metadata = test_metadata
-
-        return self
 
     def is_distributor(self) -> bool:
         """Returns a boolean regarding whether we are the distributor."""
@@ -987,128 +956,36 @@ class Syncer(base.BaseWorker):
 
         return self.receiver
 
-    def sync_initial(self):
+    def _sync_metadata(self, metadata: Optional[pd.DataFrame] = None) -> Result[pd.DataFrame, Exception]:
         """
-        syncs everything.
-        this method should be called the first time syncing is happening.
+        Syncs the metadata and returns it.
+
+        Parameters
+        ----------
+        metadata : Optional[pd.DataFrame]
+            must be provided if we are the main rank
 
         Returns
         -------
-
+        Result[pd.DataFrame, Exception]
         """
-
-        # sync the whole metadata
-        metadata: pd.DataFrame = self._sync_metadata()
-
-        # sync the local data that is syncable
-        self._sync_local_data(metadata)
-
-    def _sync_metadata(self) -> pd.DataFrame:
-        """Syncs the metadata and returns it."""
 
         # make sure we have all the metadata if we are the main rank
-        if self.distributor:
-            if self.metadata is None:
-                raise ValueError("metadata are not set in the main rank. please set them before calling this function.")
-
-        # let everyone get the metadata
-        metadata: pd.DataFrame = \
-            mpi.mpi_communicator.collective_bcast(
-                data=self.metadata,
-                root_rank=0,
-                name=self.mpi_comm_name,
+        if self.distributor and metadata is None:
+            return Err(
+                RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
             )
 
-        return metadata
+        # let everyone get the metadata
+        res: Result[pd.DataFrame, Exception] = mpi.mpi_communicator.collective_bcast(
+                data=metadata,
+                root_rank=0,
+                name=self.mpi_comm_main_local_name,
+            )
 
-    def _sync_local_data(self, metadata: pd.DataFrame = None):
-        """
-        Reads the metadata and syncs the local data within.
+        return res
 
-        Parameters
-        ----------
-        metadata : pd.DataFrame, optional
-            metadata to use for syncing. if not given, will default to the original metadata in the instance
-
-        Returns
-        -------
-
-        """
-
-        # get the metadata
-        metadata = metadata if metadata is not None else self.metadata
-
-        # get the portion of the metadata that is syncable
-        syncable_selection = metadata[metadata_columns['syncable']] == True
-        metadata = metadata[syncable_selection]
-
-        if self.force_sync is True:
-            # force sync if necessary
-            self._sync_local_data_broadcast(metadata)
-        else:
-            # sync selectively
-            self._sync_local_data_selective(metadata)
-
-    def _sync_local_data_broadcast(self, metadata: pd.DataFrame):
-        """
-        Broadcasts all the local data to all the processes and makes sure everyone has it.
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata to use for syncing
-
-        """
-
-        # we should not continue if we are the main local rank
-        if mpi.mpi_communicator.is_main_local_rank() is False:
-            return
-
-        # get the rank and size
-        rank, size = \
-            mpi.mpi_communicator.get_rank_size(mpi.mpi_communicator.get_communicator(self.mpi_comm_main_local_name))
-
-        # log
-        if self.is_distributor():
-            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
-
-        # make a thread pool ot be used for loading the data
-        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-broadcast")
-
-        # go over the data in batch_size chunks
-        for start_idx in range(0, len(metadata), self.batch_size):
-
-            # load if we are the distributor
-            if self.distributor:
-                # first, load the data into a new dataframe
-                metadata_updated: Optional[pd.DataFrame] = \
-                    self._load_local_data_raw(
-                        metadata.iloc[start_idx:(start_idx+self.batch_size)],
-                        thread_pool,
-                    )
-            else:
-                metadata_updated = None
-
-            # now broadcast
-            metadata_updated: pd.DataFrame = \
-                mpi.mpi_communicator.collective_bcast(
-                    data=metadata_updated,
-                    root_rank=0,
-                    name=self.mpi_comm_main_local_name,
-                )
-
-            # save only if we are not the main rank
-            if self.receiver:
-                self._save_local_data_raw(metadata_updated, thread_pool)
-
-        # shutdown the threadpool as it is no longer needed
-        thread_pool.shutdown(wait=True)
-
-        # log
-        if self.is_distributor():
-            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
-
-    def _check_local_data(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor):
+    def _check_local_data(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> pd.DataFrame:
         """
         Checks the local machine for existence of data in the given data frame and returns a new data frame with the
         items that do not exist.
@@ -1144,7 +1021,8 @@ class Syncer(base.BaseWorker):
         # get the new metadata and return it based on the criteria
         return metadata.iloc[selector]
 
-    def _load_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> pd.DataFrame:
+    def _load_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) \
+            -> Result[pd.DataFrame, Exception]:
         """
         Loads the local data and returns them.
 
@@ -1157,29 +1035,38 @@ class Syncer(base.BaseWorker):
 
         Returns
         -------
-        pd.DataFrame
+        Result[pd.DataFrame, Exception]
             a new metadata with the data loaded in it
 
         """
 
-        def load_single_data_raw(path: str) -> bytes:
+        def load_single_data_raw(path: str) -> Result[bytes, Exception]:
             """Loads a single raw data from the given path in binary form and returns it."""
 
-            with open(path, 'rb') as file:
-                return file.read()
+            try:
+                with open(path, 'rb') as file:
+                    return Ok(file.read())
+            except Exception as e:
+                return Err(RuntimeError(f"cannot open {path} with error of {e}"))
 
         # Load the data
-        data = list(
+        data_res = list(
             thread_pool.map(load_single_data_raw, metadata[metadata_columns['path']])
         )
+        for res in data_res:
+            if res.is_err():
+                self._log.error(f"{res.get_err()}")
+                return Err(RuntimeError("could not read a file"))
+
+        data = [item.get() for item in data_res]
 
         # assign them to a new column
         assert(_metadata_columns_internal['data_raw'] == 'data_raw')  # this is because df.assign can only get kwargs
-        metadata = metadata.assign(data_raw=data)
+        res = Result.from_func(metadata.assign, data_raw=data)
 
-        return metadata
+        return res
 
-    def _save_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> None:
+    def _save_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> Result[None, Exception]:
         """
         saves the data
 
@@ -1190,62 +1077,164 @@ class Syncer(base.BaseWorker):
         thread_pool : ThreadPoolExecutor
             the thread pool to use for saving the data
 
+        Returns
+        -------
+        Result[None, Exception]
         """
 
-        def save_single_data_raw(path: str, data: bytes) -> None:
+        def save_single_data_raw(path: str, data: bytes) -> Result[None, Exception]:
             """saves a single raw data to the given path in binary form."""
 
-            # create the folder if it does not exist
-            pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
+            try:
+                # create the folder if it does not exist
+                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
 
-            # now save the result
-            with open(path, 'wb') as file:
-                file.write(data)
+                # now save the result
+                with open(path, 'wb') as file:
+                    file.write(data)
+
+                return Ok(None)
+
+            except Exception as e:
+                return Err(RuntimeError(f"could not save file at {path} with error of {e}"))
 
         # save the data
-        list(
+        save_res = list(
             thread_pool.map(
                 lambda x: save_single_data_raw(x[0], x[1]),
                 zip(metadata[metadata_columns['path']], metadata[_metadata_columns_internal['data_raw']])
             )
         )
+        for res in save_res:
+            if res.is_err():
+                self._log.error(f"{res.get_err()}")
+                return Err(RuntimeError("could not save a file"))
 
-    def _sync_local_data_selective(self, metadata: pd.DataFrame):
+        return Ok(None)
+
+    def _sync_missing_metadata(
+            self,
+            rank: int,
+            metadata: pd.DataFrame,
+            thread_pool: ThreadPoolExecutor
+    ) -> Result[pd.DataFrame, Exception]:
         """
-        Syncs only the missing portion of the local data with all the processes and makes sure everyone has all.
+        Finds and syncs the metadata of the missing files
 
         Parameters
         ----------
+        rank : int
+            destination rank
         metadata : pd.DataFrame
             the metadata to use for syncing
+        thread_pool : ThreadPoolExecutor
+            the thread pool to use for the operations
 
+        Returns
+        -------
+        Result[pd.DataFrame, Exception]
         """
 
-        # make a thread pool to be used for the subthreads
-        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-selective")
+        if self.receiver:
+            # find out the missing data and send it to the main rank
+            metadata_missing_files = self._check_local_data(metadata, thread_pool)
+            if (
+                    res := mpi.mpi_communicator.p2p_send(
+                        data=metadata_missing_files,
+                        destination=0,
+                        name=self.mpi_comm_main_local_name,
+                    )
+            ).is_err():
+                return res
+            else:
+                return Ok(metadata_missing_files)
 
-        if self.distributor:
-            # make a thread pool to be used for interacting with other ranks
-            thread_communicator_pool = \
-                ThreadPoolExecutor(
-                    self.thread_count,
-                    thread_name_prefix="tabaluga-syncer-local-data-selective-distributor"
-                )
-
-            list(
-                thread_communicator_pool.map(
-                    lambda rank: self._sync_local_data_with_rank(rank, metadata, thread_pool),
-                    range(1, self.dist_size)
-                )
+        elif self.distributor:
+            # get the data sent by this rank
+            res = mpi.mpi_communicator.p2p_receive(
+                source=rank,
+                name=self.mpi_comm_main_local_name,
             )
+            return res
+
         else:
-            # just receive the data!
-            self._sync_local_data_with_rank(self.rank, metadata, thread_pool)
+            raise RuntimeError("we should not have ended up here!")
 
-        # shutdown the threadpool as it is no longer needed
-        thread_pool.shutdown(wait=True)
+    def _sync_data(
+            self,
+            rank: int,
+            metadata_missing_files: pd.DataFrame,
+            thread_pool: ThreadPoolExecutor,
+    ) -> Result[None, Exception]:
+        """
+        Syncs data according to the metadata of the missing files
 
-    def _sync_local_data_with_rank(self, rank: int, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor):
+        Parameters
+        ----------
+        rank : int
+            destination rank
+        metadata : pd.DataFrame
+            the metadata to use for syncing
+        thread_pool : ThreadPoolExecutor
+            the thread pool to use for the operations
+
+        Returns
+        -------
+        Result[None, Exception]
+        """
+
+        # go over the data in batch_size chunks
+        for start_idx in range(0, len(metadata_missing_files), self.batch_size):
+
+            # load if we are the distributor
+            if self.distributor:
+                # first, load the data into a new dataframe
+                if (
+                        metadata_updated_res := self._load_local_data_raw(
+                            metadata_missing_files.iloc[start_idx:(start_idx + self.batch_size)],
+                            thread_pool,
+                        )
+                ).is_err():
+                    return metadata_updated_res
+
+                # now send to the rank
+                if (
+                        res := mpi.mpi_communicator.p2p_send(
+                            data=metadata_updated_res.get(),
+                            destination=rank,
+                            tag=start_idx,
+                            name=self.mpi_comm_main_local_name,
+                        )
+                ).is_err():
+                    return res
+
+            else:
+                # just receive the data and store them
+                if (
+                        metadata_updated_res := mpi.mpi_communicator.p2p_receive(
+                            source=0,
+                            tag=start_idx,
+                            name=self.mpi_comm_main_local_name,
+                        )
+                ).is_err():
+                    return metadata_updated_res
+
+                if (
+                        res := self._save_local_data_raw(
+                            metadata_updated_res.get(),
+                            thread_pool
+                        )
+                ).is_err():
+                    return res
+
+        return Ok(None)
+
+    def _sync_local_data_with_rank(
+            self,
+            rank: int,
+            metadata: pd.DataFrame,
+            thread_pool: ThreadPoolExecutor
+    ) -> Result[None, Exception]:
         """
         Syncs only the missing portion of the local data with the given rank.
 
@@ -1258,156 +1247,227 @@ class Syncer(base.BaseWorker):
         thread_pool : ThreadPoolExecutor
             the thread pool to use for the operations
 
+        Returns
+        -------
+        Result[None, Exception]
         """
 
-        if self.receiver:
-            # find out the missing data and send it to the main rank
-            metadata_missing_files = self._check_local_data(metadata, thread_pool)
-            mpi.mpi_communicator.p2p_send(
-                data=metadata_missing_files,
-                destination=0,
-                name=self.mpi_comm_name,
+        if (
+            res := self._sync_missing_metadata(
+                rank,
+                metadata,
+                thread_pool,
             )
-        elif self.distributor:
-            # get the data sent by this rank
-            metadata_missing_files = \
-                mpi.mpi_communicator.p2p_receive(
-                    source=rank,
-                    name=self.mpi_comm_name,
-                )
-        else:
-            raise RuntimeError("we should not have ended up here!")
+        ).is_err():
+            return res
+        metadata_missing_files = res.get()
 
         # log
         if self.is_distributor() and len(metadata_missing_files) > 0:
             self._log.info(f"syncing {len(metadata_missing_files)} local data selectively with rank {rank}")
 
-        # go over the data in batch_size chunks
-        for start_idx in range(0, len(metadata_missing_files), self.batch_size):
-
-            # load if we are the distributor
-            if self.distributor:
-                # first, load the data into a new dataframe
-                metadata_updated: Optional[pd.DataFrame] = \
-                    self._load_local_data_raw(
-                        metadata_missing_files.iloc[start_idx:(start_idx + self.batch_size)],
-                        thread_pool,
-                    )
-                # now send to the rank
-                mpi.mpi_communicator.p2p_send(
-                    data=metadata_updated,
-                    destination=rank,
-                    tag=start_idx,
-                    name=self.mpi_comm_name,
-                )
-            else:
-                # just receive the data and store them
-                metadata_updated = \
-                    mpi.mpi_communicator.p2p_receive(
-                        source=0,
-                        tag=start_idx,
-                        name=self.mpi_comm_name,
-                    )
-                self._save_local_data_raw(metadata_updated, thread_pool)
+        # sync the data
+        if (
+            res := self._sync_data(
+                rank,
+                metadata_missing_files,
+                thread_pool,
+            )
+        ).is_err():
+            return res
 
         # log
         if self.is_distributor() and len(metadata_missing_files) > 0:
             self._log.info(f"done syncing {len(metadata_missing_files)} local data selectively with rank {rank}")
 
-    def sync_train_val_test_metadata(self) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+        return Ok(None)
+
+    def _sync_local_data_selective(self, metadata: pd.DataFrame) -> Result[None, Exception]:
         """
-        Splits the train/val/test metadata into chunks for each process, scatters them, and returns each chunk.
-        It should be noted that after this operation, all nodes will have exactly the same amount of data.
+        Syncs only the missing portion of the local data with all the processes and makes sure everyone has all.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata to use for syncing
 
         Returns
         -------
-        (pd.DataFrame, pd.DataFrame, pd.DataFrame)
-            the data frames for the metadata of train, val, and test
+        Result[pd.DataFrame, Exception]
+        """
+
+        if self.distributor:
+            try:
+                # make a thread pool to be used for interacting with other ranks
+                thread_pool = \
+                    ThreadPoolExecutor(
+                        self.thread_count,
+                        thread_name_prefix="tabaluga-syncer-local-data-selective-distributor"
+                    )
+            except Exception as e:
+                return Err(e)
+
+            result: List[Result[None, Exception]] = list(
+                thread_pool.map(
+                    lambda rank: self._sync_local_data_with_rank(rank, metadata, thread_pool),
+                    range(1, self.dist_size)
+                )
+            )
+
+        else:
+
+            try:
+                # make a thread pool to be used for the subthreads
+                thread_pool = ThreadPoolExecutor(
+                    self.thread_count,
+                    thread_name_prefix="tabaluga-syncer-local-data-selective"
+                )
+            except Exception as e:
+                return Err(e)
+
+            # just receive the data!
+            result: List[Result[None, Exception]] = \
+                [self._sync_local_data_with_rank(self.rank, metadata, thread_pool)]
+
+        # shutdown the threadpool as it is no longer needed
+        thread_pool.shutdown(wait=True)
+
+        for item in result:
+            if item.is_err():
+                return Err(RuntimeError(f"error while syncing data with error of {item.get_err()}"))
+
+        return Ok(None)
+
+    def _sync_local_data_broadcast(self, metadata: pd.DataFrame) -> Result[None, Exception]:
+        """
+        Broadcasts all the local data to all the processes and makes sure everyone has it.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata to use for syncing
 
         """
 
+        # we should not continue if we are not the main local rank
+        if mpi.mpi_communicator.is_main_local_rank() is False:
+            return Ok(None)
+
+        # get the rank and size
+        rank, size = \
+            mpi.mpi_communicator.get_rank_size(mpi.mpi_communicator.get_communicator(self.mpi_comm_main_local_name))
+
+        # log
         if self.is_distributor():
+            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
-            if any([item is None for item in [self.train_metadata, self.validation_metadata, self.test_metadata]]):
-                raise ValueError("metadata are not set in the main rank. please set them before calling this function.")
+        # make a thread pool ot be used for loading the data
+        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-broadcast")
 
-            # if we should not split the train data
-            if self.all_nodes_all_train_data is True:
+        # go over the data in batch_size chunks
+        for start_idx in range(0, len(metadata), self.batch_size):
 
-                # make the train data
-                train_split_metadata = [self.train_metadata]
-                train_split_metadata.extend([
-                    self.train_metadata  # make copies of the train metadata
-                    for _
-                    in range(1, self.dist_size)
-                ])
-
-            # if we should split the train data among the nodes
+            # load if we are the distributor
+            if self.distributor:
+                # first, load the data into a new dataframe
+                if (
+                        metadata_updated_res := self._load_local_data_raw(
+                            metadata.iloc[start_idx:(start_idx+self.batch_size)],
+                            thread_pool,
+                        )
+                ).is_err():
+                    return metadata_updated_res
+                metadata_updated = metadata_updated_res.get()
             else:
-                # split the training metadata
-                train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
-                chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
-                # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped and
-                # not synced
-                train_split_indices = \
-                    [
-                        train_zero_level_indices[start_idx:(start_idx+chunk_size)]
-                        for start_idx
-                        in range(0, train_zero_level_indices.size, chunk_size)
-                    ]
-                train_split_metadata = \
-                    [
-                        self.train_metadata.loc[chunk_indices]
-                        for chunk_indices
-                        in train_split_indices
-                    ]
-                # remove the extra training data
-                train_split_metadata = train_split_metadata[:self.dist_size]
+                metadata_updated = None
 
-            # split the validation metadata
-            # we only want the distributor to have the validation data and not the others
-            val_split_metadata = [self.validation_metadata]
-            val_split_metadata.extend([
-                self.validation_metadata.iloc[:0]  # this will surely result in an empty dataframe
-                for _
-                in range(1, self.dist_size)
-            ])
+            # now broadcast
+            if (
+                    metadata_updated_res := mpi.mpi_communicator.collective_bcast(
+                        data=metadata_updated,
+                        root_rank=0,
+                        name=self.mpi_comm_main_local_name,
+                    )
+            ).is_err():
+                return metadata_updated_res
 
-            # split the test metadata
-            # we only want the distributor to have the test data and not the others
-            test_split_metadata = [self.test_metadata]
-            test_split_metadata.extend([
-                self.test_metadata.iloc[:0]  # this will surely result in an empty dataframe
-                for _
-                in range(1, self.dist_size)
-            ])
+            metadata_updated = metadata_updated_res.get()
 
+            # save only if we are not the main rank
+            if self.receiver:
+                if (
+                        res := self._save_local_data_raw(metadata_updated, thread_pool)
+                ).is_err():
+                    return res
+
+        # shutdown the threadpool as it is no longer needed
+        thread_pool.shutdown(wait=True)
+
+        # log
+        if self.is_distributor():
+            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
+
+    def _sync_local_data(self, metadata: pd.DataFrame) -> Result[None, Exception]:
+        """
+        Reads the metadata and syncs the local data within.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame, optional
+            metadata to use for syncing
+
+        Returns
+        -------
+        Result[pd.DataFrame, Exception]
+        """
+
+        # get the portion of the metadata that is syncable
+        syncable_selection = metadata[metadata_columns['syncable']] == True
+        metadata = metadata[syncable_selection]
+
+        if self.force_sync is True:
+            # force sync if necessary
+            res = self._sync_local_data_broadcast(metadata)
         else:
-            train_split_metadata = None
-            val_split_metadata = None
-            test_split_metadata = None
+            # sync selectively
+            res = self._sync_local_data_selective(metadata)
 
-        # scatter all the metadata
-        train_metadata = \
-            mpi.mpi_communicator.collective_scatter(
-                data=train_split_metadata,
-                root_rank=0,
-                name=self.mpi_comm_name
-            )
-        val_metadata = \
-            mpi.mpi_communicator.collective_scatter(
-                data=val_split_metadata,
-                root_rank=0,
-                name=self.mpi_comm_name
-            )
-        test_metadata = \
-            mpi.mpi_communicator.collective_scatter(
-                data=test_split_metadata,
-                root_rank=0,
-                name=self.mpi_comm_name
-            )
+        return res
 
-        return train_metadata, val_metadata, test_metadata
+    def sync(self, metadata: pd.DataFrame = None) -> Result[None, Exception]:
+        """
+        Syncs the data of the given metadata.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata of the data to be synced, must be provided if main rank, for others, it does not matter
+
+        Returns
+        -------
+        Result[None, Exception]
+            the result of the sync
+
+        """
+
+        if self._is_enabled_main_local_rank():
+
+            if self.distributor and metadata is None:
+                    return Err(
+                        RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
+                    )
+
+            # sync the whole metadata
+            res: Result[pd.DataFrame, Exception] = self._sync_metadata(metadata)
+            if res.is_err():
+                return res
+
+            # sync the local data that is syncable
+            self._sync_local_data(res.get())
+
+        mpi.mpi_communicator.barrier()
+
+        return Ok(None)
 
 
 class MetadataSyncer(base.BaseWorker):
