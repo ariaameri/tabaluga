@@ -549,6 +549,11 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return self._size
 
+    def get_node_rank(self) -> int:
+        """Returns the node rank."""
+
+        return self._node_rank
+
 
 def init_with_config(config: ConfigParser):
     return _MPICommunicatorSingletonClass(config)
