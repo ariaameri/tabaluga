@@ -633,9 +633,12 @@ class FolderReader(base.BaseWorker):
         self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
         self._criterion_function = self._check_process_criterion(_criterion)
 
-        # list of extensions to ignore
+        # list of extensions to ignore and accept
         self._extension_ignore: List[re.Pattern] = [
             re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
+        ]
+        self._extension_accept: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('extension_accept', [])
         ]
 
         # Folders containing the data
@@ -871,7 +874,9 @@ class FolderReader(base.BaseWorker):
         check &= file_name not in ['Icon\r']
 
         # criteria for the file extension
-        check &= self._filter_file_extension(pathlib.Path(file_name).suffix[1:])  # remove the leading . from the ext
+        check &= self._filter_file_extension(
+            pathlib.Path(file_name).suffix[1:].lower()
+        )  # remove the leading . from the ext
 
         return check
 
@@ -892,6 +897,9 @@ class FolderReader(base.BaseWorker):
         """
 
         if any(pattern.match(extension) is not None for pattern in self._extension_ignore):
+            return False
+
+        if self._extension_accept and all(pattern.match(extension) is None for pattern in self._extension_accept):
             return False
 
         return True
