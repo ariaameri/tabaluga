@@ -14,7 +14,7 @@ from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO,
 from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.option import Some, Option, nothing
 from ..communicator import mpi
-from typing import List, Optional, Callable, Any
+from typing import List, Optional, Callable, Any, Dict
 import pandas as pd
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor
@@ -549,6 +549,8 @@ class MetadataManipulator(base.BaseWorker):
             metadata = self.regroup_metadata(criterion='__criterion_help')
             self.metadata = metadata = metadata.drop(['__criterion_help'], axis=1)
 
+            self._check_for_sanity(metadata)
+
         return metadata
 
     def regroup_metadata(self, criterion=None) -> pd.DataFrame:
@@ -590,6 +592,28 @@ class MetadataManipulator(base.BaseWorker):
         self.metadata = metadata
 
         return metadata
+
+    def _check_for_sanity(self, metadata: pd.DataFrame) -> None:
+        """Checks the given metadata and makes some info if necessary."""
+
+        # get the bundle counts and report
+        idx_0_to_1_count: Dict[int, int] = {}
+        for (l_0, _) in metadata.index:
+            idx_0_to_1_count[l_0] = (idx_0_to_1_count.get(l_0) or 0) + 1
+
+        from collections import Counter
+        count = Counter(idx_0_to_1_count.values())
+        if (length := len(count.values())) == 0:
+            self._log.error(f"ended up in a weird situation: data bundles seem to not exist!")
+        elif length == 1:
+            self._log.info(f"data bundles contain {length} elements each")
+        else:
+            "\n\t- ".join([f"{k}: {v}" for k, v in count.items()])
+            self._log.warning(
+                "data bundles contain different amount of elements. I found:"
+                + "\n\t (bundle size) (count)"
+                + "\n\t- " + "\n\t- ".join([f"{k}: {v}" for k, v in count.items()]) + "\n"
+            )
 
     @staticmethod
     def reset_level_0_indices(metadata: pd.DataFrame) -> pd.DataFrame:
