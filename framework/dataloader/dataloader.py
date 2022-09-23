@@ -1474,7 +1474,7 @@ class FileSyncer(OnAndEnabled):
 
         """
 
-        if self._is_enabled_main_local_rank():
+        if self._is_enabled_main_local_rank() and self.dist_size > 1:
 
             if self.distributor and metadata is None:
                     return Err(
