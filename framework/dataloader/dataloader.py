@@ -274,7 +274,8 @@ class DataManager(base.BaseEventManager, ABC):
             # add rank
             if self._shuffle_add_node_rank is True:
                 seed += mpi.mpi_communicator.get_rank()
-        np.random.seed(seed)
+
+            np.random.seed(seed)
 
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
@@ -307,7 +308,8 @@ class DataManager(base.BaseEventManager, ABC):
             ]
 
         # restore the random generator state
-        np.random.set_state(rng_state)
+        if self._seed is not None:
+            np.random.set_state(rng_state)
 
         return train_metadata, val_metadata, test_metadata
 
@@ -394,7 +396,8 @@ class DataManager(base.BaseEventManager, ABC):
             # add rank
             if self._shuffle_add_node_rank is True:
                 seed += mpi.mpi_communicator.get_rank()
-        np.random.seed(seed)
+
+            np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
         # each metadata separately
@@ -424,7 +427,8 @@ class DataManager(base.BaseEventManager, ABC):
             self.test_metadata = self.test_metadata.loc[indices]
 
         # restore the random generator state
-        np.random.set_state(rng_state)
+        if self._seed is not None:
+            np.random.set_state(rng_state)
 
     def _shuffle_each_original_metadata(self, rand_seed_add: int = 0) -> None:
         """
@@ -452,7 +456,8 @@ class DataManager(base.BaseEventManager, ABC):
             # add rank
             if self._shuffle_add_node_rank is True:
                 seed += mpi.mpi_communicator.get_rank()
-        np.random.seed(seed)
+
+            np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
         # each metadata separately
@@ -482,7 +487,8 @@ class DataManager(base.BaseEventManager, ABC):
             self.test_metadata_original = self.test_metadata_original.loc[indices]
 
         # restore the random generator state
-        np.random.set_state(rng_state)
+        if self._seed is not None:
+            np.random.set_state(rng_state)
 
     def set_batch_size_report(self, batch_size: int) -> None:
         """Sets the batch size that is used for reporting.
