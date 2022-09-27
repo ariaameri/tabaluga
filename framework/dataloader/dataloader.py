@@ -1547,6 +1547,9 @@ class MetadataSyncer(base.BaseWorker):
         # whether we should split the train data among nodes
         self.all_nodes_all_train_data = self._config.get_or_else('all_nodes_all_train_data', False)
 
+        # if we want the train metadata to have the same length across nodes
+        self.same_train_metadata_length_nodes = self._config.get_or_else('same_train_metadata_length_nodes', True)
+
         # placeholder for the metadata
         self.metadata: Optional[pd.DataFrame] = None
         self.train_metadata: Optional[pd.DataFrame] = None
@@ -1672,6 +1675,18 @@ class MetadataSyncer(base.BaseWorker):
                     ]
                 # remove the extra training data
                 train_split_metadata = train_split_metadata[:self.dist_size]
+
+                # check that all train metadata have the same length
+                if self.same_train_metadata_length_nodes:
+                    md_lengths = [len(md) for md in train_split_metadata]
+                    if not all([size == md_lengths[0] for size in md_lengths[1:]]):
+                        self._log.error(
+                            f"the train metadata across nodes have different sizes:"
+                            f"\n\t - "
+                            + "\n\t - ".join([f"{node}: {size}" for node, size in enumerate(md_lengths)])
+                            + "\n"
+                        )
+                    return Err(RuntimeError("train metadata have different sizes"))
 
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
