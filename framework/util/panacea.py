@@ -77,6 +77,12 @@ class PanaceaBase(ABC):
 
         pass
 
+    @abstractmethod
+    def copy(self) -> PanaceaBase:
+        """Makes a shallow copy of self and returns it."""
+
+        pass
+
     # Getters
 
     @abstractmethod
@@ -479,6 +485,11 @@ class Panacea(PanaceaBase):
         final_parameters = {key: helper(value) for key, value in config_dict.items()}
 
         return final_parameters
+
+    def copy(self) -> PanaceaSubclass:
+        """Makes a shallow copy of self and returns it."""
+
+        return self.__class__(self.dict_representation())
 
     # Relations
 
@@ -1122,6 +1133,11 @@ class PanaceaLeaf(PanaceaBase):
         """
 
         return (self < other) or (self == other)
+
+    def copy(self) -> PanaceaLeafSubclass:
+        """Makes a shallow copy of self and returns it."""
+
+        return self.__class__(self._value)
 
     # Operations
 
