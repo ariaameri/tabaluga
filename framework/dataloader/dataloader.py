@@ -1798,7 +1798,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.modify_metadata(metadata)
+        self.metadata: pd.DataFrame = self.set_metadata(metadata)
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -1831,10 +1831,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         for worker in self.workers:
             worker.set_shared_multithreading_pool(pool)
 
-    def set_metadata(self, metadata: pd.DataFrame) -> None:
-        """Sets the internal metadata."""
+    def set_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """Sets the internal metadata and returns the same thing."""
 
-        self.metadata = self.modify_metadata(metadata)
+        metadata = self.metadata = self.modify_metadata(metadata)
+
+        return metadata
 
     def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
@@ -2115,7 +2117,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.modify_metadata(metadata)
+        self.metadata: pd.DataFrame = self.set_metadata(metadata)
 
         # Flag for if we should load the data with multithreading
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
@@ -2163,10 +2165,12 @@ class DataLoader(base.BaseEventWorker, ABC):
         # bookkeeping for iterator
         self._iterator_count = 0
 
-    def set_metadata(self, metadata: pd.DataFrame) -> None:
-        """Sets the internal metadata."""
+    def set_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """Sets the internal metadata and returns the same thing."""
 
-        self.metadata = self.modify_metadata(metadata)
+        metadata = self.metadata = self.modify_metadata(metadata)
+
+        return metadata
 
     def set_shared_multithreading_pool(self, pool: ThreadPoolExecutor):
         """
