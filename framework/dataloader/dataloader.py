@@ -2163,6 +2163,11 @@ class DataLoader(base.BaseEventWorker, ABC):
         # bookkeeping for iterator
         self._iterator_count = 0
 
+    def set_metadata(self, metadata: pd.DataFrame) -> None:
+        """Sets the internal metadata."""
+
+        self.metadata = self.modify_metadata(metadata)
+
     def set_shared_multithreading_pool(self, pool: ThreadPoolExecutor):
         """
         Sets the shared multithreading pool to be used for data loading
