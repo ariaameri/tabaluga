@@ -69,7 +69,8 @@ class DataManager(base.BaseEventManager, ABC):
         self._input_type: str = self._config.get_or_else('input_type', 'folder_path')
 
         # Get random seed and shuffle boolean
-        self._seed = self._config.get_or_else('seed', np.random.randint(0, 100000))
+        _seed = self._config.get_or_else('seed', None)
+        self._seed = _seed if _seed is not None else np.random.randint(0, 100000)
         self._shuffle: bool = self._config.get_or_else('shuffle.enabled', False)
         self._shuffle_add_node_rank: bool = self._config.get_or_else('shuffle.add_node_rank', True)
 
