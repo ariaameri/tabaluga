@@ -1798,10 +1798,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata = metadata
-
-        # Modify the metadata
-        self.modify_metadata()
+        self.metadata: pd.DataFrame = self.modify_metadata(metadata)
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -1834,16 +1831,23 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         for worker in self.workers:
             worker.set_shared_multithreading_pool(pool)
 
-    def modify_metadata(self) -> None:
+    def set_metadata(self, metadata: pd.DataFrame) -> None:
+        """Sets the internal metadata."""
+
+        self.metadata = self.modify_metadata(metadata)
+
+    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in self.metadata[metadata_columns['path']]]
+        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
 
         # Update the metadata
-        self.metadata = self.metadata.iloc[selection]
+        metadata = metadata.iloc[selection]
 
-    def _regroup_metadata(self, criterion=None, reset_index: bool = True) -> None:
+        return metadata
+
+    def _regroup_metadata(self, metadata: pd.DataFrame, criterion=None, reset_index: bool = True) -> pd.DataFrame:
         """Groups the metadata.
 
         Each group of data (e.g. containing data and label) should have.
@@ -1852,18 +1856,20 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         Parameters
         ----------
+        metadata : pd.DataFrame
+            metadata to use
         criterion : str or List[str]
             The name of the columns based on which the metadata should be categorized
         reset_index : bool, optional
-            Whether or not to reset the level-0 indexing to range. If not given, will reset
+            Whether to reset the level-0 indexing to range. If not given, will reset
 
         """
 
         if criterion is None:
-            return
+            return metadata
 
         # Group based on the criterion
-        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
+        metadata = metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
 
         # Rename the indices to be range
         # Also rename the index level 0 name to be 'index' (instead of criterion)
@@ -1874,7 +1880,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             )
             metadata.index.names = [None, *metadata.index.names[1:]]
 
-        self.metadata = metadata
+        return metadata
 
     def _check_file(self, file_path: str) -> bool:
         """"Helper function to check a single file.
