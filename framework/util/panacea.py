@@ -3426,20 +3426,35 @@ class Modification:
             }
 
             # Get the updates on \w*(\.\w+)+ update rules
+            # make the recursive panacea
+            modified_panacea_deep_dictionary = {}
+            for key, update in update_dict.get('field').items():
+
+                # skip
+                if '.' not in key:
+                    continue
+
+                # keep a record of changes and apply each change sequentially
+                # this is to guard for the cases where we are trying to update the following example scenarios:
+                # change AAA.BBB.CCC and AAA.BBB.DDD and we want both of them to take place and not just one
+                key_level0 = key.split('.')[0]
+                panacea_level0 = \
+                    modified_panacea_deep_dictionary.get(
+                        key_level0,
+                        panacea.get_option(key.split('.')[0]).get_or_else(panacea.__class__())
+                    )
+
+                modified_panacea_deep_dictionary[key_level0] = \
+                    self.update_self(
+                        key,
+                        panacea_level0,
+                        {'field': {key[(key.index('.') + 1):]: update}, '_special': {}}
+                    )[1]
+
             modified_panacea_deep_dictionary = {
                 key: value
                 for key, value
-                in
-                {
-                    key.split('.')[0]: self.update_self(
-                        key,
-                        panacea.get_option(key.split('.')[0]).get_or_else(panacea.__class__()),
-                        {'field': {key[(key.index('.') + 1):]: update}, '_special': {}}
-                    )[1]
-                    for key, update
-                    in update_dict.get('field').items()
-                    if '.' in key
-                }.items()
+                in modified_panacea_deep_dictionary.items()
                 if not value.is_empty()
             }
 
