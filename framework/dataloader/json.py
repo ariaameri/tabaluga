@@ -21,9 +21,6 @@ class JSONLoader(dataloader.DataLoader):
 
         super().__init__(metadata, config)
 
-        # Modify the metadata
-        self.modify_metadata()
-
     def load_single_data(self, row: pd.Series):
         """Helper method to load a single json.
 

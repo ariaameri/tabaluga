@@ -22,9 +22,6 @@ class ImageLoader(dataloader.DataLoader):
 
         super().__init__(metadata, config)
 
-        # Modify the metadata
-        self.modify_metadata()
-
     # def __str__(self):
     #     """Short explanation of the instance."""
     #

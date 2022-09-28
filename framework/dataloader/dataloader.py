@@ -2115,7 +2115,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = metadata
+        self.metadata: pd.DataFrame = self.modify_metadata(metadata)
 
         # Flag for if we should load the data with multithreading
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
@@ -2176,14 +2176,16 @@ class DataLoader(base.BaseEventWorker, ABC):
         if self.use_shared_multithreading:
             self.thread_pool = pool
 
-    def modify_metadata(self) -> None:
+    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in self.metadata[metadata_columns['path']]]
+        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
 
         # Update the metadata
-        self.metadata = self.metadata.iloc[selection]
+        metadata = metadata.iloc[selection]
+
+        return metadata
 
     def _check_file(self, file_path: str) -> bool:
         """"Helper function to check a single file.
