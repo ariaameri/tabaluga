@@ -69,7 +69,7 @@ class DataManager(base.BaseEventManager, ABC):
         self._input_type: str = self._config.get_or_else('input_type', 'folder_path')
 
         # Get random seed and shuffle boolean
-        self._seed = self._config.get_or_else('seed', None)
+        self._seed = self._config.get_or_else('seed', np.random.randint(0, 100000))
         self._shuffle: bool = self._config.get_or_else('shuffle.enabled', False)
         self._shuffle_add_node_rank: bool = self._config.get_or_else('shuffle.add_node_rank', True)
 
@@ -388,16 +388,15 @@ class DataManager(base.BaseEventManager, ABC):
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
         seed = self._seed
-        if self._seed is not None:
 
-            # add the given number
-            seed += rand_seed_add
+        # add the given number
+        seed += rand_seed_add
 
-            # add rank
-            if self._shuffle_add_node_rank is True:
-                seed += mpi.mpi_communicator.get_rank()
+        # add rank
+        if self._shuffle_add_node_rank is True:
+            seed += mpi.mpi_communicator.get_rank()
 
-            np.random.seed(seed)
+        np.random.seed(seed)
 
         # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
         # each metadata separately
@@ -430,8 +429,7 @@ class DataManager(base.BaseEventManager, ABC):
             self.test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
 
         # restore the random generator state
-        if self._seed is not None:
-            np.random.set_state(rng_state)
+        np.random.set_state(rng_state)
 
     def _shuffle_each_original_metadata(self, rand_seed_add: int = 0) -> None:
         """
