@@ -408,7 +408,8 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.train_metadata = self.train_metadata.loc[indices]
+            train_metadata = self.train_metadata.loc[indices]
+            self.train_metadata = MetadataManipulator.reset_level_0_indices(train_metadata)
 
         # shuffle val_metadata
         metadata_count = self.val_metadata.index.get_level_values(0).unique().size
@@ -416,7 +417,8 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.val_metadata = self.val_metadata.loc[indices]
+            val_metadata = self.val_metadata.loc[indices]
+            self.val_metadata = MetadataManipulator.reset_level_0_indices(val_metadata)
 
         # shuffle val_metadata
         metadata_count = self.test_metadata.index.get_level_values(0).unique().size
@@ -424,7 +426,8 @@ class DataManager(base.BaseEventManager, ABC):
             if self._shuffle is False \
             else np.random.permutation(metadata_count)
         if len(indices) > 0:
-            self.test_metadata = self.test_metadata.loc[indices]
+            test_metadata = self.test_metadata.loc[indices]
+            self.test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
 
         # restore the random generator state
         if self._seed is not None:
