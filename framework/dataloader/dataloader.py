@@ -104,6 +104,11 @@ class DataManager(base.BaseEventManager, ABC):
         if (res := self.create_metadata()).is_err():
             raise res.get_err()
         self.train_metadata, self.val_metadata, self.test_metadata = res.get()
+        if mpi.mpi_communicator.is_main_rank():
+            # if we are the main rank, keep a copy of the original metadata
+            self.test_metadata_original = self.test_metadata
+            self.val_metadata_original = self.val_metadata
+            self.train_metadata_original = self.train_metadata
 
         # Train, val, and test DataLoaderManager placeholders
         self.workers['train']: DataLoaderManager
@@ -115,12 +120,6 @@ class DataManager(base.BaseEventManager, ABC):
 
             # make a syncer to sync metadata among processes
             self._metadata_syncer: MetadataSyncer = MetadataSyncer(self._config.get_or_empty('metadata_syncer'))
-
-            if mpi.mpi_communicator.is_main_rank():
-                # if we are the main rank, keep a copy of the original metadata
-                self.test_metadata_original = self.test_metadata
-                self.val_metadata_original = self.val_metadata
-                self.train_metadata_original = self.train_metadata
 
             # now, sync the train/val/test metadata
             self.sync_train_val_test_metadata()
@@ -176,7 +175,9 @@ class DataManager(base.BaseEventManager, ABC):
 
             # if we have to shuffle, shuffle
             if self._shuffle is True:
-                self._shuffle_each_original_metadata(rand_seed_add=rand_seed_add)
+                self.train_metadata_original = self.shuffle_metadata(self.train_metadata_original, rand_seed_add)
+                self.val_metadata_original = self.shuffle_metadata(self.val_metadata_original, rand_seed_add)
+                self.test_metadata_original = self.shuffle_metadata(self.test_metadata_original, rand_seed_add)
 
             # now pass the metadata to the syncer
             self._metadata_syncer.set_train_val_test_metadata(
@@ -375,7 +376,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         return train_metadata, val_metadata, test_metadata
 
-    def shuffle_each_metadata(self, rand_seed_add: int = 0) -> None:
+    def shuffle_each_metadata_inplace(self, rand_seed_add: int = 0) -> None:
         """
         Shuffles each of the metadata separately.
 
@@ -386,111 +387,49 @@ class DataManager(base.BaseEventManager, ABC):
 
         """
 
+        self.train_metadata = self.shuffle_metadata(self.train_metadata, rand_seed_add)
+        self.val_metadata = self.shuffle_metadata(self.val_metadata, rand_seed_add)
+        self.test_metadata = self.shuffle_metadata(self.test_metadata, rand_seed_add)
+
+    def shuffle_metadata(self, metadata: pd.DataFrame, rand_seed_add: int = 0) -> pd.DataFrame:
+        """
+        Shuffles the given metadata if necessary
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            metadata to shuffle
+        rand_seed_add : int, optional
+            number to add with the random seed generator to have different random number generation each time
+
+        """
+
+        if self._shuffle is False:
+            return metadata
+
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
-        seed = self._seed
 
+        seed = self._seed + rand_seed_add
         # add the given number
         seed += rand_seed_add
-
         # add rank
         if self._shuffle_add_node_rank is True:
             seed += mpi.mpi_communicator.get_rank()
 
         np.random.seed(seed)
 
-        # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
-        # each metadata separately
-
-        # shuffle train_metadata
-        metadata_count = self.train_metadata.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
+        # shuffle the metadata
+        metadata_count = metadata.index.get_level_values(0).unique().size
+        indices = np.random.permutation(metadata_count)
         if len(indices) > 0:
-            train_metadata = self.train_metadata.loc[indices]
-            self.train_metadata = MetadataManipulator.reset_level_0_indices(train_metadata)
-
-        # shuffle val_metadata
-        metadata_count = self.val_metadata.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            val_metadata = self.val_metadata.loc[indices]
-            self.val_metadata = MetadataManipulator.reset_level_0_indices(val_metadata)
-
-        # shuffle val_metadata
-        metadata_count = self.test_metadata.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            test_metadata = self.test_metadata.loc[indices]
-            self.test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
+            metadata = metadata.loc[indices]
+            metadata = MetadataManipulator.reset_level_0_indices(metadata)
 
         # restore the random generator state
         np.random.set_state(rng_state)
 
-    def _shuffle_each_original_metadata(self, rand_seed_add: int = 0) -> None:
-        """
-        Shuffles each of the metadata separately.
-
-        Parameters
-        ----------
-        rand_seed_add : int, optional
-            number to add with the random seed generator to have different random number generation each time
-
-        """
-
-        # only shuffle if we are distributed and we are the main rank
-        if mpi.mpi_communicator.is_distributed() is False or mpi.mpi_communicator.is_main_rank() is False:
-            return
-
-        # store the previous state of the random generator and set the seed
-        rng_state = np.random.get_state()
-        seed = self._seed
-        if self._seed is not None:
-
-            # add the given number
-            seed += rand_seed_add
-
-            # add rank
-            if self._shuffle_add_node_rank is True:
-                seed += mpi.mpi_communicator.get_rank()
-
-            np.random.seed(seed)
-
-        # unfortunately, because python does not have referencing, we cannot iterate over values and have to shuffle
-        # each metadata separately
-
-        # shuffle train_metadata_original
-        metadata_count = self.train_metadata_original.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            self.train_metadata_original = self.train_metadata_original.loc[indices]
-
-        # shuffle val_metadata_original
-        metadata_count = self.val_metadata_original.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            self.val_metadata_original = self.val_metadata_original.loc[indices]
-
-        # shuffle val_metadata_original
-        metadata_count = self.test_metadata_original.index.get_level_values(0).unique().size
-        indices = np.arange(metadata_count) \
-            if self._shuffle is False \
-            else np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            self.test_metadata_original = self.test_metadata_original.loc[indices]
-
-        # restore the random generator state
-        if self._seed is not None:
-            np.random.set_state(rng_state)
+        return metadata
 
     def set_batch_size_report(self, batch_size: int) -> None:
         """Sets the batch size that is used for reporting.
