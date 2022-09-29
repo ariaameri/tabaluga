@@ -1672,7 +1672,7 @@ class MetadataSyncer(base.BaseWorker):
                             + "\n\t - ".join([f"{node}: {size}" for node, size in enumerate(md_lengths)])
                             + "\n"
                         )
-                    return Err(RuntimeError("train metadata have different sizes"))
+                        return Err(RuntimeError("train metadata have different sizes"))
 
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
