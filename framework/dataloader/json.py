@@ -21,7 +21,7 @@ class JSONLoader(dataloader.DataLoader):
 
         super().__init__(metadata, config)
 
-    def load_single_data(self, row: pd.Series):
+    def _load_single_data(self, row: pd.Series):
         """Helper method to load a single json.
 
         Parameters
@@ -40,7 +40,7 @@ class JSONLoader(dataloader.DataLoader):
 
         return the_json
 
-    def load_data_post(self, data: List) -> List:
+    def _load_data_post(self, data: List) -> List:
         """Reforms the json data already loaded into a list.
 
         Parameters

@@ -98,17 +98,17 @@ class DataManager(base.BaseEventManager, ABC):
         self.metadata_generator = self._build_metadata_generator()
 
         # Pandas data frame to hold the metadata of the data
-        self.test_metadata: pd.DataFrame
-        self.val_metadata: pd.DataFrame
         self.train_metadata: pd.DataFrame
-        if (res := self.create_metadata()).is_err():
+        self.val_metadata: pd.DataFrame
+        self.test_metadata: pd.DataFrame
+        if (res := self._create_metadata()).is_err():
             raise res.get_err()
         self.train_metadata, self.val_metadata, self.test_metadata = res.get()
-        if mpi.mpi_communicator.is_main_rank():
-            # if we are the main rank, keep a copy of the original metadata
-            self.test_metadata_original = self.test_metadata
-            self.val_metadata_original = self.val_metadata
-            self.train_metadata_original = self.train_metadata
+
+        # keep a copy of the original metadata
+        self.test_metadata_original = self.test_metadata
+        self.val_metadata_original = self.val_metadata
+        self.train_metadata_original = self.train_metadata
 
         # Train, val, and test DataLoaderManager placeholders
         self.workers['train']: DataLoaderManager
@@ -122,7 +122,10 @@ class DataManager(base.BaseEventManager, ABC):
             self._metadata_syncer: MetadataSyncer = MetadataSyncer(self._config.get_or_empty('metadata_syncer'))
 
             # now, sync the train/val/test metadata
-            self.sync_train_val_test_metadata()
+            if (res := self._sync_all_metadata_distributed()).is_err():
+                self._log.error(f"error while syncing the metadata with error of {res.get_err()}")
+                raise RuntimeError("error while syncing metadata")
+            self.train_metadata, self.val_metadata, self.test_metadata = res.get()
 
         # Create workers
         self.create_workers()
@@ -140,24 +143,30 @@ class DataManager(base.BaseEventManager, ABC):
                 self.thread_pool = ThreadPoolExecutor(
                     self._multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
                 )
-        self.distribute_shared_multithreading_pool()
+        self._distribute_shared_multithreading_pool()
 
         # set the batch sizes
         self.set_batch_size_report(self.batch_size_report)
         self.set_batch_size_effective(self._batch_size_effective)
 
-    def distribute_shared_multithreading_pool(self):
+    def _distribute_shared_multithreading_pool(self):
         """distributes the shared multithreading pool among all workers."""
 
         if self._multithreading:
-            for worker in self.workers:
+            for worker in self._get_dataloader_workers():
                 worker.set_shared_multithreading_pool(self.thread_pool)
+
+    @abstractmethod
+    def _get_dataloader_workers(self) -> List:
+        """Returns the list of workers that the shared multithreading pool can be set to."""
+
+        pass
 
     def get_syncer(self):
 
         return self._metadata_syncer
 
-    def sync_train_val_test_metadata(self, rand_seed_add: int = 0):
+    def _sync_all_metadata_distributed(self, rand_seed_add: int = 0) -> Result[Any, Exception]:
         """
         Syncs the metadata across processes.
 
@@ -166,29 +175,38 @@ class DataManager(base.BaseEventManager, ABC):
         rand_seed_add : int, optional
             number to add with the random seed generator to have different random number generation each time
 
+        Returns
+        -------
+        Result[(pd.DataFrame, pd.DataFrame, pd.DataFrame), Exception]
+            train/val/test metadata
         """
 
+        train_metadata_original = self.train_metadata_original
+        val_metadata_original = self.val_metadata_original
+        test_metadata_original = self.test_metadata_original
+
         if mpi.mpi_communicator.is_distributed() is False:
-            raise RuntimeError("not in distributed mode to sync train/val/test metadata.")
+            return Ok((train_metadata_original, val_metadata_original, test_metadata_original))
 
         if self._metadata_syncer.is_distributor():
 
             # if we have to shuffle, shuffle
             if self._shuffle is True:
-                self.train_metadata_original = self.shuffle_metadata(self.train_metadata_original, rand_seed_add)
-                self.val_metadata_original = self.shuffle_metadata(self.val_metadata_original, rand_seed_add)
-                self.test_metadata_original = self.shuffle_metadata(self.test_metadata_original, rand_seed_add)
+                train_metadata_original = self._shuffle_metadata(train_metadata_original, rand_seed_add)
+                val_metadata_original = self._shuffle_metadata(val_metadata_original, rand_seed_add)
+                test_metadata_original = self._shuffle_metadata(test_metadata_original, rand_seed_add)
 
             # now pass the metadata to the syncer
             self._metadata_syncer.set_train_val_test_metadata(
-                train_metadata=self.train_metadata_original,
-                validation_metadata=self.val_metadata_original,
-                test_metadata=self.test_metadata_original,
+                train_metadata=train_metadata_original,
+                validation_metadata=val_metadata_original,
+                test_metadata=test_metadata_original,
             )
 
         # get the metadata from the syncer
         if (res := self._metadata_syncer.sync_train_val_test_metadata()).is_err():
             self._log.error(f"error happened while syncing the metadata between nodes with error of {res.get_err()}")
+            return Err(RuntimeError("failed syncing metadata"))
         train_metadata, val_metadata, test_metadata = res.get()
 
         # reset the indices
@@ -196,9 +214,7 @@ class DataManager(base.BaseEventManager, ABC):
         val_metadata = MetadataManipulator.reset_level_0_indices(val_metadata)
         test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
 
-        self.train_metadata = train_metadata
-        self.val_metadata = val_metadata
-        self.test_metadata = test_metadata
+        return Ok((train_metadata, val_metadata, test_metadata))
 
     def _check_process_config(self) -> None:
         """Reconfigures the config file for this class."""
@@ -223,7 +239,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         return metadata_generator
 
-    def create_metadata(self) -> Result[Any, Exception]:
+    def _create_metadata(self) -> Result[Any, Exception]:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         train_metadata = val_metadata = test_metadata = None
@@ -231,7 +247,7 @@ class DataManager(base.BaseEventManager, ABC):
         if mpi.mpi_communicator.is_main_rank():
             # get the metadata
             metadata = self.metadata_generator.build_and_get_metadata()
-            metadata = self.modify_metadata(metadata)
+            metadata = self._modify_metadata(metadata)
             train_metadata, val_metadata, test_metadata = \
                 self._generate_train_val_test_metadata(metadata)
             train_metadata, val_metadata, test_metadata = \
@@ -248,7 +264,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         return Ok((train_metadata, val_metadata, test_metadata))
 
-    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Modifies the metadata that this instance holds."""
 
         metadata_manipulator = MetadataManipulator(metadata=metadata)
@@ -346,7 +362,7 @@ class DataManager(base.BaseEventManager, ABC):
         def process_df(new_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
             """Processes the new df and concats it with the old one and returns the result."""
 
-            new_df = self.modify_metadata(new_df)
+            new_df = self._modify_metadata(new_df)
             new_df = add_original_index(new_df)
             new_df = reindex(new_df, len(old_df.index.get_level_values(0).unique()))
             df = pd.concat([old_df, new_df])
@@ -376,7 +392,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         return train_metadata, val_metadata, test_metadata
 
-    def shuffle_each_metadata_inplace(self, rand_seed_add: int = 0) -> None:
+    def _shuffle_all_metadata(self, rand_seed_add: int = 0) -> None:
         """
         Shuffles each of the metadata separately.
 
@@ -387,11 +403,11 @@ class DataManager(base.BaseEventManager, ABC):
 
         """
 
-        self.train_metadata = self.shuffle_metadata(self.train_metadata, rand_seed_add)
-        self.val_metadata = self.shuffle_metadata(self.val_metadata, rand_seed_add)
-        self.test_metadata = self.shuffle_metadata(self.test_metadata, rand_seed_add)
+        self.train_metadata = self._shuffle_metadata(self.train_metadata, rand_seed_add)
+        self.val_metadata = self._shuffle_metadata(self.val_metadata, rand_seed_add)
+        self.test_metadata = self._shuffle_metadata(self.test_metadata, rand_seed_add)
 
-    def shuffle_metadata(self, metadata: pd.DataFrame, rand_seed_add: int = 0) -> pd.DataFrame:
+    def _shuffle_metadata(self, metadata: pd.DataFrame, rand_seed_add: int = 0) -> pd.DataFrame:
         """
         Shuffles the given metadata if necessary
 
@@ -431,6 +447,29 @@ class DataManager(base.BaseEventManager, ABC):
 
         return metadata
 
+    def sync_metadata(self, rand_seed_add: int = 0) -> None:
+        """
+        Does the necessary things to sync the metadata. Should be called at each epoch.
+
+        Parameters
+        ----------
+        rand_seed_add : int, optional
+            number to add with the random seed generator to have different random number generation each time
+
+        """
+
+        # first, sync all metadata across nodes in distributed mode
+        if (res := self._sync_all_metadata_distributed(rand_seed_add)).is_err():
+            self._log.error(f"error while syncing the metadata with error of {res.get_err()}")
+            raise RuntimeError("error while syncing metadata")
+        self.train_metadata, self.val_metadata, self.test_metadata = res.get()
+
+        # shuffle
+        self._shuffle_all_metadata(rand_seed_add)
+
+        # send the new metadata to all the workers
+        self._distribute_metadata_to_workers()
+
     def set_batch_size_report(self, batch_size: int) -> None:
         """Sets the batch size that is used for reporting.
 
@@ -444,7 +483,7 @@ class DataManager(base.BaseEventManager, ABC):
         self.batch_size_report = batch_size
 
         # Set batch size of all the workers
-        for worker in self.workers:
+        for worker in self._get_dataloader_workers():
             worker.set_batch_size_report(batch_size)
 
         self._log.info(f"batch size report set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
@@ -462,10 +501,16 @@ class DataManager(base.BaseEventManager, ABC):
         self._batch_size_effective = batch_size
 
         # Set batch size of all the workers
-        for worker in self.workers:
+        for worker in self._get_dataloader_workers():
             worker.set_batch_size_effective(batch_size)
 
         self._log.info(f"batch size effective set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
+
+    @abstractmethod
+    def _distribute_metadata_to_workers(self) -> None:
+        """distribute the metadata to workers."""
+
+        pass
 
 
 class MetadataManipulator(base.BaseWorker):
@@ -1456,9 +1501,9 @@ class FileSyncer(OnAndEnabled):
         if self._is_enabled_main_local_rank() and self.dist_size > 1:
 
             if self.distributor and metadata is None:
-                    return Err(
-                        RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
-                    )
+                return Err(
+                    RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
+                )
 
             # sync the whole metadata
             res: Result[pd.DataFrame, Exception] = self._sync_metadata(metadata)
@@ -1798,7 +1843,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.set_metadata(metadata)
+        self.metadata: pd.DataFrame = self.set_metadata(metadata, False)
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -1828,17 +1873,16 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         self._shared_multithreading_pool = pool
-        for worker in self.workers:
+        for worker in self._get_dataloader_workers():
             worker.set_shared_multithreading_pool(pool)
 
-    def set_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """Sets the internal metadata and returns the same thing."""
+    @abstractmethod
+    def _get_dataloader_workers(self) -> List:
+        """Returns the list of workers that the shared multithreading pool can be set to."""
 
-        metadata = self.metadata = self.modify_metadata(metadata)
+        pass
 
-        return metadata
-
-    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
@@ -1925,7 +1969,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         number_of_iterations_workers = []
 
         # Set batch size of all the workers and get their number_of_iterations
-        for worker in self.workers:
+        for worker in self._get_dataloader_workers():
             number_of_iterations_workers.append(worker.set_batch_size_report(batch_size))
 
         # Check if all the returned number of iterations are the same
@@ -1964,7 +2008,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         number_of_iterations_workers = []
 
         # Set batch size of all the workers and get their number_of_iterations
-        for worker in self.workers:
+        for worker in self._get_dataloader_workers():
             number_of_iterations_workers.append(worker.set_batch_size_effective(batch_size))
 
         # Set the number of iterations
@@ -2099,6 +2143,22 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         raise NotImplementedError
 
+    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> pd.DataFrame:
+        """Sets the internal metadata and returns the same thing."""
+
+        metadata = self.metadata = self._modify_metadata(metadata)
+
+        if distribute:
+            self._distribute_metadata_to_workers()
+
+        return metadata
+
+    @abstractmethod
+    def _distribute_metadata_to_workers(self) -> None:
+        """distribute the metadata to workers."""
+
+        pass
+
 
 class DataLoader(base.BaseEventWorker, ABC):
     """This abstract class loads the data."""
@@ -2168,7 +2228,7 @@ class DataLoader(base.BaseEventWorker, ABC):
     def set_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Sets the internal metadata and returns the same thing."""
 
-        metadata = self.metadata = self.modify_metadata(metadata)
+        metadata = self.metadata = self._modify_metadata(metadata)
 
         return metadata
 
@@ -2185,7 +2245,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         if self.use_shared_multithreading:
             self.thread_pool = pool
 
-    def modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
@@ -2335,7 +2395,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self.number_of_iterations_report
 
-    def load_data(self, metadata: pd.DataFrame):
+    def _load_data(self, metadata: pd.DataFrame):
         """Loads data provided in the metadata data frame.
 
         Parameters
@@ -2359,19 +2419,19 @@ class DataLoader(base.BaseEventWorker, ABC):
                 )
             # Load the data with threads
             data = list(
-                    self.thread_pool.map(lambda row: self.load_single_data(row[1]), metadata.iterrows())
+                    self.thread_pool.map(lambda row: self._load_single_data(row[1]), metadata.iterrows())
                 )
         else:
             data = [
-                self.load_single_data(row[1]) for row in metadata.iterrows()
+                self._load_single_data(row[1]) for row in metadata.iterrows()
             ]
 
-        data = self.load_data_post(data)
+        data = self._load_data_post(data)
 
         return data
 
     @abstractmethod
-    def load_single_data(self, row: pd.Series):
+    def _load_single_data(self, row: pd.Series):
         """Loads a single file whose path is given.
 
         Parameters
@@ -2388,7 +2448,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def load_data_post(self, data: List):
+    def _load_data_post(self, data: List):
         """Reforms the data already loaded into the desired format.
 
         Parameters
@@ -2404,7 +2464,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         raise NotImplementedError
 
-    def load_batch(self, item: int):
+    def _load_batch(self, item: int):
         """
         loads a batch and returns the result
 
@@ -2433,7 +2493,7 @@ class DataLoader(base.BaseEventWorker, ABC):
             metadata = pd.concat([metadata, metadata2])
 
         # Load the images
-        data = self.load_data(metadata)
+        data = self._load_data(metadata)
 
         return data
 
@@ -2465,7 +2525,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         # load the batches that are not already loaded
         new_data = {
-            str(loaded_data[0]): self.load_batch(loaded_data[0])
+            str(loaded_data[0]): self._load_batch(loaded_data[0])
             for loaded_data
             in already_loaded_data_option
             if loaded_data[1].is_empty()
@@ -2555,14 +2615,14 @@ class DataLoader(base.BaseEventWorker, ABC):
 
                 data = self._loaded_data\
                     .get_value_option(str(item))\
-                    .or_else(Some(item).map(lambda x: self.load_batch(x)))\
+                    .or_else(Some(item).map(lambda x: self._load_batch(x)))\
                     .get()
 
             # now, let the load ahead know
             self._w_data_load_ahead.send(item)
 
         else:
-            data = self.load_batch(item)
+            data = self._load_batch(item)
 
         return data
 

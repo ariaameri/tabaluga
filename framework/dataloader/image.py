@@ -29,7 +29,7 @@ class ImageLoader(dataloader.DataLoader):
     #
     #     return string
 
-    def load_single_data(self, row: pd.Series) -> np.ndarray:
+    def _load_single_data(self, row: pd.Series) -> np.ndarray:
         """Helper method to load a single image.
 
         Parameters
@@ -45,7 +45,7 @@ class ImageLoader(dataloader.DataLoader):
 
         return cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
 
-    def load_data_post(self, data: List) -> np.ndarray:
+    def _load_data_post(self, data: List) -> np.ndarray:
         """Reforms the image data already loaded into a numpy array.
 
         Parameters
