@@ -426,7 +426,7 @@ class DataManager(base.BaseEventManager, ABC):
         # store the previous state of the random generator and set the seed
         rng_state = np.random.get_state()
 
-        seed = self._seed + rand_seed_add
+        seed = self._seed
         # add the given number
         seed += rand_seed_add
         # add rank
@@ -574,7 +574,11 @@ class MetadataManipulator(base.BaseWorker):
             raise ValueError(f"part of criterion '{criterion}' does not exists as a metadata column.")
 
         # Group based on the criterion
-        metadata = self.metadata.groupby(criterion).apply(lambda x: x.reset_index(drop=True))
+        cols = list(self.metadata.columns)
+        metadata = \
+            self.metadata\
+                .groupby(criterion, sort=True)\
+                .apply(lambda x: x.sort_values(by=cols).reset_index(drop=True))
 
         # Rename the indices to be range
         # Also rename the index level 0 name to be 'index' (instead of `criterion`)
