@@ -3571,6 +3571,47 @@ class Modification:
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
 
+def str_to_filter_enum(item: str) -> Option[Union[Modification.Filter.Operations, Modification.Filter.Modifiers]]:
+
+    for op in Modification.Filter.Operations:
+        if op.value == item:
+            return Some(op)
+
+    for op in Modification.Filter.Modifiers:
+        if op.value == item:
+            return Some(op)
+
+    return nothing
+
+
+def str_to_update_enum(item: str) \
+        -> Option[
+            Union[Modification.Update.Operations, Modification.Update.Modifiers]
+        ]:
+
+    for op in Modification.Update.Operations:
+        if op.value == item:
+            return Some(op)
+
+    for op in Modification.Update.Modifiers:
+        if op.value == item:
+            return Some(op)
+
+    return nothing
+
+
+def str_to_conditional_enum(item: str) \
+        -> Option[
+            Union[Modification.Update.Conditionals]
+        ]:
+
+    for op in Modification.Update.Conditionals:
+        if op.value == item:
+            return Some(op)
+
+    return nothing
+
+
 # constants
 FILTER_OPERATIONS = FO = Modification.Filter.Operations
 FILTER_MODIFIERS = FM = Modification.Filter.Modifiers
