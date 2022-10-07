@@ -1904,6 +1904,7 @@ class Modification:
             SET_ONLY = '$set_only'
             SET_ON_INSERT = '$set_on_insert'
             UPDATE_ONLY = '$update_only'
+            UPDATE_ONLY_VALUE = '$update_only_value'
             UPDATE = '$update'
             RENAME = '$rename'
             INC = '$inc'
@@ -2043,6 +2044,8 @@ class Modification:
                     function = self._set_on_insert
                 elif single_operator == self.Operations.UPDATE_ONLY:
                     function = self._update_only
+                elif single_operator == self.Operations.UPDATE_ONLY_VALUE:
+                    function = self._update_only_value
                 elif single_operator == self.Operations.UPDATE:
                     function = self._update
                 elif single_operator == self.Operations.RENAME:
@@ -2296,6 +2299,52 @@ class Modification:
                 # if the value does not exist
                 if x.is_empty():
                     raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY}` does not exist!")
+
+                # the good case!
+                result = Some((key, value))
+
+                return result
+
+            return helper
+
+        def _update_only_value(self, value: Any) -> Callable[[str, Option], Some]:
+            """Wrapper function for updating a value on an Option value that does exist and is a leaf.
+
+            Parameters
+            ----------
+            value : Any
+                A value to update the Option value with.
+                    If Option value exists, i.e. it is a PanaceaBase, update its value
+                    If Option value does not exist, raise an error
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Some:
+                """Function to be called on an Option value, that has to be Some and a leaf, to update it.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value, which has to be Some
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the updated value
+
+                """
+
+                # if the value does not exist
+                if x.is_empty():
+                    raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY}` does not exist!")
+
+                if x.filter(lambda x: x.is_leaf()).is_empty():
+                    raise ValueError(f"The value '{key}' to `{self.Operations.UPDATE_ONLY_VALUE}` is not a value!")
 
                 # the good case!
                 result = Some((key, value))
