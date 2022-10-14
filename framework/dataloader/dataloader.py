@@ -2495,10 +2495,10 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Find the corresponding metadata
         begin_index = (item * self._batch_size_effective) % self._get_metadata_len()
         end_index = begin_index + self._batch_size_effective
-        metadata = self.metadata.iloc[begin_index:end_index]
+        metadata = self.metadata.loc[begin_index:(end_index-1)]
         if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
             remainder = self._batch_size_effective - (self._get_metadata_len() - 1 - begin_index)
-            metadata2 = self.metadata.iloc[:remainder]
+            metadata2 = self.metadata.loc[:(remainder-1)]
             metadata = pd.concat([metadata, metadata2])
 
         # Load the images
