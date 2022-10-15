@@ -1847,7 +1847,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.set_metadata(metadata, False)
+        self.metadata_original, self.metadata = self.set_metadata(metadata, False)
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -2147,15 +2147,16 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         raise NotImplementedError
 
-    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> pd.DataFrame:
+    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> (pd.DataFrame, pd.DataFrame):
         """Sets the internal metadata and returns the same thing."""
 
+        metadata_original = self.metadata_original = metadata
         metadata = self.metadata = self._modify_metadata(metadata)
 
         if distribute:
             self._distribute_metadata_to_workers()
 
-        return metadata
+        return metadata_original, metadata
 
     @abstractmethod
     def _distribute_metadata_to_workers(self) -> None:
