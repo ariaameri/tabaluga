@@ -1847,7 +1847,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.set_metadata(metadata, False)
+        self.metadata_original, self.metadata = self.set_metadata(metadata, False)
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -2147,15 +2147,16 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         raise NotImplementedError
 
-    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> pd.DataFrame:
+    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> (pd.DataFrame, pd.DataFrame):
         """Sets the internal metadata and returns the same thing."""
 
+        metadata_original = self.metadata_original = metadata
         metadata = self.metadata = self._modify_metadata(metadata)
 
         if distribute:
             self._distribute_metadata_to_workers()
 
-        return metadata
+        return metadata_original, metadata
 
     @abstractmethod
     def _distribute_metadata_to_workers(self) -> None:
@@ -2285,6 +2286,11 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return True
 
+    def _get_metadata_len(self) -> int:
+        """Finds and returns the length of metadata."""
+
+        return len(self.metadata)
+
     def set_batch_size_report(self, batch_size: int) -> int:
         """Sets the batch size and thus finds the total number of batches in one epoch.
 
@@ -2296,7 +2302,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         """
 
         self.batch_size_report = batch_size
-        self.number_of_iterations_report = len(self.metadata) // batch_size
+        self.number_of_iterations_report = self._get_metadata_len() // batch_size
 
         return self.number_of_iterations_report
 
@@ -2315,7 +2321,7 @@ class DataLoader(base.BaseEventWorker, ABC):
             raise RuntimeError('please first set the report batch size and then call this method')
 
         self._batch_size_effective = batch_size
-        self._number_of_iterations_effective = len(self.metadata) // batch_size
+        self._number_of_iterations_effective = self._get_metadata_len() // batch_size
 
         # set the wrap around
         if self._batch_size_effective > self.batch_size_report:
@@ -2488,12 +2494,12 @@ class DataLoader(base.BaseEventWorker, ABC):
             raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
 
         # Find the corresponding metadata
-        begin_index = (item * self._batch_size_effective) % len(self.metadata)
+        begin_index = (item * self._batch_size_effective) % self._get_metadata_len()
         end_index = begin_index + self._batch_size_effective
-        metadata = self.metadata.iloc[begin_index:end_index]
-        if end_index > len(self.metadata) - 1 and self._data_loading_wrap_around is True:
-            remainder = self._batch_size_effective - (len(self.metadata) - 1 - begin_index)
-            metadata2 = self.metadata.iloc[:remainder]
+        metadata = self.metadata.loc[begin_index:(end_index-1)]
+        if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
+            remainder = self._batch_size_effective - (self._get_metadata_len() - 1 - begin_index)
+            metadata2 = self.metadata.loc[:(remainder-1)]
             metadata = pd.concat([metadata, metadata2])
 
         # Load the images

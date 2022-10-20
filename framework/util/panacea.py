@@ -3466,7 +3466,7 @@ class Modification:
                 for item
                 in
                 [  # Process each of the parameters, results in Option value containing (key, value) pairs
-                    update(key, panacea.get_option(key))
+                    update(key, panacea.get_value_option(key))
                     for key, update
                     in update_dict.get('field').items()  # items that should select specific fields
                     if '.' not in key
