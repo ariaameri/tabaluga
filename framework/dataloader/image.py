@@ -45,7 +45,7 @@ class ImageLoader(dataloader.DataLoader):
 
         return cv2.cvtColor(cv2.imread(row['path']), cv2.COLOR_BGR2RGB)
 
-    def _load_data_post(self, data: List) -> np.ndarray:
+    def _load_data_post(self, data: List) -> List:
         """Reforms the image data already loaded into a numpy array.
 
         Parameters
@@ -55,11 +55,11 @@ class ImageLoader(dataloader.DataLoader):
 
         Returns
         -------
-        Loaded data in numpy array format
+        Loaded data itself
 
         """
 
-        return np.stack(data)
+        return data
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
