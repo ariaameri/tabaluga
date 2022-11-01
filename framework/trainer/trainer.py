@@ -416,6 +416,34 @@ class Trainer(base.BaseEventManager, ABC):
 
         raise NotImplementedError
 
+    def on_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # set the batch to be zero as we are just starting
+        self.batch = 0
+
+        super().on_epoch_begin()
+
+    def on_train_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # set the batch to be zero as we are just starting
+        self.batch = 0
+
+        super().on_train_epoch_begin()
+
+    def on_val_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # set the batch to be zero as we are just starting
+        self.batch = 0
+
+        super().on_val_epoch_begin()
+
+    def on_test_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # set the batch to be zero as we are just starting
+        self.batch = 0
+
+        super().on_test_epoch_begin()
+
     def signal_catcher(self, os_signal, frame):
         """Catches an OS signal and calls it on its workers."""
 
