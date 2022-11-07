@@ -2304,6 +2304,9 @@ class DataLoader(base.BaseEventWorker, ABC):
         self.batch_size_report = batch_size
         self.number_of_iterations_report = self._get_metadata_len() // batch_size
 
+        # reset the loaded data
+        self._loaded_data = DataMuncher()
+
         return self.number_of_iterations_report
 
     def set_batch_size_effective(self, batch_size: int) -> int:
@@ -2322,6 +2325,9 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         self._batch_size_effective = batch_size
         self._number_of_iterations_effective = self._get_metadata_len() // batch_size
+
+        # reset the loaded data
+        self._loaded_data = DataMuncher()
 
         # set the wrap around
         if self._batch_size_effective > self.batch_size_report:
