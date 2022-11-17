@@ -612,7 +612,7 @@ class MetadataManipulator(base.BaseWorker):
             )
 
     @staticmethod
-    def reset_level_0_indices(metadata: pd.DataFrame) -> pd.DataFrame:
+    def reset_level_0_indices(metadata: pd.DataFrame, offset: int = 0) -> pd.DataFrame:
         """
         Resets the level 0 indices to start from 0 and returns the result.
 
@@ -620,6 +620,8 @@ class MetadataManipulator(base.BaseWorker):
         ----------
         metadata : pd.DataFrame
             the data frame to reset the indices
+        offset : int
+            the offset for setting the index
 
         Returns
         -------
@@ -629,7 +631,7 @@ class MetadataManipulator(base.BaseWorker):
         """
 
         metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=0)},
+            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=offset)},
             level=0,
         )
 
