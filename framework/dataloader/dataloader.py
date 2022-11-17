@@ -2480,7 +2480,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         raise NotImplementedError
 
-    def _load_batch(self, item: int):
+    def load_batch(self, item: int):
         """
         loads a batch and returns the result
 
@@ -2541,7 +2541,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         # load the batches that are not already loaded
         new_data = {
-            str(loaded_data[0]): self._load_batch(loaded_data[0])
+            str(loaded_data[0]): self.load_batch(loaded_data[0])
             for loaded_data
             in already_loaded_data_option
             if loaded_data[1].is_empty()
@@ -2631,14 +2631,14 @@ class DataLoader(base.BaseEventWorker, ABC):
 
                 data = self._loaded_data\
                     .get_value_option(str(item))\
-                    .or_else(Some(item).map(lambda x: self._load_batch(x)))\
+                    .or_else(Some(item).map(lambda x: self.load_batch(x)))\
                     .get()
 
             # now, let the load ahead know
             self._w_data_load_ahead.send(item)
 
         else:
-            data = self._load_batch(item)
+            data = self.load_batch(item)
 
         return data
 
