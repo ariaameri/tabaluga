@@ -2513,6 +2513,35 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return data
 
+    def load_batch_size_1(self, item: int):
+        """
+        loads a batch with batch size of 1 and returns the result, which is a single element
+
+        Parameters
+        ----------
+        item : int
+            batch number
+
+        Returns
+        -------
+        result
+
+        """
+
+        # Check if item count is sensible
+        if item >= self._get_metadata_len():
+            raise RuntimeError(f'Requested number of batch to be loaded goes beyond the end of available data.')
+
+        # Find the corresponding metadata
+        begin_index = item % self._get_metadata_len()
+        end_index = begin_index + 1
+        metadata = self.metadata.loc[begin_index:(end_index-1)]
+
+        # Load the images
+        data = self._load_data(metadata)
+
+        return data
+
     def _load_ahead_batches(self, batches: List[int]) -> None:
         """
         loads the batches given as input and stores them. This method is used in the look ahead loading.
