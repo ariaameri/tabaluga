@@ -2373,6 +2373,18 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self.batch_size_report
 
+    def get_number_of_iterations_batch_size_1(self) -> int:
+        """
+        Returns the number of iterations if we were to use batch size 1.
+
+        Returns
+        -------
+        int
+            number of iterations
+        """
+
+        return self._get_metadata_len()
+
     def get_number_of_iterations(self) -> int:
         """
         Returns the number of iterations.
