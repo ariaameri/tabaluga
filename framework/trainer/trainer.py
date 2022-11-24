@@ -46,6 +46,7 @@ class Trainer(base.BaseEventManager, ABC):
         self.number_of_iterations: int = -1  # Has to be set by the data loader
         self.batch_size: int = -1  # Has to be set by the data loader
         self.epoch: int = 0
+        self.iter_num: int = 0
         self.batch: int = 0
 
         # Set placeholders for the train and validation data
@@ -223,6 +224,9 @@ class Trainer(base.BaseEventManager, ABC):
         self.train_epoch_info = []
 
         for self.batch in range(self.number_of_iterations):
+
+            if self.batch != 0:
+                self.iter_num += 1
 
             self.on_batch_begin()
             self.on_train_batch_begin()
@@ -420,6 +424,7 @@ class Trainer(base.BaseEventManager, ABC):
 
         # set the batch to be zero as we are just starting
         self.batch = 0
+        self.iter_num += 1
 
         super().on_epoch_begin()
 
