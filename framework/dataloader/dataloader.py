@@ -79,6 +79,7 @@ class DataManager(base.BaseEventManager, ABC):
         self._val_ratio: float = self._config.get_or_else('val_ratio', 0)
 
         # Set batch size
+        # this batch size the current batch size used
         self.batch_size_report: int = self._config.get('batch_size')
         # have another batch size to use for loading the actual data with
         # this is because sometimes we want to set the number of iterations with one batch size, `batch_size_report`
@@ -93,6 +94,12 @@ class DataManager(base.BaseEventManager, ABC):
                            f"{colored.fg('cyan')}{self.batch_size_report}{colored.attr('reset')} "
                            f"while performing data loading with batch size of "
                            f"{colored.fg('cyan')}{self._batch_size_effective}{colored.attr('reset')}")
+        # bookkeeping for the training batch size
+        self._batch_size_report_train: int = self.batch_size_report
+        self._batch_size_effective_train: int = self._batch_size_effective
+        # bookkeeping for the val/test batch size
+        self._batch_size_effective_val: int = self._config.get_or_else('batch_size_val', None)
+        self._batch_size_effective_test: int = self._config.get_or_else('batch_size_test', None)
 
         # build the metadata generator
         self.metadata_generator = self._build_metadata_generator()
