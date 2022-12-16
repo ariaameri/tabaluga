@@ -471,15 +471,17 @@ class Panacea(PanaceaBase):
             return out
 
         # checking for validity
-        for item in config_dict.keys():
+        for item in list(config_dict.keys()):
 
             # check if the key is string
             if not isinstance(item, str):
                 raise ValueError(f'cannot have a key of {item}, keys have to be strings')
 
-            # check that the names do not contain `.`s
-            if '.' in item:
-                raise ValueError(f'cannot have a key of name {item}: key elements cannot have `.` in their names')
+            # recursively create the keys with .'s
+            if (idx := item.find('.')) != (-1):
+                key = item[:idx]
+                config_dict[key] = self.__class__({item[(idx+1):]: config_dict[item]})
+                del config_dict[item]
 
         # Create the dictionary of parameters
         final_parameters = {key: helper(value) for key, value in config_dict.items()}
