@@ -509,6 +509,9 @@ class Logger:
             f'{colored.attr("reset")}' \
             f'{msg}'
 
+        # indent with 9 extra spaces to take care of 'warning: '
+        warning_message = self._indenter(warning_message, 9)
+
         self._logger.warning(warning_message)
 
     def error(self, msg: str) -> None:
