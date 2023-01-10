@@ -820,6 +820,32 @@ class Panacea(PanaceaBase):
 
         return list(self._parameters.values())
 
+    def get_branch_keys(self) -> List[str]:
+        """
+        Returns the keys in this instance that are branches.
+
+        Returns
+        -------
+        List[str]
+            list of all the branch keys
+
+        """
+
+        return [i for i in self._parameters.keys() if self._parameters[i].is_branch()]
+
+    def get_leaf_keys(self) -> List[str]:
+        """
+        Returns the keys in this instance that are leaf.
+
+        Returns
+        -------
+        List[str]
+            list of all the leaf keys
+
+        """
+
+        return [i for i in self._parameters.keys() if self._parameters[i].is_leaf()]
+
     # Modifications
 
     def reduce(self, function: Callable[[Any, Any], Any]) -> Any:
