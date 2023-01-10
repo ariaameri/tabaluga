@@ -611,12 +611,24 @@ class MetadataManipulator(base.BaseWorker):
         elif length == 1:
             self._log.info(f"data bundles contain {length} elements each")
         else:
-            "\n\t- ".join([f"{k}: {v}" for k, v in count.items()])
-            self._log.warning(
-                "data bundles contain different amount of elements. I found:"
-                + "\n\t (bundle size) (count)"
-                + "\n\t- " + "\n\t- ".join([f"{k}: {v}" for k, v in count.items()]) + "\n"
-            )
+            warn = \
+                "data bundles contain different amount of elements. I found:" \
+                "\n\t (bundle size) (count)" \
+                "\n\t\t (sample)"
+            for c, v in count.items():
+                warn += f"\n\t- {c}: {v}"
+                # get the elements that have c counts
+                c_keys = [k for k, v in idx_0_to_1_count.items() if v == c][:10]
+                # sample them
+                sample_df_str = str(metadata.loc[c_keys])
+                from tabaluga.framework.util.util import REGEX_INDENT_NEW_LINE_ONLY
+                sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
+
+                warn += f"\n\t\t {sample_df_str}"
+
+            warn += "\n"
+
+            self._log.warning(warn)
 
     @staticmethod
     def reset_level_0_indices(metadata: pd.DataFrame, offset: int = 0) -> pd.DataFrame:
@@ -1666,6 +1678,10 @@ class MetadataSyncer(base.BaseWorker):
                         for start_idx
                         in range(0, train_zero_level_indices.size, chunk_size)
                     ]
+                from collections import Counter
+                print(Counter(self.train_metadata.index.get_level_values(1)))
+                for i in train_split_indices:
+                    print(len(i))
                 train_split_metadata = \
                     [
                         self.train_metadata.loc[chunk_indices]
@@ -1674,6 +1690,10 @@ class MetadataSyncer(base.BaseWorker):
                     ]
                 # remove the extra training data
                 train_split_metadata = train_split_metadata[:self.dist_size]
+
+                for i in train_split_metadata:
+                    from collections import Counter
+                    print(Counter(i.index.get_level_values(1)))
 
                 # check that all train metadata have the same length
                 if self.same_train_metadata_length_nodes:
