@@ -1505,6 +1505,7 @@ class Modification:
             SELF = '_self'
             BC = '_bc'
             KEYNAME = '_key_name'
+            DUMMY = '_dummy'
 
         def __init__(self, query: Dict):
             """Initializer to the class which will parse the query and create the corresponding actions.
@@ -3235,6 +3236,13 @@ class Modification:
                 .get(self.Filter.Modifiers.KEYNAME) \
                 .filter(Some(bc.split('.')[-1])) \
                 if filter_dict.get('_special').get(self.Filter.Modifiers.KEYNAME) is not None \
+                else True
+        satisfied &= \
+            filter_dict \
+                .get('_special') \
+                .get(self.Filter.Modifiers.DUMMY) \
+                .filter(Some(panacea)) \
+                if filter_dict.get('_special').get(self.Filter.Modifiers.DUMMY) is not None \
                 else True
 
         # For special item '_value', `panacea` has to be a leaf
