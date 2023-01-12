@@ -555,7 +555,7 @@ class Panacea(PanaceaBase):
     def contains_key(self, key: str) -> bool:
         """Check if the given `key` exists as a name of a parameter in the shallowest level of the instance."""
 
-        return key in self._parameters.keys()
+        return self.get_value_option(key).is_defined()
 
     def exists(self, func: FunctionType) -> bool:
         """Checks if the function `func` holds true for any of the internal parameters."""
