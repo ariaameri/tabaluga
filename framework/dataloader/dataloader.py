@@ -614,19 +614,25 @@ class MetadataManipulator(base.BaseWorker):
             warn = \
                 "data bundles contain different amount of elements. I found:" \
                 "\n\t (bundle size) (count)" \
-                "\n\t\t (sample)"
+                "\n\t\t (samples' path)"
+            # get the pd max_colwidth and set it to something big
+            pd_max_col_width = pd.get_option('display.max_colwidth')
+            pd.set_option('display.max_colwidth', 1000)
             for c, v in count.items():
                 warn += f"\n\t- {c}: {v}"
                 # get the elements that have c counts
                 c_keys = [k for k, v in idx_0_to_1_count.items() if v == c][:10]
                 # sample them
-                sample_df_str = str(metadata.loc[c_keys])
+                sample_df_str = str(metadata.loc[c_keys][metadata_columns['path']])
                 from tabaluga.framework.util.util import REGEX_INDENT_NEW_LINE_ONLY
                 sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
 
                 warn += f"\n\t\t {sample_df_str}"
 
             warn += "\n"
+
+            # revert pandas setting
+            pd.set_option('display.max_colwidth', pd_max_col_width)
 
             self._log.warning(warn)
 
