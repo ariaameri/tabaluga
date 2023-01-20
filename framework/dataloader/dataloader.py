@@ -2342,6 +2342,12 @@ class DataLoader(base.BaseEventWorker, ABC):
         # reset the loaded data
         self._loaded_data = DataMuncher()
 
+        # set the wrap around
+        if self._batch_size_effective > self.batch_size_report:
+            self._data_loading_wrap_around = True
+        else:
+            self._data_loading_wrap_around = False
+
         return self.number_of_iterations_report
 
     def set_batch_size_effective(self, batch_size: int) -> int:
@@ -2367,6 +2373,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         # set the wrap around
         if self._batch_size_effective > self.batch_size_report:
             self._data_loading_wrap_around = True
+        else:
+            self._data_loading_wrap_around = False
 
         return self._number_of_iterations_effective
 
