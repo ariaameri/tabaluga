@@ -52,7 +52,7 @@ class LogHug(DataMuncher):
 
         return out_string
 
-    def str_representation(self, name: str, depth: int = -1) -> str:
+    def str_representation(self, name: str, depth: int = -1, keys_only: bool = False) -> str:
         """Helper function to create a string representation of the instance.
 
         Parameters
@@ -61,6 +61,8 @@ class LogHug(DataMuncher):
             The name of the current instance
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         Returns
         -------
@@ -82,14 +84,14 @@ class LogHug(DataMuncher):
         # First process the leaves and then the branches
         out_substring = \
             ''.join(
-                item.str_representation(name=key, depth=depth-1)
+                item.str_representation(name=key, depth=depth-1, keys_only=keys_only)
                 for key, item
                 in sorted(self._parameters.items())
                 if item.is_leaf()
             ) \
             + \
             ''.join(
-                item.str_representation(name=key, depth=depth-1)
+                item.str_representation(name=key, depth=depth-1, keys_only=keys_only)
                 for key, item
                 in sorted(self._parameters.items())
                 if item.is_branch()

@@ -29,13 +29,15 @@ class PanaceaBase(ABC):
     # Representation
 
     @abstractmethod
-    def print(self, depth: int = -1) -> None:
+    def print(self, depth: int = -1, keys_only: bool = False) -> None:
         """Print the configuration up to certain depth.
 
         Parameters
         ----------
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         """
 
@@ -54,7 +56,7 @@ class PanaceaBase(ABC):
         pass
 
     @abstractmethod
-    def str_representation(self, name: str, depth: int = -1) -> str:
+    def str_representation(self, name: str, depth: int = -1, keys_only: bool = False) -> str:
         """Helper function to create a string representation of the instance.
 
         Parameters
@@ -63,6 +65,8 @@ class PanaceaBase(ABC):
             The name of the current instance
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         Returns
         -------
@@ -577,17 +581,19 @@ class Panacea(PanaceaBase):
 
         return out_string
 
-    def print(self, depth: int = -1) -> None:
+    def print(self, depth: int = -1, keys_only: bool = False) -> None:
         """Print the configuration up to certain depth.
 
         Parameters
         ----------
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         """
 
-        print(self.str_representation(depth=depth, name=''))
+        print(self.str_representation(depth=depth, name='', keys_only=keys_only))
 
     def dict_representation(self) -> Dict:
         """Method to help with visualization of the configurations.
@@ -603,7 +609,7 @@ class Panacea(PanaceaBase):
 
         return out
 
-    def str_representation(self, name: str, depth: int = -1) -> str:
+    def str_representation(self, name: str, depth: int = -1, keys_only: bool = False) -> str:
         """Helper function to create a string representation of the instance.
 
         Parameters
@@ -612,6 +618,8 @@ class Panacea(PanaceaBase):
             The name of the current instance
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         Returns
         -------
@@ -632,7 +640,7 @@ class Panacea(PanaceaBase):
         # Create the string from all the children
         out_substring = \
             ''.join(
-                item.str_representation(name=key, depth=depth-1)
+                item.str_representation(name=key, depth=depth-1, keys_only=keys_only)
                 for key, item
                 in
                 # first print the leaves and then the branches
@@ -1238,17 +1246,19 @@ class PanaceaLeaf(PanaceaBase):
 
     # Representation
 
-    def print(self, depth: int = -1) -> None:
+    def print(self, depth: int = -1, keys_only: bool = False) -> None:
         """Print the configuration up to certain depth.
 
         Parameters
         ----------
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         """
 
-        print(self.str_representation(depth=depth, name=''))
+        print(self.str_representation(depth=depth, name='', keys_only=keys_only))
 
     def __str__(self) -> str:
         """Method to help with the visualization of the configuration in YAML style."""
@@ -1271,7 +1281,7 @@ class PanaceaLeaf(PanaceaBase):
 
         return result
 
-    def str_representation(self, name: str, depth: int = -1) -> str:
+    def str_representation(self, name: str, depth: int = -1, keys_only: bool = False) -> str:
         """Helper function to create a string representation of the instance.
 
         Parameters
@@ -1280,6 +1290,8 @@ class PanaceaLeaf(PanaceaBase):
             The name of the current instance
         depth : int, optional
             The depth until which the string representation should go down the configuration
+        keys_only : bool, optional
+            whether to print the keys and not the values of the leaves
 
         Returns
         -------
@@ -1294,7 +1306,7 @@ class PanaceaLeaf(PanaceaBase):
         out_string = self._identity_str_representation(name)
 
         # Check if we should go any further deep
-        if depth == 1:
+        if depth == 1 or keys_only:
             return out_string + f'\n'
 
         out_string += f'{self.after_item_symbol()} '
