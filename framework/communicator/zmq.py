@@ -1,5 +1,5 @@
-from typing import Union, Any, Optional, List, Callable
-
+import json
+from typing import Union, Any, Optional, List, Callable, Dict
 from ..base.base import BaseWorker
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
@@ -46,6 +46,7 @@ class ZMQInternalPubSub(BaseWorker):
             daemon=True,
         )
         thread.start()
+        self._log.info("zmq internal server started")
 
         return context, xpub, xsub
 
@@ -108,7 +109,7 @@ class ZMQInternalPubSub(BaseWorker):
 
         return pub, sub
 
-    def pub(self, topic: str, data: Union[bytes, str]) -> Result[Optional[zmq.MessageTracker], BaseException]:
+    def pub(self, topic: str, data: Union[bytes, str, Dict]) -> Result[Optional[zmq.MessageTracker], BaseException]:
         """
         Publishes the data to the topic.
 
@@ -116,8 +117,8 @@ class ZMQInternalPubSub(BaseWorker):
         ----------
         topic : str
             topic to publish to
-        data : Union[bytes, str]
-            data in form of str or bytes
+        data : Union[bytes, str, Dict]
+            data in form of str, dict, or bytes
 
         Returns
         -------
@@ -125,8 +126,18 @@ class ZMQInternalPubSub(BaseWorker):
 
         """
 
+        if isinstance(data, dict):
+            res = Result.from_func(json.dumps, data)
+            if res.is_err():
+                return res
+            else:
+                data = res.get()
         if isinstance(data, str):
-            data = data.encode('utf8')
+            res = Result.from_func(data.encode, 'utf8')
+            if res.is_err():
+                return res
+            else:
+                data = res.get()
         elif not isinstance(data, bytes):
             return Err(ValueError("input value type not accepted"))
 
