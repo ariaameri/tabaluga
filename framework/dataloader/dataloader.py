@@ -1688,10 +1688,6 @@ class MetadataSyncer(base.BaseWorker):
                         for start_idx
                         in range(0, train_zero_level_indices.size, chunk_size)
                     ]
-                from collections import Counter
-                print(Counter(self.train_metadata.index.get_level_values(1)))
-                for i in train_split_indices:
-                    print(len(i))
                 train_split_metadata = \
                     [
                         self.train_metadata.loc[chunk_indices]
@@ -1700,10 +1696,6 @@ class MetadataSyncer(base.BaseWorker):
                     ]
                 # remove the extra training data
                 train_split_metadata = train_split_metadata[:self.dist_size]
-
-                for i in train_split_metadata:
-                    from collections import Counter
-                    print(Counter(i.index.get_level_values(1)))
 
                 # check that all train metadata have the same length
                 if self.same_train_metadata_length_nodes:
