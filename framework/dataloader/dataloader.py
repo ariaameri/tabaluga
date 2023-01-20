@@ -580,12 +580,16 @@ class MetadataManipulator(base.BaseWorker):
         elif isinstance(criterion, list) and any([(c not in self.metadata.columns) for c in criterion]):
             raise ValueError(f"part of criterion '{criterion}' does not exists as a metadata column.")
 
-        # Group based on the criterion
-        cols = list(self.metadata.columns)
-        metadata = \
-            self.metadata\
-                .groupby(criterion, sort=True)\
-                .apply(lambda x: x.sort_values(by=cols).reset_index(drop=True))
+        new_indices = []
+        new_indices_count = {}
+        for k in self.metadata[criterion]:
+            n = new_indices_count.get(k, 0)
+            new_indices_count[k] = n + 1
+            new_indices.append((k, n))
+        metadata = self.metadata.copy(True)
+        metadata.index = pd.MultiIndex.from_tuples(new_indices)
+        # sort the indices
+        metadata = metadata.loc[metadata.index.sort_values()]
 
         # Rename the indices to be range
         # Also rename the index level 0 name to be 'index' (instead of `criterion`)
