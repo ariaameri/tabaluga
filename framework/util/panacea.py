@@ -3221,7 +3221,7 @@ class Modification:
 
         # Check if all filter's field items are satisfied
         for key, filter in filter_dict.get('field').items():
-            satisfied &= filter.filter(panacea.get_option(key))
+            satisfied &= filter.filter(panacea.get_value_option(key))
 
             # If filter is not satisfied, return false
             if satisfied is False:
