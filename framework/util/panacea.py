@@ -1624,7 +1624,7 @@ class Modification:
 
             return function_list
 
-        def filter(self, x: Option) -> bool:
+        def filter(self, x: Option, *args, **kwargs) -> bool:
             """Method to perform the filtering on an Option value.
 
             This filtering is based on the query given in the constructor.
@@ -1641,7 +1641,7 @@ class Modification:
             """
 
             # Perform all the filtering on the current item
-            filter_list = [func(x) for func in self._function_list]
+            filter_list = [func(x, *args, **kwargs) for func in self._function_list]
 
             # Check if all the filters are satisfied
             satisfied = all(filter_list)
@@ -1662,7 +1662,7 @@ class Modification:
 
             """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Function to be called on an Option value to apply an internal function.
 
                 Parameters
@@ -1703,7 +1703,7 @@ class Modification:
 
             """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not Option x has an element.
 
                 Parameters
@@ -1738,7 +1738,7 @@ class Modification:
 
                """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not a regex satisfies the Option x element.
 
                 Parameters
@@ -1778,7 +1778,7 @@ class Modification:
 
                """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not a regex satisfies the Option x element.
 
                 Parameters
@@ -1818,7 +1818,7 @@ class Modification:
 
             """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not Option x is equal to `value`.
 
                 Parameters
@@ -1857,7 +1857,7 @@ class Modification:
 
             """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not Option x satisfies or of some operators.
 
                 Parameters
@@ -1877,9 +1877,8 @@ class Modification:
                 # Check all the criteria sequentially
                 for criterion in modifiers:
 
-                    # TODO: '_bc' does not work, fix it!
                     # If any of the results is true, the whole thing is true
-                    if criterion.filter_check_self(panacea, '') is True:
+                    if criterion.filter_check_self(panacea, kwargs['bc']) is True:
                         return True
 
                 return False
@@ -1903,7 +1902,7 @@ class Modification:
 
             """
 
-            def helper(x: Option) -> bool:
+            def helper(x: Option, *args, **kwargs) -> bool:
                 """Helper function to decide whether or not Option x satisfies and of some operators.
 
                 Parameters
@@ -1923,9 +1922,8 @@ class Modification:
                 # Check all the criteria sequentially
                 for criterion in modifiers:
 
-                    # TODO: '_bc' does not work, fix it!
                     # If any of the results is false, the whole thing is false
-                    if criterion.filter_check_self(panacea, '') is False:
+                    if criterion.filter_check_self(panacea, kwargs['bc']) is False:
                         return False
 
                 return True
@@ -3253,7 +3251,7 @@ class Modification:
             filter_dict \
                 .get('_special') \
                 .get(self.Filter.Modifiers.DUMMY) \
-                .filter(Some(panacea)) \
+                .filter(Some(panacea), bc=bc) \
                 if filter_dict.get('_special').get(self.Filter.Modifiers.DUMMY) is not None \
                 else True
 
