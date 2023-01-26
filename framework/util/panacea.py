@@ -484,7 +484,11 @@ class Panacea(PanaceaBase):
             # recursively create the keys with .'s
             if (idx := item.find('.')) != (-1):
                 key = item[:idx]
-                config_dict[key] = self.__class__({item[(idx+1):]: config_dict[item]})
+                if key in config_dict:
+                    config_dict[key] = \
+                        config_dict[key].update({}, {UO.SET: {item[(idx+1):]: config_dict[item]}}, {UC.RECURSIVE: True})
+                else:
+                    config_dict[key] = self.__class__({item[(idx+1):]: config_dict[item]})
                 del config_dict[item]
 
         # Create the dictionary of parameters
