@@ -346,7 +346,7 @@ class BackgroundToColor(Process):
         # Set the new channel to be filled
         self.new_channel = self._config.get_or_else('new_channel', -1)
 
-    def process(self, data: np.ndarray) -> np.ndarray:
+    def process(self, data: List[np.ndarray]) -> List[np.ndarray]:
         """"Converts background pixels containing all zeros to 255 in some channel
 
         In other words:
@@ -368,15 +368,20 @@ class BackgroundToColor(Process):
 
         """
 
-        # Find the background pixels
-        background = np.all(data == 0, axis=self.axis)
+        out = []
 
-        # Fill the background with 255
-        output = data.copy()
-        dim_count = len(output.shape)
-        prefix_count = self.axis if self.axis >= 0 else (dim_count + self.axis)
-        suffix_count = dim_count - 1 - prefix_count
-        output[(slice(None),) * prefix_count + (self.new_channel,) + (slice(None),) * suffix_count] \
-            = background * 255
+        for image in data:
+            # Find the background pixels
+            background = np.all(image == 0, axis=self.axis)
 
-        return output
+            # Fill the background with 255
+            output = image.copy()
+            dim_count = len(output.shape)
+            prefix_count = self.axis if self.axis >= 0 else (dim_count + self.axis)
+            suffix_count = dim_count - 1 - prefix_count
+            output[(slice(None),) * prefix_count + (self.new_channel,) + (slice(None),) * suffix_count] \
+                = background * 255
+
+            out.append(output)
+
+        return out
