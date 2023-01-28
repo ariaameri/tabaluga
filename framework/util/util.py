@@ -9,6 +9,7 @@ from tabaluga.framework.util.result import Result
 
 REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
+REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 
 
 class EventMode(Enum):
