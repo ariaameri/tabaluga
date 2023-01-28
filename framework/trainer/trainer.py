@@ -1,3 +1,4 @@
+import uuid
 from ..base import base
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
@@ -12,6 +13,7 @@ import signal
 import sys
 import os
 import traceback
+from ..util.result import Result, Ok
 
 BATCH_STRING = 'batch'
 EPOCH_STRING = 'epoch'
@@ -37,6 +39,13 @@ class Trainer(base.BaseEventManager, ABC):
         #     mpi.mpi_communicator = mpi.init_with_config(config.get_or_empty("mpi"))
 
         super().__init__(config)
+
+        # make an id for this run
+        res = self._make_run_id()
+        if res.is_err():
+            self._log.error(f"error while generating run id with error of '{res.get_err()}'")
+            raise RuntimeError("error in run id generation")
+        self.run_id: uuid.UUID = res.get()
 
         # initialize the console handler
         self._console_handler.activate()
@@ -78,6 +87,25 @@ class Trainer(base.BaseEventManager, ABC):
 
         # Register exception hook to be caught
         self._register_exception_hook()
+
+    @staticmethod
+    def _make_run_id() -> Result[uuid.UUID, Exception]:
+        """
+        Makes and returns a run id that is shared among all workers.
+
+        Returns
+        -------
+        Result[uuid.UUID, Exception]
+
+        """
+
+        run_id: Result[uuid.UUID, Exception] = Ok(uuid.uuid4())
+
+        from ..communicator.mpi import mpi_communicator
+        if mpi_communicator.is_distributed():
+            run_id = mpi_communicator.collective_bcast(run_id.get())
+
+        return run_id
 
     def _set_communicator_configs(self, config: ConfigParser):
         """Sets the configurations for the communicators."""
