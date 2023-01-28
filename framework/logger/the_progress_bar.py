@@ -97,7 +97,7 @@ THREAD_NAME_PREFIX = "the_progressbar_"
 
 # function to initialize rabbit data
 # this is because mpi_communicator is not ready at the time of importing this module and will become ready later
-def make_rabbit_data():
+def make_rabbit_data(run_id: str):
 
     global rabbit_data
 
@@ -116,8 +116,8 @@ def make_rabbit_data():
                 'delivery_mode': 1
             },
             'queue': {
-                'name': f'tpb_data_gatherer_info_{mpi.mpi_communicator.get_rank()}',
-                'name_template': f'tpb_data_gatherer_info_<rank>',
+                'name': f'tpb_data_gatherer_info_{mpi.mpi_communicator.get_rank()}_{run_id}',
+                'name_template': f'tpb_data_gatherer_info_<rank>_{run_id}',
                 # exchange is in '..exchange'
                 # routing key is in '..message'
                 "max_length": 1,  # we only want the latest update
@@ -125,7 +125,7 @@ def make_rabbit_data():
                 'auto_delete': True,
             },
             'message': {
-                'routing_key': f'data.update_info.{mpi.mpi_communicator.get_rank()}',
+                'routing_key': f'data.update_info.{mpi.mpi_communicator.get_rank()}_{run_id}',
             },
             'consumer': {
                 'name': 'tpb_data_gather_consumer',
@@ -140,14 +140,14 @@ def make_rabbit_data():
                 'delivery_mode': 1
             },
             'queue': {
-                'name': f'tpb_printer',
+                'name': f'tpb_printer_{run_id}',
                 # exchange is in '..exchange'
                 # routing key is in '..message'
                 'durable': False,
                 'auto_delete': True,
             },
             'message': {
-                'routing_key': f'data.printer.manager',
+                'routing_key': f'data.printer.manager_{run_id}',
             },
             'consumer': {
                 'name': 'tpb_printer_consumer',
@@ -294,8 +294,11 @@ class TheProgressBarBase(ABC, BaseWorker):
 
         super().__init__(config)
 
+        # get the run id
+        self.run_id: str = str(self._config.get_value_option("run_id").expect("run id not found"))
+
         # set rabbit data
-        make_rabbit_data()
+        make_rabbit_data(self.run_id)
 
         # A daemon thread placeholder for running the update of the progress bar and other stuff
         # Also, a daemon thread placeholder for when on pause
