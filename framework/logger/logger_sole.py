@@ -1,5 +1,5 @@
 from ..util.config import ConfigParser
-from ..util.util import REGEX_INDENT_NEW_LINE_ONLY
+from ..util.util import REGEX_INDENT_NEW_LINE_ONLY, REGEX_REMOVE_NONPRINT_CHARS
 from ..util.symbols_unicode import SYMBOL_UNICODE_CONFIG as SUC
 import logging
 from collections import OrderedDict
@@ -287,7 +287,8 @@ class Logger:
             self._file_handler = self._set_handler_properties(file_handler, self._create_format("file"))
             self._logger.addHandler(self._file_handler)
 
-        prefix_len = 1 + len(self._logger_name) + 1  # 1 for arrow and 1 for the space after the name
+        # find the text len: 1 for arrow and 1 for the space after the name
+        prefix_len = 1 + len(REGEX_REMOVE_NONPRINT_CHARS.sub('', self._logger_name)) + 1
         self._indenter = \
             lambda text, add_space: REGEX_INDENT_NEW_LINE_ONLY.sub(rf"\1{' ' * (prefix_len + add_space)}", text)
 
