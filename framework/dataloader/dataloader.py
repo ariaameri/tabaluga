@@ -545,14 +545,15 @@ class MetadataManipulator(base.BaseWorker):
                 self.metadata.apply(lambda row: mapping[row[criterion_field_name]], axis=1)
 
             # regroup based on the file name
-            metadata = self.regroup_metadata(criterion='__criterion_help')
+            metadata = self.regroup_metadata(self.metadata, criterion='__criterion_help')
             self.metadata = metadata = metadata.drop(['__criterion_help'], axis=1)
 
             self._check_for_sanity(metadata)
 
         return metadata
 
-    def regroup_metadata(self, criterion=None) -> pd.DataFrame:
+    @staticmethod
+    def regroup_metadata(metadata: pd.DataFrame, criterion: str = None, reset_index: bool = True) -> pd.DataFrame:
         """Groups the metadata.
 
         Each group of data (e.g. containing data and label) should have.
@@ -561,8 +562,12 @@ class MetadataManipulator(base.BaseWorker):
 
         Parameters
         ----------
+        metadata : pd.DataFrame
+            metadata to process
         criterion : str or List[str]
             The name of the columns based on which the metadata should be categorized
+        reset_index : bool
+            whether to reset the level 0 indices
 
         Returns
         -------
@@ -571,32 +576,31 @@ class MetadataManipulator(base.BaseWorker):
 
         """
 
-        if criterion is None:
-            return self.metadata
+        if criterion is None or metadata.empty:
+            return metadata
 
         # check if criterion is a column concept
-        if isinstance(criterion, str) and criterion not in self.metadata.columns:
+        if isinstance(criterion, str) and criterion not in metadata.columns:
             raise ValueError(f"criterion '{criterion}' does not exists as a metadata column.")
-        elif isinstance(criterion, list) and any([(c not in self.metadata.columns) for c in criterion]):
+        elif isinstance(criterion, list) and any([(c not in metadata.columns) for c in criterion]):
             raise ValueError(f"part of criterion '{criterion}' does not exists as a metadata column.")
 
         new_indices = []
         new_indices_count = {}
-        for k in self.metadata[criterion]:
+        for k in metadata[criterion]:
             n = new_indices_count.get(k, 0)
             new_indices_count[k] = n + 1
             new_indices.append((k, n))
-        metadata = self.metadata.copy(True)
+        metadata = metadata.copy(True)
         metadata.index = pd.MultiIndex.from_tuples(new_indices)
         # sort the indices
         metadata = metadata.loc[metadata.index.sort_values()]
 
-        # Rename the indices to be range
-        # Also rename the index level 0 name to be 'index' (instead of `criterion`)
-        metadata = self.reset_level_0_indices(metadata)
-        metadata.index.names = [None, *metadata.index.names[1:]]
-
-        self.metadata = metadata
+        if reset_index:
+            # Rename the indices to be range
+            # Also rename the index level 0 name to be 'index' (instead of `criterion`)
+            metadata = MetadataManipulator.reset_level_0_indices(metadata)
+            metadata.index.names = [None, *metadata.index.names[1:]]
 
         return metadata
 
@@ -2721,39 +2725,3 @@ class DataLoader(base.BaseEventWorker, ABC):
             data = self.load_batch(item)
 
         return data
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
