@@ -296,7 +296,7 @@ class PanaceaBase(ABC):
         # Return the result of an empty Panacea if the filtering result is empty
         return filtered.get_or_else(('', self.__class__()))[1]
 
-    def find_one(self, filter_dict: Dict = None) -> Option:
+    def find_one(self, filter_dict: Dict = None) -> Option[(str, Any)]:
         """Method to find the first item based on the criteria given and return an Option value of it.
 
         Parameters
@@ -307,7 +307,7 @@ class PanaceaBase(ABC):
 
         Returns
         -------
-        An Option value of the first element found that satisfies the given criteria.
+        The breadcrumb and Option value of the first element found that satisfies the given criteria.
 
         """
 
@@ -320,7 +320,7 @@ class PanaceaBase(ABC):
         # Return
         return found_one
 
-    def find_all(self, filter_dict: Dict = None) -> Generator[Any]:
+    def find_all(self, filter_dict: Dict = None) -> Generator[(str, Any)]:
         """Method to find the first item based on the criteria given and return an Option value of it.
 
         Parameters
@@ -331,7 +331,7 @@ class PanaceaBase(ABC):
 
         Returns
         -------
-        An Option value of the first element found that satisfies the given criteria.
+        The breadcrumb and Option value of the elements found that satisfies the given criteria.
 
         """
 
@@ -3315,7 +3315,7 @@ class Modification:
         # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
-    def find_one(self, panacea: PanaceaBase, bc: str = '') -> Option[Any]:
+    def find_one(self, panacea: PanaceaBase, bc: str = '') -> Option[(str, Any)]:
         """Method to find the very first single element on `panacea` that satisfies the filtering criteria and returns
         it.
 
@@ -3328,7 +3328,8 @@ class Modification:
 
         Returns
         -------
-        The result of finding the very single element that satisfies the filtering criteria in form of Option value.
+        The result of finding the breadcrumb and the very single element that satisfies the filtering criteria
+        in form of Option value.
 
         """
 
@@ -3351,12 +3352,12 @@ class Modification:
         # If the `panacea` instance met the filtering criteria
         # After that, if it is a branch node, return it as Option value, and if it is a leaf node, return its value
         # as Option value
-        do_after_satisfied = lambda key, x: Some(x) if issubclass(type(x), Panacea) else Some(x.get())
+        do_after_satisfied = lambda key, x: Some((bc, x)) if issubclass(type(x), Panacea) else Some((bc, x.get()))
 
         # Do the traversing with the correct functions
         return self.traverse(panacea=panacea, bc=bc, do_after_satisfied=do_after_satisfied, propagate=propagate)
 
-    def find_all(self, panacea: PanaceaBase, bc: str = '') -> Generator[Option[Any]]:
+    def find_all(self, panacea: PanaceaBase, bc: str = '') -> Generator[Option[(str, Any)]]:
         """Method to find the very first single element on `panacea` that satisfies the filtering criteria and returns
         it.
 
@@ -3369,7 +3370,8 @@ class Modification:
 
         Returns
         -------
-        The result of finding the very single element that satisfies the filtering criteria in form of Option value.
+        The result of finding the breadcrumb and all the elements that satisfies the filtering criteria in form of
+        Option value.
 
         """
 
@@ -3394,7 +3396,7 @@ class Modification:
         # If the `panacea` instance met the filtering criteria
         # After that, if it is a branch node, return it as Option value, and if it is a leaf node, return its value
         # as Option value
-        do_after_satisfied = lambda key, x: Some(x) if issubclass(type(x), Panacea) else Some(x.get())
+        do_after_satisfied = lambda key, x: Some((bc, x)) if issubclass(type(x), Panacea) else Some((bc, x.get()))
 
         # Do the traversing with the correct functions
         return \
