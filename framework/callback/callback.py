@@ -123,7 +123,7 @@ class TrainStatExpAverage(Callback):
         if train_stat.is_empty():
             return
 
-        train_stat = train_stat.get()
+        train_stat = train_stat.get()[1]
 
         # Update the train statistics
         self.trainer.train_current_statistics = \
@@ -140,7 +140,7 @@ class TrainStatExpAverage(Callback):
         if train_stat.is_empty():
             return
 
-        train_stat = train_stat.get()
+        train_stat = train_stat.get()[1]
 
         # Update the train statistics
         self.trainer.train_current_statistics = \

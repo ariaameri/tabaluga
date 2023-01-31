@@ -85,7 +85,7 @@ class Asyncer(Logger, ConfigReader):
 
         # make coroutines for closing all the event loops
         coroutine_list = [
-            event_loop_closer(event_loop)
+            event_loop_closer(event_loop[1])
             for event_loop
             in self.async_info.find_all({FM.BC: {FO.REGEX: r'^\.([^\.]+)\.event_loop'}})
         ]
