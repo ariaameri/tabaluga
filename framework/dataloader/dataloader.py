@@ -2589,18 +2589,18 @@ class DataLoader(base.BaseEventWorker, ABC):
             if loaded_data[1].is_defined()
         }
 
-        # load the batches that are not already loaded
-        new_data = {
-            str(loaded_data[0]): self.load_batch(loaded_data[0])
-            for loaded_data
-            in already_loaded_data_option
-            if loaded_data[1].is_empty()
-        }
-
-        # set the result
-        new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
-        with self._loaded_data_mu:
-            self._loaded_data = new_loaded_data
+        # load the batches that are not already loaded and save them
+        new_data = {}
+        for loaded_data in already_loaded_data_option:
+            # skip if we already have the data
+            if loaded_data[1].is_defined():
+                continue
+            # load the new batch
+            new_data[str(loaded_data[0])] = self.load_batch(loaded_data[0])
+            # update the loaded data
+            new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
+            with self._loaded_data_mu:  # most probably, we will not have to wait here
+                self._loaded_data = new_loaded_data
 
     def _load_ahead_batch_thread(self) -> None:
         """method for the load ahead thread to run"""
