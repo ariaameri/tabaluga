@@ -2679,11 +2679,13 @@ class DataLoader(base.BaseEventWorker, ABC):
             # try to load from the already loaded data and if not exist, load manually
 
             with self._loaded_data_mu:
+                data = self._loaded_data.get_value_option(str(item))
 
-                data = self._loaded_data\
-                    .get_value_option(str(item))\
-                    .or_else(Some(item).map(lambda x: self.load_batch(x)))\
-                    .get()
+            # if not already loaded, load it
+            if data.is_empty():
+                data = self.load_batch(item)
+            else:
+                data = data.get()
 
             # now, let the load ahead know
             self._w_data_load_ahead.send(item)
