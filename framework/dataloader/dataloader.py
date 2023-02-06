@@ -2,6 +2,7 @@ import concurrent.futures
 import math
 import pathlib
 import re
+import select
 import threading
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -2607,7 +2608,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         while True:
 
             # get the batch size that was loaded
-            batch = self._r_data_load_ahead.recv()
+            r, _, _ = select.select([self._r_data_load_ahead], [], [])
+            batch = r[0].recv()
 
             # find the batch sizes that should be loaded
             start_idx = batch + 1
