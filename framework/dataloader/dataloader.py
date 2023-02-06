@@ -1898,6 +1898,13 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         self._batch_size_effective: int = -1
         self._number_of_iterations_effective: int = -1
 
+        # read the load ahead config and spread it to the children
+        load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 3)
+        self._config = self._config.update(
+            {FM.BC: {FO.REGEX: r'\.\w+'}},
+            {UO.SET_ON_INSERT: {"load_ahead_batch_count": load_ahead_batch_count}}
+        )
+
         # Create workers
         self.create_workers()
 
@@ -2201,7 +2208,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         # for loading ahead batches
         self._loaded_data_mu = threading.Lock()
         self._loaded_data = DataMuncher()  # will be a mapping from str(batch) to the loaded data
-        self._load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 0)
+        self._load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 3)
         self._load_ahead_enabled = self._load_ahead_batch_count > 0
         import multiprocessing
         self._r_data_load_ahead: Optional[multiprocessing.connection.Connection] = None
