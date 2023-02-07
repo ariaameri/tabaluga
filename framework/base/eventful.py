@@ -1,9 +1,13 @@
 from typing import Any, Dict, Union, Callable
 from .base import ConfigReader, Logger
+from ..asyncer.asyncer import asyncer
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..communicator.zmq.internal_async import zmq_internal_async_communicator as zmq, ZMQInternalAsyncSub
 from ..util.result import Result, Ok
+
+
+EVENTFUL_INTERNAL_CONFIG_PREFIX = "_eventful_internal"
 
 
 class EventfulInternal(Logger, ConfigReader):
@@ -14,9 +18,18 @@ class EventfulInternal(Logger, ConfigReader):
         super().__init__(config)
 
         # mapping from topic prefix to listener
-        self.__event_loop_name = self.__class__.__name__
+        self.__event_loop_name = \
+            self._config.get_or_else(f"{EVENTFUL_INTERNAL_CONFIG_PREFIX}.event_loop_name", self.__class__.__name__)
         self.__event_listen_info = DataMuncher()
         self.__event_pub = zmq.zmq.get_pub()
+
+        # make sure the event loop exists
+        if asyncer.asyncer.get_event_loop_option(self.__event_loop_name).is_empty():
+            if (res := asyncer.asyncer.create_event_loop(self.__event_loop_name)).is_err():
+                self._log.error(
+                    f"error making the event loop of name {self.__event_loop_name} with error of '{res.get_err()}'"
+                )
+                raise res.get_err()
 
     def _add_event_callback(
             self,
