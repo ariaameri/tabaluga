@@ -182,19 +182,10 @@ class ZMQInternalAsyncPubSub(BaseWorker):
         elif not isinstance(data, bytes):
             return Err(ValueError("input value type not accepted"))
 
-        async def x():
-            await self._pub_universal.send_multipart([f"{topic} ".encode('utf-8') + data])
-            print("sent")
-
-        res = asyncer.asyncer.add_coroutine(
-            x(),
+        res = asyncer.asyncer.add_callback(
+            callback=functools.partial(self._pub_universal.send_multipart, [f"{topic} ".encode('utf-8') + data]),
             event_loop_name=_ASYNCER_NAME,
         )
-
-        # res = asyncer.asyncer.add_callback(
-        #     callback=functools.partial(self._pub_universal.send_multipart, f"{topic} ".encode('utf-8') + data),
-        #     event_loop_name=_ASYNCER_NAME,
-        # )
 
         return Ok(res)
 
