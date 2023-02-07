@@ -14,9 +14,11 @@ class EventfulInternal(Logger, ConfigReader):
         super().__init__(config)
 
         # mapping from topic prefix to listener
-        self._listen_info = DataMuncher()
+        self.__event_loop_name = self.__class__.__name__
+        self.__event_listen_info = DataMuncher()
+        self.__event_pub = zmq.zmq.get_pub()
 
-    def _add_callback(
+    def _add_event_callback(
             self,
             topic_prefix: str,
             callback: Callable[[str, Union[bytes, Dict]], Any],
@@ -39,9 +41,9 @@ class EventfulInternal(Logger, ConfigReader):
         """
 
         # get the receiver
-        if (res := self._listen_info.get_value_option(topic_prefix)).is_empty():
+        if (res := self.__event_listen_info.get_value_option(topic_prefix)).is_empty():
             # make a receiver
-            res = zmq.zmq.get_receiver(topic_prefix, self.__class__.__name__)
+            res = zmq.zmq.get_receiver(topic_prefix, self.__event_loop_name)
             if res.is_err():
                 return res
             else:
@@ -51,10 +53,28 @@ class EventfulInternal(Logger, ConfigReader):
                 if res.is_err():
                     return res
                 # store
-                self._listen_info = self._listen_info.update({}, {topic_prefix: receiver})
+                self.__event_listen_info = self.__event_listen_info.update({}, {topic_prefix: receiver})
         else:
             receiver: ZMQInternalAsyncSub = res.get()
 
         receiver.register_callback(callback)
 
         return Ok(None)
+
+    def _publish_event(self, topic: str, data: Any) -> Result:
+        """
+        Publishes an event.
+
+        Parameters
+        ----------
+        topic : str
+            topic
+        data : Any
+            data to publish
+
+        Returns
+        -------
+        Result
+        """
+
+        return zmq.zmq.pub_with_pub(topic, data, self.__event_pub, self.__event_loop_name)
