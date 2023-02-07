@@ -1898,12 +1898,24 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         self._batch_size_effective: int = -1
         self._number_of_iterations_effective: int = -1
 
-        # read the load ahead config and spread it to the children
-        load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 3)
-        self._config = self._config.update(
-            {FM.BC: {FO.REGEX: r'\.\w+'}},
-            {UO.SET_ON_INSERT: {"load_ahead_batch_count": load_ahead_batch_count}}
-        )
+        # for loading ahead batches
+        self._loaded_data_mu = threading.Lock()
+        self._loaded_data = DataMuncher()  # will be a mapping from str(batch) to the loaded data
+        self._load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 3)
+        self._load_ahead_enabled = self._load_ahead_batch_count > 0
+        if self._load_ahead_enabled:
+            self._log.info(f"loading batches ahead with size of {self._load_ahead_batch_count}")
+            import multiprocessing
+            self._r_data_load_ahead, self._w_data_load_ahead = multiprocessing.Pipe(duplex=False)
+            self._load_ahead_thread = threading.Thread(
+                name='tabaluga-dataloader-manager-batch-ahead-load',
+                target=self._load_ahead_batch_thread,
+                daemon=True,
+            )
+            self._load_ahead_thread.start()
+
+        # bookkeeping to know if we wrap around the dataset while loading
+        self._data_loading_wrap_around = True
 
         # Create workers
         self.create_workers()
@@ -2000,6 +2012,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Set the number of iterations
         self.number_of_iterations_report = number_of_iterations_workers[0]
 
+        # set the wrap around
+        if self._batch_size_effective > self.batch_size_report:
+            self._data_loading_wrap_around = True
+        else:
+            self._data_loading_wrap_around = False
+
     def set_batch_size_effective(self, batch_size: int) -> None:
         """Sets the batch size to load the data with.
 
@@ -2025,6 +2043,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         # Set the number of iterations
         self._number_of_iterations_effective = number_of_iterations_workers[0]
+
+        # set the wrap around
+        if self._batch_size_effective > self.batch_size_report:
+            self._data_loading_wrap_around = True
+        else:
+            self._data_loading_wrap_around = False
 
     def get_batch_size(self) -> int:
         """
@@ -2139,6 +2163,83 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         return data
 
     @abstractmethod
+    def load_batch(self, item: int):
+        """
+        loads a batch and returns the result
+
+        Parameters
+        ----------
+        item : int
+            batch number
+
+        Returns
+        -------
+        result
+
+        """
+
+        raise NotImplementedError
+
+    def _load_ahead_batches(self, batches: List[int]) -> None:
+        """
+        loads the batches given as input and stores them. This method is used in the look ahead loading.
+
+        Parameters
+        ----------
+        batches : List[int]
+            list of batches that has to be loaded
+
+        """
+
+        # look for the batches we have and load the ones we do not
+        already_loaded_data_option = [
+            (batch, self._loaded_data.get_value_option(str(batch)))
+            for batch
+            in batches
+        ]
+
+        # the batches that we will need
+        old_loaded_data = {
+            str(loaded_data[0]): loaded_data[1].get()
+            for loaded_data
+            in already_loaded_data_option
+            if loaded_data[1].is_defined()
+        }
+
+        # load the batches that are not already loaded and save them
+        new_data = {}
+        for loaded_data in already_loaded_data_option:
+            # skip if we already have the data
+            if loaded_data[1].is_defined():
+                continue
+            # load the new batch
+            new_data[str(loaded_data[0])] = self.load_batch(loaded_data[0])
+            # update the loaded data
+            new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
+            with self._loaded_data_mu:  # most probably, we will not have to wait here
+                self._loaded_data = new_loaded_data
+
+    def _load_ahead_batch_thread(self) -> None:
+        """method for the load ahead thread to run"""
+
+        while True:
+
+            # get the batch size that was loaded
+            r, _, _ = select.select([self._r_data_load_ahead], [], [])
+            batch = r[0].recv()
+
+            # find the batch sizes that should be loaded
+            start_idx = batch + 1
+            end_idx = batch + 1 + self._load_ahead_batch_count
+            batches_to_be_loaded = list(range(start_idx, end_idx))
+
+            # correct the batch indices if necessary
+            if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
+                batches_to_be_loaded = [i % self.get_number_of_iterations() for i in batches_to_be_loaded]
+
+            # do the batch ahead loading
+            self._load_ahead_batches(batches_to_be_loaded)
+
     def __getitem__(self, item: int):
         """Returns the item-th batch of the data.
 
@@ -2153,7 +2254,25 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        raise NotImplementedError
+        if self._load_ahead_enabled:
+            # try to load from the already loaded data and if not exist, load manually
+
+            with self._loaded_data_mu:
+                data = self._loaded_data.get_value_option(str(item))
+
+            # if not already loaded, load it
+            if data.is_empty():
+                data = self.load_batch(item)
+            else:
+                data = data.get()
+
+            # now, let the load ahead know
+            self._w_data_load_ahead.send(item)
+
+        else:
+            data = self.load_batch(item)
+
+        return data
 
     def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> (pd.DataFrame, pd.DataFrame):
         """Sets the internal metadata and returns the same thing."""
