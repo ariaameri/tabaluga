@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from typing import Dict, Any, List, Type, Union, Callable, Generator, TypeVar
 from types import FunctionType
 import yaml
@@ -9,7 +10,7 @@ from .option import Some, nothing, Option
 from abc import ABC, abstractmethod
 import multiprocessing
 from concurrent.futures import ThreadPoolExecutor
-
+from .result import Result
 
 # for return type to include subclasses
 PanaceaBaseSubclass = TypeVar("PanaceaBaseSubclass", bound="PanaceaBase")
@@ -500,6 +501,21 @@ class Panacea(PanaceaBase):
         """Makes a shallow copy of self and returns it."""
 
         return self.__class__(self.dict_representation())
+
+    def dumps(self) -> Result[bytes, Exception]:
+        """Dumps to bytes."""
+
+        return Result.from_func(json.dumps, self.dict_representation()).map(lambda x: x.encode("utf-8"))
+
+    def marshal(self) -> Result[bytes, Exception]:
+        """Dumps to bytes."""
+
+        return self.dumps()
+
+    def unmarshal(self, x: bytes) -> Result[PanaceaSubclass, Exception]:
+        """Loads bytes to self."""
+
+        return Result.from_func(json.loads, x).map(self.__class__)
 
     # Relations
 
