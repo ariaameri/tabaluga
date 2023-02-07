@@ -1,13 +1,15 @@
 import json
 from typing import Union, Any, Optional, List, Callable, Dict
-from ..base.base import BaseWorker
-from ..util.config import ConfigParser
-from ..util.data_muncher import DataMuncher
-from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
-from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
+from tabaluga.framework.base.base import BaseWorker
+from tabaluga.framework.util.config import ConfigParser
+from tabaluga.framework.util.data_muncher import DataMuncher
+from tabaluga.framework.util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
+from tabaluga.framework.util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 import zmq
+from tabaluga.framework.util.result import Result, Err
 
-from ..util.result import Result, Err
+_XPUB_ADDR = "inproc://xpub"
+_XSUB_ADDR = "inproc://xsub"
 
 
 class ZMQInternalPubSub(BaseWorker):
@@ -36,8 +38,8 @@ class ZMQInternalPubSub(BaseWorker):
         context = zmq.Context()
         xpub = context.socket(zmq.XPUB)
         xsub = context.socket(zmq.XSUB)
-        xpub.bind("inproc://xpub")
-        xsub.bind("inproc://xsub")
+        xpub.bind(_XPUB_ADDR)
+        xsub.bind(_XSUB_ADDR)
         import threading
         thread = threading.Thread(
             name='tabaluga-zmq-proxy',
@@ -62,7 +64,7 @@ class ZMQInternalPubSub(BaseWorker):
         """
 
         pub = self.zmq_context.socket(zmq.PUB)
-        pub.connect("inproc://xsub")
+        pub.connect(_XSUB_ADDR)
 
         return pub
 
@@ -83,7 +85,7 @@ class ZMQInternalPubSub(BaseWorker):
         """
 
         sub = self.zmq_context.socket(zmq.SUB)
-        sub.connect("inproc://xpub")
+        sub.connect(_XPUB_ADDR)
         sub.setsockopt(zmq.SUBSCRIBE, topic.encode())
 
         return sub
@@ -280,7 +282,7 @@ class _ZMQInternalPubSubGlobal:
     def _create_instance(self) -> None:
         """Creates the zmq instance."""
 
-        from . import config
+        from .. import config
 
         self._zmq_global = init_with_config(config.zmq_config or ConfigParser({}))
 
@@ -304,4 +306,4 @@ class _ZMQInternalPubSubGlobal:
 
 
 # this is an instance that everyone can use
-zmq_communicator: _ZMQInternalPubSubGlobal = _ZMQInternalPubSubGlobal()
+zmq_internal_communicator: _ZMQInternalPubSubGlobal = _ZMQInternalPubSubGlobal()
