@@ -14,8 +14,8 @@ from tabaluga.framework.util.result import Result, Err, Ok
 import functools
 
 _ASYNCER_NAME = "_zmq_internal"
-_XPUB_ADDR = "inproc://xpub_async"
-_XSUB_ADDR = "inproc://xsub_async"
+_XPUB_ADDR = "inproc://xpub"
+_XSUB_ADDR = "inproc://xsub"
 
 
 async def _sub_async(sub):
