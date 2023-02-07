@@ -13,7 +13,7 @@ from ..util.data_muncher import DataMuncher
 
 
 # Constants
-_LOGGER_CONFIG_PREFIX = "_logger"
+LOGGER_CONFIG_PREFIX = "_logger"
 
 # Shared global variables
 _LOGGER_WORKER_CONFIG: Optional[ConfigParser] = None
@@ -81,7 +81,7 @@ class Logger(ConfigReader):
             return self._log
 
         # first, set the initial config that is shared among all and override with local config
-        local_config = self._config.get_or_empty(_LOGGER_CONFIG_PREFIX)
+        local_config = self._config.get_or_empty(LOGGER_CONFIG_PREFIX)
         config_logger = \
             _LOGGER_WORKER_CONFIG\
             .update({}, {
