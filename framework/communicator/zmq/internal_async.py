@@ -167,6 +167,39 @@ class ZMQInternalAsyncPubSub(BaseWorker):
 
         """
 
+        return self.pub_with_pub(topic, data, self._pub_universal, _ASYNCER_NAME)
+
+    @staticmethod
+    def pub_with_pub(
+            topic: str,
+            data: Union[bytes, str, Dict],
+            pub: zmq.asyncio.Socket,
+            event_loop_name: str,
+    ) -> Result[asyncio.events.Handle, BaseException]:
+        """
+        Publishes the data to the topic.
+
+        Parameters
+        ----------
+        topic : str
+            topic to publish to
+        data : Union[bytes, str, Dict]
+            data in form of str, dict, or bytes
+        pub : zmq.asyncio.Socket
+            pub to use
+        event_loop_name : str
+            name of the event loop to use for async
+
+        Returns
+        -------
+        Result
+
+        """
+
+        # check if event_loop_name exists
+        if asyncer.asyncer.get_event_loop_option(event_loop_name).is_empty():
+            return Err(RuntimeError(f"event loop {event_loop_name} does not exist"))
+
         if isinstance(data, dict):
             res = Result.from_func(json.dumps, data)
             if res.is_err():
@@ -183,8 +216,8 @@ class ZMQInternalAsyncPubSub(BaseWorker):
             return Err(ValueError("input value type not accepted"))
 
         res = asyncer.asyncer.add_callback(
-            callback=functools.partial(self._pub_universal.send_multipart, [f"{topic} ".encode('utf-8') + data]),
-            event_loop_name=_ASYNCER_NAME,
+            callback=functools.partial(pub.send_multipart, [f"{topic} ".encode('utf-8') + data]),
+            event_loop_name=event_loop_name,
         )
 
         return Ok(res)
