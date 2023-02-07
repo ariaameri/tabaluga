@@ -3523,6 +3523,9 @@ class Modification:
         new_panacea = panacea
         new_key = key
 
+        # keep a track of the nested keys with '.' in them so that we do not override them later
+        updated_nested_keys = set()
+
         # First the field update rules are applied
         # Then, on the result, _special rules are applied
 
@@ -3551,21 +3554,28 @@ class Modification:
                 if '.' not in key:
                     continue
 
+                # retrieve some info
+                dot_index = key.index('.')
+                key_level0 = key.split('.')[0]
+                rest_key = key[(dot_index + 1):]
+
+                # store that we processed the key
+                updated_nested_keys.add(key_level0)
+
                 # keep a record of changes and apply each change sequentially
                 # this is to guard for the cases where we are trying to update the following example scenarios:
                 # change AAA.BBB.CCC and AAA.BBB.DDD and we want both of them to take place and not just one
-                key_level0 = key.split('.')[0]
                 panacea_level0 = \
                     modified_panacea_deep_dictionary.get(
                         key_level0,
-                        panacea.get_option(key.split('.')[0]).get_or_else(panacea.__class__())
+                        panacea.get_option(key_level0).get_or_else(panacea.__class__())
                     )
 
                 modified_panacea_deep_dictionary[key_level0] = \
                     self.update_self(
-                        key,
+                        key_level0,
                         panacea_level0,
-                        {'field': {key[(key.index('.') + 1):]: update}, '_special': {}}
+                        {'field': {rest_key: update}, '_special': {}}
                     )[1]
 
             modified_panacea_deep_dictionary = {
@@ -3575,19 +3585,27 @@ class Modification:
                 if not value.is_empty()
             }
 
-            # Create a new dictionary in order to make a new instance
-            # The items that are not modified by the update rules should reappear as-is
-            new_panacea_dict = {
-                # Items not modified by the update rules
-                **{key: value for key, value in panacea.get_parameters().items() if
-                   key not in update_dict.get('field').keys()},
-                # Items modified by the update rules
-                **modified_panacea_dictionary,
-                **modified_panacea_deep_dictionary
-            }
+            # make the resulting panacea
+            # if we have not updated anything, do not construct again
+            if \
+                    not update_dict.get('field').keys() and \
+                    not modified_panacea_dictionary and \
+                    not modified_panacea_deep_dictionary:
+                new_panacea = panacea
+            else:
+                # Create a new dictionary in order to make a new instance
+                # The items that are not modified by the update rules should reappear as-is
+                new_panacea_dict = {
+                    # Items not modified by the update rules
+                    **{key: value for key, value in panacea.get_parameters().items() if
+                       (key not in update_dict.get('field').keys() and key not in updated_nested_keys)},
+                    # Items modified by the update rules
+                    **modified_panacea_dictionary,
+                    **modified_panacea_deep_dictionary
+                }
 
-            # Generate a new class from the modified parameters
-            new_panacea = panacea.__class__(new_panacea_dict)
+                # Generate a new class from the modified parameters
+                new_panacea = panacea.__class__(new_panacea_dict)
 
         # Apply the special updates
         if update_dict.get('_special').get('_recursive') is not None:
