@@ -370,7 +370,10 @@ class ZMQInternalAsyncSub(BaseWorker):
             recv_topic, recv_data = await _sub_async(self.sub)
 
             for callback in self.callbacks:
-                callback(recv_topic, recv_data)
+                try:
+                    callback(recv_topic, recv_data)
+                except Exception as e:
+                    continue
 
     def receive(self) -> Result[asyncio.Task, ValueError]:
         """Starts receiving."""
