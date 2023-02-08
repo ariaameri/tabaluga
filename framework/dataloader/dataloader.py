@@ -2162,6 +2162,22 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return data
 
+    def _load_batch_wrap(self, item: int):
+        """Helper method that corrects the item number according to the wraparound"""
+
+        if item >= self.get_number_of_iterations():
+            if self._data_loading_wrap_around:
+                item = item % self.get_number_of_iterations()
+            else:
+                self._log.error(
+                    f"requested batch {item} is beyond the number of batches of {self.get_number_of_iterations()}"
+                )
+                raise RuntimeError(
+                    f"requested batch {item} is beyond the number of batches of {self.get_number_of_iterations()}"
+                )
+
+        return self.load_batch(item)
+
     @abstractmethod
     def load_batch(self, item: int):
         """
@@ -2213,7 +2229,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             if loaded_data[1].is_defined():
                 continue
             # load the new batch
-            new_data[str(loaded_data[0])] = self.load_batch(loaded_data[0])
+            new_data[str(loaded_data[0])] = self._load_batch_wrap(loaded_data[0])
             # update the loaded data
             new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
             with self._loaded_data_mu:  # most probably, we will not have to wait here
@@ -2262,7 +2278,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
             # if not already loaded, load it
             if data.is_empty():
-                data = self.load_batch(item)
+                data = self._load_batch_wrap(item)
             else:
                 data = data.get()
 
@@ -2270,7 +2286,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             self._w_data_load_ahead.send(item)
 
         else:
-            data = self.load_batch(item)
+            data = self._load_batch_wrap(item)
 
         return data
 
