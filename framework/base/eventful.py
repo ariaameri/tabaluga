@@ -15,7 +15,8 @@ class EventfulInternal(Logger, ConfigReader):
 
     def __init__(self, config: ConfigParser = None):
 
-        super().__init__(config)
+        ConfigReader.__init__(self, config)
+        Logger.__init__(self, self._config)
 
         # mapping from topic prefix to listener
         self.__event_loop_name = \
