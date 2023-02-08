@@ -2188,21 +2188,21 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         super().on_test_epoch_begin(info)
 
-    def _load_batch_wrap(self, item: int):
-        """Helper method that corrects the item number according to the wraparound"""
+    def _load_batch_wrap(self, batch: int, *args, **kwargs):
+        """Helper method that corrects the batch number according to the wraparound"""
 
-        if item >= self.get_number_of_iterations():
+        if batch >= self.get_number_of_iterations():
             if self._data_loading_wrap_around:
-                item = item % self.get_number_of_iterations()
+                batch = batch % self.get_number_of_iterations()
             else:
                 self._log.error(
-                    f"requested batch {item} is beyond the number of batches of {self.get_number_of_iterations()}"
+                    f"requested batch {batch} is beyond the number of batches of {self.get_number_of_iterations()}"
                 )
                 raise RuntimeError(
-                    f"requested batch {item} is beyond the number of batches of {self.get_number_of_iterations()}"
+                    f"requested batch {batch} is beyond the number of batches of {self.get_number_of_iterations()}"
                 )
 
-        return self.load_batch(item)
+        return self.load_batch(batch)
 
     @abstractmethod
     def load_batch(self, item: int):
@@ -2296,23 +2296,27 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
+        return self.get(batch=item)
+
+    def get(self, batch: int, *args, **kwargs):
+
         if self._load_ahead_enabled:
             # try to load from the already loaded data and if not exist, load manually
 
             with self._loaded_data_mu:
-                data = self._loaded_data.get_value_option(str(item))
+                data = self._loaded_data.get_value_option(str(batch))
 
             # if not already loaded, load it
             if data.is_empty():
-                data = self._load_batch_wrap(item)
+                data = self._load_batch_wrap(batch, *args, **kwargs)
             else:
                 data = data.get()
 
             # now, let the load ahead know
-            self._w_data_load_ahead.send(item)
+            self._w_data_load_ahead.send(batch)
 
         else:
-            data = self._load_batch_wrap(item)
+            data = self._load_batch_wrap(batch, *args, **kwargs)
 
         return data
 
