@@ -2162,6 +2162,32 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return data
 
+    def _reset_load_ahead_data(self):
+        """Resets the loaded ahead data"""
+
+        self._loaded_data = DataMuncher()
+
+    def on_train_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # reset the load ahead data as they are obsolete!
+        self._reset_load_ahead_data()
+
+        super().on_train_epoch_begin(info)
+
+    def on_val_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # reset the load ahead data as they are obsolete!
+        self._reset_load_ahead_data()
+
+        super().on_val_epoch_begin(info)
+
+    def on_test_epoch_begin(self, info: DataMuncher = DataMuncher()):
+
+        # reset the load ahead data as they are obsolete!
+        self._reset_load_ahead_data()
+
+        super().on_test_epoch_begin(info)
+
     def _load_batch_wrap(self, item: int):
         """Helper method that corrects the item number according to the wraparound"""
 
