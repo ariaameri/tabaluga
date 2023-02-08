@@ -241,7 +241,12 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         if self._message_pass_working is False:
             return 0
 
-        return self._message_pass_queue_async.qsize()
+        if self._single_queue:
+            size = self._message_pass_queue_async.qsize()
+        else:
+            size = sum(_.qsize() for _ in self._queues.get("_queues_async"))
+
+        return size
 
     @abstractmethod
     async def _receive(self) -> None:
