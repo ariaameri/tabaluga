@@ -2235,7 +2235,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
             # correct the batch indices if necessary
             if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
-                batches_to_be_loaded = [i % self.get_number_of_iterations() for i in batches_to_be_loaded]
+                batches_to_be_loaded = list(range(start_idx,  self.get_number_of_iterations()))
 
             # do the batch ahead loading
             self._load_ahead_batches(batches_to_be_loaded)
@@ -2744,7 +2744,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
             # correct the batch indices if necessary
             if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
-                batches_to_be_loaded = [i % self.get_number_of_iterations() for i in batches_to_be_loaded]
+                batches_to_be_loaded = list(range(start_idx,  self.get_number_of_iterations()))
 
             # do the batch ahead loading
             self._load_ahead_batches(batches_to_be_loaded)
