@@ -147,6 +147,7 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
             self._queues.get_value_option("_queues_async").for_each(lambda x: x.append(queue_async))
         # sort the arrays based on the priority
         if len(ps := self._queues.get("_priorities")) > 1:
+            self._pending_polls = {}
             sorted_idxs = np.argsort(ps)[::-1]
             self._queues = \
                 self._queues\
@@ -299,7 +300,8 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         super().__init__(config)
 
         # function that will be used for getting messages
-        self._message_getter = self._get_message()
+        asyncer_loop = asyncer.asyncer.get_event_loop_option(self._event_loop_name).get()
+        self._message_getter = self._get_message(asyncer_loop)
 
     def __del__(self):
 
@@ -319,7 +321,7 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
             self._event_loop_name,
         )
 
-    def _get_message(self):
+    def _get_message(self, asyncer_loop: asyncio.AbstractEventLoop):
         """Helper method to create a function for getting the messages in order of priority."""
 
         if self._single_queue:
@@ -331,8 +333,29 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
         else:
             # if we have multiple queues, sort based on priority
             async def receiver_helper() -> List[Tuple[Number, str, MessageType]]:
-                poll = [asyncio.create_task(_.get()) for _ in self._queues.get("_queues_async")]
+
+                # this is very stupid
+                # we have to make this functionality manually
+                # because there is no functionality like `select.select` for python's asyncio
+                # also janus queues do not have polling method :/
+                # so, here we go...
+
+                # construct the polls that we have not processed yet and the ones that are new
+                poll = [
+                    asyncer_loop.create_task(q.get())
+                    if idx not in self._pending_polls
+                    else self._pending_polls[idx]
+                    for idx, q
+                    in enumerate(self._queues.get("_queues_async"))
+                ]
                 done, pending = await asyncio.wait(poll, return_when=asyncio.FIRST_COMPLETED)
+                self._pending_polls = \
+                    {
+                        idx: poll[idx]
+                        for idx
+                        in range(len(self._queues.get("_queues_async")))
+                        if poll[idx] in pending
+                    }
 
                 # perform the actions in round-robin fashion
                 # note that the queues and priorities arrays are already sorted based on priorities
