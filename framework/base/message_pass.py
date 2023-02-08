@@ -1,13 +1,19 @@
+import asyncio
+from numbers import Number
 from threading import Lock
 import time
 from dataclasses import dataclass
+import numpy as np
 from ..asyncer.asyncer import asyncer
 from .base import ConfigReader, Logger, BaseWorker
 from ..util.config import ConfigParser
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic, Optional, Callable, Any, Set
+from typing import TypeVar, Generic, Optional, Callable, Any, Set, Tuple, List
 import janus
-from ..util.result import Result, Err
+from ..util.data_muncher import DataMuncher
+from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
+from ..util.data_muncher import UPDATE_OPERATIONS as UO, UPDATE_MODIFIERS as UM
+from ..util.result import Result, Err, Ok
 
 # type of message we accept
 MessageType = TypeVar("MessageType")
@@ -75,6 +81,10 @@ class MessagePasserError:
         """Errors related to the queue."""
         pass
 
+    class QueueNotExist(QueueError):
+        """Error when the queue does not exist."""
+        pass
+
     class OperationError(BaseMessagePasserError):
         """Error for when we are not operational."""
         pass
@@ -102,6 +112,77 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
             self._log.error("could not create event loop for message passing.")
             raise RuntimeError("could not create event loop for message passing.")
 
+        # we can have multiple queues
+        self._queues_info = self._config.get_or_empty(f"{MESSAGE_PASSER_CONFIG_PREFIX}.queues")
+        # for convenience have the info as array of data as well
+        self._queues = DataMuncher({
+            "_names": [],
+            "_priorities": [],
+            "_queues": [],
+            "_queues_sync": [],
+            "_queues_async": [],
+            "queues": {},
+        })
+        for name in self._queues_info.get_keys():
+            priority = self._queues_info.get_or_else(f"{name}.priority", 1)
+            if not isinstance(priority, Number):
+                self._log.error(f"for the queue {name} got priority of {priority} that is not a number")
+                raise ValueError(f"wrong queue priority")
+            if (message_pass_queue_res := self._make_async_queue()).is_err():
+                raise message_pass_queue_res.get_err()
+            queue: janus.Queue[MessageType] = message_pass_queue_res.get()
+            queue_sync: janus.SyncQueue = queue.sync_q
+            queue_async: janus.AsyncQueue = queue.async_q
+            self._queues = self._queues.update({}, {
+                f"queues.{name}.name": name,
+                f"queues.{name}.priority": priority,
+                f"queues.{name}.queue": queue,
+                f"queues.{name}.q_sync": queue_sync,
+                f"queues.{name}.q_async": queue_async,
+            })
+            self._queues.get_value_option("_names").for_each(lambda x: x.append(name))
+            self._queues.get_value_option("_priorities").for_each(lambda x: x.append(priority))
+            self._queues.get_value_option("_queues").for_each(lambda x: x.append(queue))
+            self._queues.get_value_option("_queues_sync").for_each(lambda x: x.append(queue_sync))
+            self._queues.get_value_option("_queues_async").for_each(lambda x: x.append(queue_async))
+        # sort the arrays based on the priority
+        if len(ps := self._queues.get("_priorities")) > 1:
+            sorted_idxs = np.argsort(ps)[::-1]
+            self._queues = \
+                self._queues\
+                .update_map(
+                    {FM.KEYNAME: {FO.REGEX: r'^_\w+'}},
+                    lambda x: [x[idx] for idx in sorted_idxs],
+                )
+
+            # take the one with the lowest priority and make that the default queue
+            self._default_queue_sync = self._queues.get("_queues_sync")[-1]
+
+        # if we have only one queue, optimize a bit
+        self._single_queue = False  # to know if we have a single queue
+        if 0 <= len(self._queues_info.get_keys()) <= 1:
+            self._single_queue = True
+            if (message_pass_queue_res := self._make_async_queue()).is_err():
+                raise message_pass_queue_res.get_err()
+            self._message_pass_queue: janus.Queue[MessageType] = message_pass_queue_res.get()
+            self._message_pass_queue_sync: janus.SyncQueue = self._message_pass_queue.sync_q
+            self._message_pass_queue_async: janus.AsyncQueue = self._message_pass_queue.async_q
+            self._default_queue_sync = self._message_pass_queue_sync
+
+            # make a queue for storing the messages that will be processed later
+        from collections import deque
+        self._inbox_storage: deque[MessageType] = deque()
+
+        # bookkeeping to know we are operational
+        self._message_pass_working = True
+
+        # add us to the list of all message passers
+        with _ALL_MESSAGE_PASSERS_LOCK:
+            _ALL_MESSAGE_PASSERS.add(self)
+
+    def _make_async_queue(self) -> Result[janus.Queue[MessageType], Exception]:
+        """Makes and returns an async queue, wrapped in Result."""
+
         async def make_janus_queue():
             """Helper function for creating a janus queue in the desired event loop."""
             return janus.Queue()
@@ -115,28 +196,18 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         )
         if res.is_err():
             self._log.error("could not create queue for event loop for message passing.")
-            raise RuntimeError("could not create queue for event loop for message passing.")
+            return Err(RuntimeError("could not create queue for event loop for message passing."))
         i = 0
         while not res.get().done() and i < 5000:
             i += 1
             time.sleep(.001)
         if i == 5000:
             self._log.error("waited too log to obtain queue for message passing")
-            raise RuntimeError("waited too log to obtain queue for message passing")
-        self._message_pass_queue: janus.Queue[MessageType] = res.get().result()
-        self._message_pass_queue_sync: janus.SyncQueue = self._message_pass_queue.sync_q
-        self._message_pass_queue_async: janus.AsyncQueue = self._message_pass_queue.async_q
+            return Err(RuntimeError("waited too log to obtain queue for message passing"))
 
-        # make a queue for storing the messages that will be processed later
-        from collections import deque
-        self._inbox_storage: deque[MessageType] = deque()
+        message_pass_queue: janus.Queue[MessageType] = res.get().result()
 
-        # bookkeeping to know we are operational
-        self._message_pass_working = True
-
-        # add us to the list of all message passers
-        with _ALL_MESSAGE_PASSERS_LOCK:
-            _ALL_MESSAGE_PASSERS.add(self)
+        return Ok(message_pass_queue)
 
     def _message_store(self, message: MessageType) -> None:
         """
@@ -177,7 +248,7 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
 
         raise NotImplementedError
 
-    def tell(self, message: MessageType) -> Result:
+    def tell(self, message: MessageType, queue_name: str = None) -> Result:
         """
         Sends the message to self for later processing.
 
@@ -185,6 +256,8 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
         ----------
         message : MessageType
             the message to be sent for later processing
+        queue_name : str, optional
+            whether to put this message on a special queue, when not passed, default queue is used
 
         Returns
         -------
@@ -193,10 +266,19 @@ class MessagePasserBase(Generic[MessageType], Logger, ConfigReader, ABC):
 
         """
 
-        if self._message_pass_working is False:
+        # make sure if we are working and initialized
+        if not hasattr(self, "_message_pass_working") or self._message_pass_working is False:
             return Err(MessagePasserError.OperationError("not operational"))
 
-        res = Result.from_func(self._message_pass_queue_sync.put, message)
+        if queue_name is None:
+            msg_queue = self._default_queue_sync
+        else:
+            res = self._queues.get_value_option(f"queues.{queue_name}.q_sync")
+            if res.is_empty():
+                return Err(MessagePasserError.QueueNotExist(f"queue with name {queue_name} does not exist"))
+            msg_queue = res.get()
+
+        res = Result.from_func(msg_queue.put, message)
         if res.is_err():
             res = Err(MessagePasserError.QueueError(res.get_err()))
 
@@ -216,6 +298,9 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
         super().__init__(config)
 
+        # function that will be used for getting messages
+        self._message_getter = self._get_message()
+
     def __del__(self):
 
         self.tell(terminate_message)
@@ -234,6 +319,35 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
             self._event_loop_name,
         )
 
+    def _get_message(self):
+        """Helper method to create a function for getting the messages in order of priority."""
+
+        if self._single_queue:
+            # if we have a single queue, optimize a bit
+            async def receiver_helper() -> List[Tuple[Number, str, MessageType]]:
+                message: MessageType = await self._message_pass_queue_async.get()
+                return [(1, "default", message)]
+
+        else:
+            # if we have multiple queues, sort based on priority
+            async def receiver_helper() -> List[Tuple[Number, str, MessageType]]:
+                poll = [asyncio.create_task(_.get()) for _ in self._queues.get("_queues_async")]
+                done, pending = await asyncio.wait(poll, return_when=asyncio.FIRST_COMPLETED)
+
+                # perform the actions in round-robin fashion
+                # note that the queues and priorities arrays are already sorted based on priorities
+                # thus, the following array is sorted based on priorities
+                p_res = [
+                    (p, n, poll[idx].result())
+                    for idx, (p, n)
+                    in enumerate(zip(self._queues.get("_priorities"), self._queues.get("_names")))
+                    if poll[idx] in done
+                ]
+
+                return p_res
+
+        return receiver_helper
+
     async def _receive(self) -> None:
         """Main method. Receives the messages sent and acts upon them."""
 
@@ -241,34 +355,36 @@ class MessagePasser(MessagePasserBase[MessageType], ABC):
 
             # get the command
             try:
-                message: MessageType = await self._message_pass_queue_async.get()
+                priority_messages: List[Tuple[Number, str, MessageType]] = await self._message_getter()
             except BaseException as e:
                 self._log.error(f"failed getting message from queue with error of '{e}'. stopping message receiving")
                 break
 
-            # if it is a termination message, terminate
-            if message == terminate_message:
-                break
+            for priority, q_name, msg in priority_messages:
 
-            try:
-                # process the message
-                result: ReceiveResults.BaseReceiveResult = await self._receive_message(message)
-            except BaseException as e:
-                result: ReceiveResults.BaseReceiveResult = _PanicReceive(error=e)
+                # if it is a termination message, terminate
+                if msg == terminate_message:
+                    break
 
-            if isinstance(result, ReceiveResults.SameReceive):
-                # do nothing and go to the next fetching
-                pass
-            elif isinstance(result, ReceiveResults.EndReceive):
-                break
-            elif isinstance(result, ReceiveResults.DestructReceive):
-                break
-            elif isinstance(result, _PanicReceive):
-                self._log.warning(f"receiver panicked with error of '{result.error}'")
-                break
-            else:
-                self._message_pass_working = False
-                raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
+                try:
+                    # process the message
+                    result: ReceiveResults.BaseReceiveResult = await self._receive_message(msg)
+                except BaseException as e:
+                    result: ReceiveResults.BaseReceiveResult = _PanicReceive(error=e)
+
+                if isinstance(result, ReceiveResults.SameReceive):
+                    # do nothing and go to the next fetching
+                    pass
+                elif isinstance(result, ReceiveResults.EndReceive):
+                    break
+                elif isinstance(result, ReceiveResults.DestructReceive):
+                    break
+                elif isinstance(result, _PanicReceive):
+                    self._log.warning(f"receiver panicked with error of '{result.error}'")
+                    break
+                else:
+                    self._message_pass_working = False
+                    raise RuntimeError(f"received unknown receive behavior of '{result}' of type '{type(result)}'")
 
         # no longer operational
         self._message_pass_working = False
