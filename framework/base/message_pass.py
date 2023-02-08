@@ -577,12 +577,12 @@ class _MessagePasserTerminator(BaseWorker):
         if result is False:
             return False, None
 
-        check = (len(_ALL_MESSAGE_PASSERS) == 0)
         names_queue = {
             item.__class__.__name__: item.get_approximate_message_passer_queue_size()
             for item
             in _ALL_MESSAGE_PASSERS
         }
+        check = (sum(names_queue.values()) == 0)
         _ALL_MESSAGE_PASSERS_LOCK.release()
         return check, names_queue
 
