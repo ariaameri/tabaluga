@@ -174,6 +174,22 @@ class Option(Generic[T], ABC):
 
         return default_value if self.is_empty() else self
 
+    def or_else_func(self, default_func: Callable[[], Option[Any]]) -> Option[Any]:
+        """Returns the Option itself if non-empty or runs the default function that returns an option.
+
+        Parameters
+        ----------
+        default_func : Callable[[], Option[Any]]
+            Default function to call and return in case of non-existence internal value
+
+        Returns
+        -------
+        Self in case of non-empty Option or the result of running default_func
+
+        """
+
+        return default_func() if self.is_empty() else self
+
     @abstractmethod
     def get_or_else(self, default_value: Any) -> Any:
         """Returns the internal value or default_value if non-existence.
