@@ -1041,7 +1041,7 @@ class Panacea(PanaceaBase):
             in {
                 key: self._parameters.get(key).intersection_option(value_new)
                 for key, value_new in new_config._parameters.items()
-                if (key in self._parameters) and (key in new_config._parameters)
+                if key in self._parameters
             }.items()
             if value.is_defined()
         }
