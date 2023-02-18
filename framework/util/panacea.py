@@ -429,7 +429,6 @@ class PanaceaBase(ABC):
     def diff_option(
             self,
             new_config: PanaceaSubclass,
-            consider_values: bool = True,
             same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
     ) -> Option[PanaceaSubclass]:
         """
@@ -439,8 +438,6 @@ class PanaceaBase(ABC):
         ----------
         new_config : PanaceaSubclass
             the panacea to subtract
-        consider_values : bool, optional
-            whether to consider values for equality for finding the diff, default to True
         same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
             function to use when two keys are the same and of the same type
 
@@ -1192,7 +1189,6 @@ class Panacea(PanaceaBase):
     def diff(
             self,
             new_config: PanaceaSubclass,
-            consider_values: bool = True,
             same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
     ) -> PanaceaSubclass:
         """
@@ -1202,8 +1198,6 @@ class Panacea(PanaceaBase):
         ----------
         new_config : PanaceaSubclass
             the panacea to subtract
-        consider_values : bool, optional
-            whether to consider values for equality for finding the diff, default to True
         same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
             function to use when two keys are the same and of the same type
 
@@ -1216,15 +1210,13 @@ class Panacea(PanaceaBase):
 
         return \
             self.diff_option(
-                new_config,
-                consider_values,
-                same_key_reduction_func
+                new_config=new_config,
+                same_key_reduction_func=same_key_reduction_func,
             ).get_or_else_func(lambda: self.__class__({}))
 
     def diff_option(
         self,
         new_config: PanaceaSubclass,
-        consider_values: bool = True,
         same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
     ) -> Option[PanaceaSubclass]:
         """
@@ -1234,8 +1226,6 @@ class Panacea(PanaceaBase):
         ----------
         new_config : PanaceaSubclass
             the panacea to subtract
-        consider_values : bool, optional
-            whether to consider values for equality for finding the diff, default to True
         same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
             function to use when two keys are the same and of the same type
 
@@ -1260,7 +1250,6 @@ class Panacea(PanaceaBase):
             in {
                 key: value.diff_option(
                     new_config=new_config._parameters.get(key),
-                    consider_values=consider_values,
                     same_key_reduction_func=same_key_reduction_func,
                 )
                 for key, value in self._parameters.items()
@@ -1511,7 +1500,6 @@ class PanaceaLeaf(PanaceaBase):
     def diff_option(
             self,
             new_config: PanaceaSubclass,
-            consider_values: bool = True,
             same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
     ) -> Option[PanaceaSubclass]:
         """
@@ -1521,8 +1509,6 @@ class PanaceaLeaf(PanaceaBase):
         ----------
         new_config : PanaceaSubclass
             the panacea to subtract
-        consider_values : bool, optional
-            whether to consider values for equality for finding the diff, default to True
         same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
             function to use when two keys are the same and of the same type
 
@@ -1534,15 +1520,12 @@ class PanaceaLeaf(PanaceaBase):
         """
 
         if type(self) == type(new_config):
-            if consider_values:
-                if same_key_reduction_func is not None:
-                    return same_key_reduction_func(self._value, new_config.get("_value"))
-                elif self == new_config:
-                    return nothing
-                else:
-                    return Some(self)
-            else:
+            if same_key_reduction_func is not None:
+                return same_key_reduction_func(self._value, new_config.get("_value"))
+            elif self == new_config:
                 return nothing
+            else:
+                return Some(self)
         # if the other thing is not a leaf as I am, then the difference is myself
         else:
             return Some(self)
