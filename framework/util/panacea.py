@@ -1,6 +1,6 @@
 from __future__ import annotations
 import json
-from typing import Dict, Any, List, Type, Union, Callable, Generator, TypeVar
+from typing import Dict, Any, List, Type, Union, Callable, Generator, TypeVar, Optional
 from types import FunctionType
 import yaml
 from enum import Enum
@@ -380,13 +380,19 @@ class PanaceaBase(ABC):
     # Modifications
 
     @abstractmethod
-    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+    def union_option(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
         """method to take the union of two config instances and replace the currently existing ones.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to union with (and update) the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -397,13 +403,19 @@ class PanaceaBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def intersection_option(self, new_config: PanaceaSubclass) -> Option:
+    def intersection_option(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option:
         """method to help to take the intersection of two config instances.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to intersect with the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -414,7 +426,12 @@ class PanaceaBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+    def diff_option(
+            self,
+            new_config: PanaceaSubclass,
+            consider_values: bool = True,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
         """
         Finds the diff of self and the provided argument and returns the result, Option wrapped.
 
@@ -424,6 +441,8 @@ class PanaceaBase(ABC):
             the panacea to subtract
         consider_values : bool, optional
             whether to consider values for equality for finding the diff, default to True
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1016,13 +1035,19 @@ class Panacea(PanaceaBase):
 
         return result
 
-    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+    def union_option(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
         """method to take the union of two config instances and replace the currently existing ones.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to union with (and update) the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1047,9 +1072,17 @@ class Panacea(PanaceaBase):
         # Find the elements that exist in both of the configs
         # prefer the new one that is given as argument
         out_intersection = {
-            key: value_new.union_option(self._parameters.get(key)).get()
-            for key, value_new in new_config._parameters.items()
-            if (key in self._parameters) and (key in new_config._parameters)
+            k: v.get()
+            for k, v
+            in {
+                key: value_new.union_option(
+                    new_config=self._parameters.get(key),
+                    same_key_reduction_func=same_key_reduction_func,
+                )
+                for key, value_new in new_config._parameters.items()
+                if (key in self._parameters) and (key in new_config._parameters)
+            }.items()
+            if v.is_defined()
         }
 
         # Concatenate the newly generated dictionaries to get a new one and create a Panacea from that
@@ -1064,13 +1097,19 @@ class Panacea(PanaceaBase):
         else:
             return Some(self.__class__(final_parameters))
 
-    def union(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
+    def union(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> PanaceaSubclass:
         """method to take the union of two config instances and replace the currently existing ones.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to union with (and update) the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1078,15 +1117,21 @@ class Panacea(PanaceaBase):
 
         """
 
-        return self.union_option(new_config).get()
+        return self.union_option(new_config, same_key_reduction_func).get()
 
-    def intersection(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
+    def intersection(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> PanaceaSubclass:
         """method to take the intersection of two config instances.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to intersect with the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1094,15 +1139,21 @@ class Panacea(PanaceaBase):
 
         """
 
-        return self.intersection_option(new_config).get_or_else(self.__class__())
+        return self.intersection_option(new_config, same_key_reduction_func).get_or_else(self.__class__())
 
-    def intersection_option(self, new_config: PanaceaSubclass) -> Option:
+    def intersection_option(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option:
         """method to help to take the intersection of two config instances.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to intersect with the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1115,7 +1166,10 @@ class Panacea(PanaceaBase):
             key: value.get()
             for key, value
             in {
-                key: self._parameters.get(key).intersection_option(value_new)
+                key: self._parameters.get(key).intersection_option(
+                    new_config=value_new,
+                    same_key_reduction_func=same_key_reduction_func,
+                )
                 for key, value_new in new_config._parameters.items()
                 if key in self._parameters
             }.items()
@@ -1135,7 +1189,12 @@ class Panacea(PanaceaBase):
         else:
             return nothing
 
-    def diff(self, new_config: PanaceaSubclass, consider_values: bool = True) -> PanaceaSubclass:
+    def diff(
+            self,
+            new_config: PanaceaSubclass,
+            consider_values: bool = True,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> PanaceaSubclass:
         """
         Finds the diff of self and the provided argument and returns the result
 
@@ -1145,6 +1204,8 @@ class Panacea(PanaceaBase):
             the panacea to subtract
         consider_values : bool, optional
             whether to consider values for equality for finding the diff, default to True
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1153,9 +1214,19 @@ class Panacea(PanaceaBase):
 
         """
 
-        return self.diff_option(new_config, consider_values).get_or_else_func(lambda: self.__class__({}))
+        return \
+            self.diff_option(
+                new_config,
+                consider_values,
+                same_key_reduction_func
+            ).get_or_else_func(lambda: self.__class__({}))
 
-    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+    def diff_option(
+        self,
+        new_config: PanaceaSubclass,
+        consider_values: bool = True,
+        same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
         """
         Finds the diff of self and the provided argument and returns the result, Option wrapped.
 
@@ -1165,6 +1236,8 @@ class Panacea(PanaceaBase):
             the panacea to subtract
         consider_values : bool, optional
             whether to consider values for equality for finding the diff, default to True
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1185,7 +1258,11 @@ class Panacea(PanaceaBase):
             k: v.get()
             for k, v
             in {
-                key: value.diff_option(new_config._parameters.get(key), consider_values=consider_values)
+                key: value.diff_option(
+                    new_config=new_config._parameters.get(key),
+                    consider_values=consider_values,
+                    same_key_reduction_func=same_key_reduction_func,
+                )
                 for key, value in self._parameters.items()
                 if key in new_config._parameters.keys()
             }.items()
@@ -1382,13 +1459,19 @@ class PanaceaLeaf(PanaceaBase):
 
     # Modification
 
-    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+    def union_option(
+            self,
+            new_config: PanaceaSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
         """method to take the union of two config instances and replace the currently existing ones.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to union with (and update) the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1396,15 +1479,23 @@ class PanaceaLeaf(PanaceaBase):
 
         """
 
+        if (same_key_reduction_func is not None) and (type(self) == type(new_config)):
+            return same_key_reduction_func(self._value, new_config.get("_value"))
         return Some(self)
 
-    def intersection_option(self, new_config: PanaceaBaseSubclass) -> Option:
+    def intersection_option(
+            self,
+            new_config: PanaceaBaseSubclass,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option:
         """method to help to take the intersection of two config instances.
 
         Parameters
         ----------
         new_config : Panacea
             A config instance to intersect with the current one
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
 
         Returns
         -------
@@ -1412,13 +1503,41 @@ class PanaceaLeaf(PanaceaBase):
 
         """
 
+        if (same_key_reduction_func is not None) and (type(self) == type(new_config)):
+            return same_key_reduction_func(self._value, new_config.get("_value"))
+
         return Some(self) if (self == new_config) else nothing
 
-    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+    def diff_option(
+            self,
+            new_config: PanaceaSubclass,
+            consider_values: bool = True,
+            same_key_reduction_func: Optional[Callable[[Any, Any], Option[Any]]] = None,
+    ) -> Option[PanaceaSubclass]:
+        """
+        Finds the diff of self and the provided argument and returns the result, Option wrapped.
+
+        Parameters
+        ----------
+        new_config : PanaceaSubclass
+            the panacea to subtract
+        consider_values : bool, optional
+            whether to consider values for equality for finding the diff, default to True
+        same_key_reduction_func : Optional[Callable[[Any, Any], Option[Any]]]
+            function to use when two keys are the same and of the same type
+
+        Returns
+        -------
+        Option[PanaceaSubclass]
+            result of diff, option wrapped
+
+        """
 
         if type(self) == type(new_config):
             if consider_values:
-                if self == new_config:
+                if same_key_reduction_func is not None:
+                    return same_key_reduction_func(self._value, new_config.get("_value"))
+                elif self == new_config:
                     return nothing
                 else:
                     return Some(self)
