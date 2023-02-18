@@ -940,6 +940,54 @@ class Panacea(PanaceaBase):
 
         return result
 
+    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+        """method to take the union of two config instances and replace the currently existing ones.
+
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to union with (and update) the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the union of the two config instances
+
+        """
+
+        # If None is passed, do nothing
+        if new_config is None:
+            return Some(self)
+
+        if type(self) != type(new_config):
+            return Some(self)
+
+        # Find the elements that exist in only one of the configs
+        out_delta = {
+            key: value
+            for key, value in chain(self._parameters.items(), new_config._parameters.items())
+            if (key in self._parameters.keys()) ^ (key in new_config._parameters.keys())
+        }
+
+        # Find the elements that exist in both of the configs
+        # prefer the new one that is given as argument
+        out_intersection = {
+            key: value_new.union_option(self._parameters.get(key)).get()
+            for key, value_new in new_config._parameters.items()
+            if (key in self._parameters) and (key in new_config._parameters)
+        }
+
+        # Concatenate the newly generated dictionaries to get a new one and create a Panacea from that
+        final_parameters = {**out_delta, **out_intersection}
+
+        # If the union is the current instance, return self
+        if final_parameters == self._parameters:
+            return Some(self)
+        # If the union is the to-be-union-ed instance, return it
+        elif final_parameters == new_config._parameters:
+            return Some(new_config)
+        else:
+            return Some(self.__class__(final_parameters))
+
     def union(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
         """method to take the union of two config instances and replace the currently existing ones.
 
@@ -954,65 +1002,7 @@ class Panacea(PanaceaBase):
 
         """
 
-        def union_helper(new: Any, old: Any, this) -> PanaceaBaseSubclass:
-            """Helper function to create the union of two elements.
-
-            Parameters
-            ----------
-            new : Any
-                The new element
-            old : Any
-                The old element
-            this
-                The reference to the outer class
-
-            Returns
-            -------
-            The result of union of the new and old elements
-
-            """
-
-            # If we are dealing with the same object, return it
-            if new is old:
-                return new
-            # If the new and old items are ConfigParsers, traverse recursively, else return the new item
-            if type(new) == type(old) == type(this):
-                return old.union(new)
-            else:
-                return new
-
-        # If None is passed, do nothing
-        if new_config is None:
-            return self
-
-        assert type(new_config) is type(self), \
-            f"The element to be union-ed must be the same type as {self.__class__.__name__} class."
-
-        # Find the elements that exist in only one of the configs
-        out_delta = {
-            key: value
-            for key, value in chain(self._parameters.items(), new_config._parameters.items())
-            if (key in self._parameters.keys()) ^ (key in new_config._parameters.keys())
-        }
-
-        # Find the elements that exist in both of the configs
-        out_intersection = {
-            key: union_helper(value_new, self._parameters.get(key), self)
-            for key, value_new in new_config._parameters.items()
-            if (key in self._parameters) and (key in new_config._parameters)
-        }
-
-        # Concatenate the newly generated dictionaries to get a new one and create a Panacea from that
-        final_parameters = {**out_delta, **out_intersection}
-
-        # If the union is the current instance, return self
-        if final_parameters == self._parameters:
-            return self
-        # If the union is the to-be-union-ed instance, return it
-        elif final_parameters == new_config._parameters:
-            return new_config
-        else:
-            return self.__class__(final_parameters)
+        return self.union_option(new_config).get()
 
     def intersection(self, new_config: PanaceaSubclass) -> PanaceaSubclass:
         """method to take the intersection of two config instances.
@@ -1247,6 +1237,22 @@ class PanaceaLeaf(PanaceaBase):
         return func(self._value)
 
     # Modification
+
+    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+        """method to take the union of two config instances and replace the currently existing ones.
+
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to union with (and update) the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the union of the two config instances
+
+        """
+
+        return Some(self)
 
     def intersection_option(self, new_config: PanaceaBaseSubclass) -> Option:
         """method to help to take the intersection of two config instances.
