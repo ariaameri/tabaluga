@@ -1059,6 +1059,74 @@ class Panacea(PanaceaBase):
         else:
             return nothing
 
+    def diff(self, new_config: PanaceaSubclass, consider_values: bool = True) -> PanaceaSubclass:
+        """
+        Finds the diff of self and the provided argument and returns the result
+
+        Parameters
+        ----------
+        new_config : PanaceaSubclass
+            the panacea to subtract
+        consider_values : bool, optional
+            whether to consider values for equality for finding the diff, default to True
+
+        Returns
+        -------
+        PanaceaSubclass
+            result of diff
+
+        """
+
+        return self.diff_option(new_config, consider_values).get_or_else_func(lambda: self.__class__({}))
+
+    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+        """
+        Finds the diff of self and the provided argument and returns the result, Option wrapped.
+
+        Parameters
+        ----------
+        new_config : PanaceaSubclass
+            the panacea to subtract
+        consider_values : bool, optional
+            whether to consider values for equality for finding the diff, default to True
+
+        Returns
+        -------
+        Option[PanaceaSubclass]
+            result of diff, option wrapped
+
+        """
+
+        # Find the elements that exist in this instance but not the other
+        out_diff = {
+            key: value
+            for key, value in self._parameters.items()
+            if key not in new_config._parameters.keys()
+        }
+
+        # Items that exist, has to be processed recursively
+        in_diff = {
+            k: v.get()
+            for k, v
+            in {
+                key: value.diff_option(new_config._parameters.get(key), consider_values=consider_values)
+                for key, value in self._parameters.items()
+                if key in new_config._parameters.keys()
+            }.items()
+            if v.is_defined()
+        }
+
+        # Concatenate the newly generated dictionaries to get a new one and create a Panacea from that
+        final_parameters = {**out_diff, **in_diff}
+
+        if not final_parameters:
+            return nothing
+        # If the diff is the current instance, return self
+        elif final_parameters == self._parameters:
+            return Some(self)
+        else:
+            return Some(self.__class__(final_parameters))
+
 
 class PanaceaLeaf(PanaceaBase):
     """A class that will contain a value in a config tree.
@@ -1269,6 +1337,20 @@ class PanaceaLeaf(PanaceaBase):
         """
 
         return Some(self) if (self == new_config) else nothing
+
+    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+
+        if type(self) == type(new_config):
+            if consider_values:
+                if self == new_config:
+                    return nothing
+                else:
+                    return Some(self)
+            else:
+                return nothing
+        # if the other thing is not a leaf as I am, then the difference is myself
+        else:
+            return Some(self)
 
     # Representation
 
