@@ -376,6 +376,63 @@ class PanaceaBase(ABC):
         # Return
         return updated.get_or_else(('', self))[1]
 
+    # Modifications
+
+    @abstractmethod
+    def union_option(self, new_config: PanaceaSubclass) -> Option[PanaceaSubclass]:
+        """method to take the union of two config instances and replace the currently existing ones.
+
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to union with (and update) the current one
+
+        Returns
+        -------
+        A new instance of ConfigParser containing the union of the two config instances
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def intersection_option(self, new_config: PanaceaSubclass) -> Option:
+        """method to help to take the intersection of two config instances.
+
+        Parameters
+        ----------
+        new_config : Panacea
+            A config instance to intersect with the current one
+
+        Returns
+        -------
+        An Option value containing the intersection of the two config instances
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def diff_option(self, new_config: PanaceaSubclass, consider_values: bool = True) -> Option[PanaceaSubclass]:
+        """
+        Finds the diff of self and the provided argument and returns the result, Option wrapped.
+
+        Parameters
+        ----------
+        new_config : PanaceaSubclass
+            the panacea to subtract
+        consider_values : bool, optional
+            whether to consider values for equality for finding the diff, default to True
+
+        Returns
+        -------
+        Option[PanaceaSubclass]
+            result of diff, option wrapped
+
+        """
+
+        raise NotImplementedError
+
 
 class Panacea(PanaceaBase):
     """A class that will contain config values and subclasses.
