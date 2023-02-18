@@ -208,6 +208,23 @@ class Option(Generic[T], ABC):
         pass
 
     @abstractmethod
+    def get_or_else_func(self, default_func: Callable[[], Any]) -> Any:
+        """Returns the internal value or the result of running default_func if non-existence.
+
+        Parameters
+        ----------
+        default_func : default_func: Callable[[], Any]
+            Default function to run and return in case of non-existence internal value
+
+        Returns
+        -------
+        The internal value or the result of running default_func
+
+        """
+
+        pass
+
+    @abstractmethod
     def get(self) -> T:
         """Returns the internal value or raises an error if non-existence.
 
@@ -333,6 +350,22 @@ class Some(Option):
         ----------
         default_value : Any
             Default value to return in case of non-existence internal value, does not work here
+
+        Returns
+        -------
+        The internal value
+
+        """
+
+        return self._value
+
+    def get_or_else_func(self, default_func: Callable[[], Any]) -> Any:
+        """Returns the internal value.
+
+        Parameters
+        ----------
+        default_func : default_func: Callable[[], Any]
+            Default function to run and return in case of non-existence internal value
 
         Returns
         -------
@@ -521,6 +554,22 @@ class Nothing(Option):
         """
 
         return default_value
+
+    def get_or_else_func(self, default_func: Callable[[], Any]) -> Any:
+        """Returns the result of running default_func.
+
+        Parameters
+        ----------
+        default_func : default_func: Callable[[], Any]
+            Default function to run and return in case of non-existence internal value
+
+        Returns
+        -------
+        The result of running default_func
+
+        """
+
+        return default_func()
 
     def exist(self, function: Callable[[T], bool]) -> bool:
         """Returns false as there is no element to satisfy the predicate.
