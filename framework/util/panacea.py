@@ -159,6 +159,7 @@ class PanaceaBase(ABC):
         else:
             return value
 
+    @abstractmethod
     def get_or_else(self, item: str, default_value: Any) -> Any:
         """Gets an item in the instance and return default_value if not found.
 
@@ -175,7 +176,7 @@ class PanaceaBase(ABC):
 
         """
 
-        return self.get_option(item).fold(lambda x: x.get() if isinstance(x, self.Leaf) else x, default_value)
+        raise NotImplementedError
 
     def get_parameters(self) -> Dict:
         """Gets the entire parameters.
@@ -603,7 +604,7 @@ class Panacea(PanaceaBase):
 
         return self.__class__(self._parameters)
 
-    def __deepcopy__(self, memodict={}):
+    def __deepcopy__(self):
         """Deep copy of the current instance."""
 
         return self.__class__(self.dict_representation())
@@ -794,6 +795,24 @@ class Panacea(PanaceaBase):
             raise AttributeError(f'Leaf item {item} does not exist in this instance of {self.__class__.__name__}!')
 
         return out.get()
+
+    def get_or_else(self, item: str, default_value: Any) -> Any:
+        """Gets an item in the instance and return default_value if not found.
+
+        Parameters
+        ----------
+        item : str
+            Item to look for in the shallowest level
+        default_value : Any
+            A value to return if the item was not found
+
+        Returns
+        -------
+        The item looking for or default value
+
+        """
+
+        return self.get_option(item).fold(lambda x: x.get() if isinstance(x, self.Leaf) else x, default_value)
 
     def get_or_empty(self, item: str) -> PanaceaSubclass:
         """
@@ -1518,6 +1537,24 @@ class PanaceaLeaf(PanaceaBase):
         """
 
         return nothing
+
+    def get_or_else(self, item: str, default_value: Any) -> Any:
+        """Gets an item in the instance and return default_value if not found.
+
+        Parameters
+        ----------
+        item : str
+            Item to look for in the shallowest level
+        default_value : Any
+            A value to return if the item was not found
+
+        Returns
+        -------
+        The item looking for or default value
+
+        """
+
+        return self.get_option(item).get_or_else(default_value)
 
     def get_value_option(self, item: str = '_value') -> Option[Any]:
         """
@@ -2600,7 +2637,7 @@ class Modification:
 
             Parameters
             ----------
-            key_new : str
+            value : str
                 The old name of the value to be renamed
 
             Returns
@@ -2708,7 +2745,7 @@ class Modification:
 
             Parameters
             ----------
-            funcs: Union[FunctionType, List[FunctionType]]
+            value: Union[FunctionType, List[FunctionType]]
                 The (list of) function to apply to the Option value
 
             Returns
