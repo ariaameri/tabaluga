@@ -531,7 +531,7 @@ class MetadataManipulator(base.BaseWorker):
         # metadata storage
         self.metadata = metadata
 
-    def modify(self) -> pd.DataFrame:
+    def modify(self, check_for_sanity: bool = True) -> pd.DataFrame:
         """Runs the whole modification pipeline and returns the result."""
 
         metadata = self.metadata
@@ -549,7 +549,8 @@ class MetadataManipulator(base.BaseWorker):
             metadata = self.regroup_metadata(self.metadata, criterion='__criterion_help')
             self.metadata = metadata = metadata.drop(['__criterion_help'], axis=1)
 
-            self._check_for_sanity(metadata)
+            if check_for_sanity:
+                self._check_for_sanity(metadata)
 
         return metadata
 
@@ -605,7 +606,8 @@ class MetadataManipulator(base.BaseWorker):
 
         return metadata
 
-    def _check_for_sanity(self, metadata: pd.DataFrame) -> None:
+    @staticmethod
+    def check_for_sanity(metadata: pd.DataFrame, logger) -> None:
         """Checks the given metadata and makes some info if necessary."""
 
         # get the bundle counts and report
@@ -616,9 +618,9 @@ class MetadataManipulator(base.BaseWorker):
         from collections import Counter
         count = Counter(idx_0_to_1_count.values())
         if (length := len(count.values())) == 0:
-            self._log.error(f"ended up in a weird situation: data bundles seem to not exist!")
+            logger.error(f"ended up in a weird situation: data bundles seem to not exist!")
         elif length == 1:
-            self._log.info(f"data bundles contain {length} elements each")
+            logger.info(f"data bundles contain {list(count.keys())[0]} elements each")
         else:
             warn = \
                 "data bundles contain different amount of elements. I found:" \
@@ -643,7 +645,12 @@ class MetadataManipulator(base.BaseWorker):
             # revert pandas setting
             pd.set_option('display.max_colwidth', pd_max_col_width)
 
-            self._log.warning(warn)
+            logger.warning(warn)
+
+    def _check_for_sanity(self, metadata: pd.DataFrame) -> None:
+        """Checks the given metadata and makes some info if necessary."""
+
+        return self.check_for_sanity(metadata, self._log)
 
     @staticmethod
     def reset_level_0_indices(metadata: pd.DataFrame, offset: int = 0) -> pd.DataFrame:
