@@ -678,6 +678,50 @@ class MetadataManipulator(base.BaseWorker):
 
         return metadata
 
+    @staticmethod
+    def bundle_exist_name(metadata: pd.DataFrame, exist_names: List[str], criterion_column: str):
+        """
+        Takes the two level indexed metadata, for each of the levels checks if the criterion column contains all names.
+        If not, removes that bundle (level 0 index) and returns the result.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the two-level indexed metadata
+        exist_names : List[str]
+            the names that must exist in each bundle according to criterion_column values
+        criterion_column : str
+            the column name to use to search for exist_names
+
+        Returns
+        -------
+        pd.DataFrame
+            the result
+
+        """
+
+        names_count: int = len(exist_names)
+        locs_drop = []
+
+        for i0 in metadata.index.get_level_values(0).unique():
+            loc = metadata.loc[i0]
+
+            # if the bundle has a smaller number of elements from the "exist" names, drop it
+            if len(loc) < names_count:
+                locs_drop.append(i0)
+                continue
+
+            # if it does not have all names, then it should be removed
+            loc_criterion = loc[criterion_column].values
+            for name in exist_names:
+                if name not in loc_criterion:
+                    locs_drop.append(i0)
+                    break
+
+        metadata = metadata.drop(locs_drop)
+
+        return metadata
+
 
 class FolderReader(base.BaseWorker):
     """This class is a helper class that reads metadata from a path (folder)."""
