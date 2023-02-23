@@ -84,7 +84,7 @@ class CUDAInformation(Process):
 
         msg = f''\
               f'{colored.fg("turquoise_2")}\u25A0 {colored.fg("blue")}CUDA information{colored.attr("reset")} is as follows:\n\n'\
-              f'\u00B7 {colored.fg("cornflower_blue")}driver version{colored.attr("reset")}: {pynvml.nvmlSystemGetDriverVersion().decode("utf-8")}\n' \
+              f'\u00B7 {colored.fg("cornflower_blue")}driver version{colored.attr("reset")}: {pynvml.nvmlSystemGetDriverVersion()}\n' \
               f'\u00B7 {colored.fg("cornflower_blue")}cuda version{colored.attr("reset")}: {pynvml.nvmlSystemGetCudaDriverVersion()}\n' \
               f'\u00B7 {colored.fg("cornflower_blue")}device count{colored.attr("reset")}: {pynvml.nvmlDeviceGetCount()}\n'\
               f'{device_info}\n'
