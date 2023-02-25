@@ -54,6 +54,8 @@ class Trainer(base.BaseEventManager, ABC):
         self.epochs: int = self._config.get('epochs')
         self.number_of_iterations: int = -1  # Has to be set by the data loader
         self.batch_size: int = -1  # Has to be set by the data loader
+        self.number_of_iterations_effective: int = -1  # Has to be set by the data loader
+        self.batch_size_effective: int = -1  # Has to be set by the data loader
         self.epoch: int = 0
         self.iter_num: int = 0
         self.batch: int = 0
