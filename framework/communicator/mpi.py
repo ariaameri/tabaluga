@@ -506,6 +506,33 @@ class _MPICommunicatorSingletonClass(BaseWorker):
 
         return Result.from_func(communicator.get().gather, sendobj=data, root=root_rank)
 
+    def collective_allgather(self, data: Any, name: str = None) \
+            -> Result[List[Any], Exception]:
+        """
+        collective communication for all-gathering
+
+        Parameters
+        ----------
+        data : Any
+            the data that has to be sent for gathering
+        name : str, optional
+            the name of the communicator to used. if not given, world will be used
+
+        Returns
+        -------
+        Result[List[Any], Exception]
+            the received data
+
+        """
+
+        self._check_mpi4py_loaded()
+
+        communicator: Option[MPI.Comm] = self._communicators.get_value_option(name or 'world')
+        if communicator.is_empty():
+            return Err(RuntimeError(f"communicator '{name or 'world'}' does not exit"))
+
+        return Result.from_func(communicator.get().allgather, sendobj=data)
+
     def get_rank_size(self, communicator: 'MPI.Comm') -> (int, int):
         """
         Gets the rank and size given an MPI communicator.
