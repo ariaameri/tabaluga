@@ -1,6 +1,6 @@
 import math
 import multiprocessing
-import pathlib
+import random
 import select
 import subprocess
 import threading
@@ -295,7 +295,7 @@ class TheProgressBarBase(ABC, BaseWorker):
         super().__init__(config)
 
         # get the run id
-        self.run_id: str = str(self._config.get_value_option("run_id").expect("run id not found"))
+        self.run_id: str = str(self._config.get_or_else("run_id", str(random.randint(0, 100_000))))
 
         # set rabbit data
         make_rabbit_data(self.run_id)
