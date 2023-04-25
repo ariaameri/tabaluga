@@ -132,6 +132,30 @@ class PanaceaBase(ABC):
 
         return out.get()
 
+    def get_value_list_option(self, items: List[str]) -> Option:
+        """
+        Goes through the list and return the first items found, option wrapped
+
+        Parameters
+        ----------
+        items : List[str]
+            Items to look for in the shallowest level or in the deeper level where levels are separated by '.'
+                For example item1.item2 will look at item1 in the shallowest level and will look for item2 inside item1.
+
+        Returns
+        -------
+        Value of the item, option wrapped
+
+        """
+
+        out = nothing
+        for item in items:
+            out = self.get_value_option(item)
+            if out.is_defined():
+                break
+
+        return out
+
     def get_value_option(self, item: str) -> Option[Any]:
         """
         Gets an item in the instance and return an Option value of that.
