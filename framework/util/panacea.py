@@ -2246,6 +2246,7 @@ class Modification:
             SET = '$set'
             SET_ONLY = '$set_only'
             SET_ON_INSERT = '$set_on_insert'
+            SET_ON_OPTION = '$set_on_option'
             UPDATE_ONLY = '$update_only'
             UPDATE_ONLY_VALUE = '$update_only_value'
             UPDATE = '$update'
@@ -2385,6 +2386,8 @@ class Modification:
                     function = self._set_only
                 elif single_operator == self.Operations.SET_ON_INSERT:
                     function = self._set_on_insert
+                elif single_operator == self.Operations.SET_ON_OPTION:
+                    function = self._set_on_option
                 elif single_operator == self.Operations.UPDATE_ONLY:
                     function = self._update_only
                 elif single_operator == self.Operations.UPDATE_ONLY_VALUE:
@@ -2602,6 +2605,44 @@ class Modification:
                 """
 
                 result = x.map(lambda a: (key, a)).or_else(Some((key, value)))
+
+                return result
+
+            return helper
+
+        def _set_on_option(self, value: Option) -> Callable[[str, Option], Option]:
+            """Wrapper function for setting a value on an Option value.
+
+            Parameters
+            ----------
+            value : Any
+                A value to set to the Option value.
+                    If Option value exists, i.e. it is a PanaceaBase, update it
+                    If Option value does not exist, set the value
+
+            Returns
+            -------
+            A function that can be called on an Option (key, value) pair, where value is PanaceaBase
+
+            """
+
+            def helper(key: str, x: Option) -> Option:
+                """Function to be called on an Option value to set a value.
+
+                Parameters
+                ----------
+                key : str
+                    Name of the Option value
+                x : Option
+                    An Option value to set the value
+
+                Returns
+                -------
+                Option, Some, (key, value) pair with the set value
+
+                """
+
+                result = value.flat_map(lambda _: Some((key, value.get())))
 
                 return result
 
