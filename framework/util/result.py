@@ -153,6 +153,24 @@ class Result(Generic[T, S], ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def flat_map(self, func: Callable[[Any], 'Result']) -> 'Result':
+        """
+        Apply a function to the value in case of OK and ignore in case of Err.
+
+        Parameters
+        ----------
+        func : Callable[[Any], Result]
+            function to be called on the value
+
+        Returns
+        -------
+        Result
+            new instance of Result
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
     def map_err(self, func: Callable[[BaseException], BaseException]) -> 'Result':
         """
         Apply a function to the error in case of Err and ignore in case of Ok.
@@ -307,6 +325,23 @@ class Ok(Result):
 
         return Ok(func(self._value))
 
+    def flat_map(self, func: Callable[[Any], 'Result']) -> 'Result':
+        """
+        Apply a function to the value in case of OK and ignore in case of Err.
+
+        Parameters
+        ----------
+        func : Callable[[Any], Result]
+            function to be called on the value
+
+        Returns
+        -------
+        Result
+            new instance of Result
+        """
+
+        return func(self._value)
+
     def map_err(self, func : Callable[[BaseException], BaseException]) -> 'Result':
         """
         Just ignore.
@@ -449,6 +484,23 @@ class Err(Result):
         -------
         Result
             same instance
+        """
+
+        return self
+
+    def flat_map(self, func: Callable[[Any], 'Result']) -> 'Result':
+        """
+        Apply a function to the value in case of OK and ignore in case of Err.
+
+        Parameters
+        ----------
+        func : Callable[[Any], Result]
+            function to be called on the value
+
+        Returns
+        -------
+        Result
+            new instance of Result
         """
 
         return self
