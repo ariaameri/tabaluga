@@ -212,7 +212,12 @@ class DataManager(base.BaseEventManager, ABC):
             )
 
         # get the metadata from the syncer
-        if (res := self._metadata_syncer.sync_train_val_test_metadata()).is_err():
+        if (res := self._metadata_syncer.sync_train_val_test_metadata(
+                train_metadata_original,
+                val_metadata_original,
+                test_metadata_original,
+                self.batch_size,
+        )).is_err():
             self._log.error(f"error happened while syncing the metadata between nodes with error of {res.get_err()}")
             return Err(RuntimeError("failed syncing metadata"))
         train_metadata, val_metadata, test_metadata = res.get()
@@ -1627,12 +1632,6 @@ class MetadataSyncer(base.BaseWorker):
         # if we want the train metadata to have the same length across nodes
         self.same_train_metadata_length_nodes = self._config.get_or_else('same_train_metadata_length_nodes', True)
 
-        # placeholder for the metadata
-        self.metadata: Optional[pd.DataFrame] = None
-        self.train_metadata: Optional[pd.DataFrame] = None
-        self.validation_metadata: Optional[pd.DataFrame] = None
-        self.test_metadata: Optional[pd.DataFrame] = None
-
         # get a new mpi communicator
         self.mpi_comm_name = 'metadata_syncer'
         if (
@@ -1651,57 +1650,26 @@ class MetadataSyncer(base.BaseWorker):
 
         return self.receiver
 
-    def set_metadata(self, metadata: pd.DataFrame):
-        """
-        Sets the complete metadata to be used for initial synchronization.
+    def _get_batch_sizes(self, batch_size: int) -> Result[List[int], Exception]:
 
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata data frame
+        return mpi.mpi_communicator.collective_gather(batch_size, name=self.mpi_comm_name)
 
-        Returns
-        -------
-        self
+    def _get_counts_based_on_list(self, total_count: int, weights: List[int]) -> List[int]:
 
-        """
+        total = sum(weights)
+        common_fact = [int(int(c / total * total_count) / c) for c in weights]
+        main_common_fact = min(common_fact)
+        final_counts = [int(main_common_fact * c) for c in weights]
 
-        self.metadata = metadata
+        return final_counts
 
-        return self
-
-    def set_train_val_test_metadata(
+    def _generate_train_val_test_metadata(
             self,
             train_metadata: pd.DataFrame,
-            validation_metadata: pd.DataFrame,
+            val_metadata: pd.DataFrame,
             test_metadata: pd.DataFrame,
-    ):
-        """
-        Sets the train/val/test metadata..
-
-        Parameters
-        ----------
-        train_metadata : pd.DataFrame
-            the train metadata data frame
-        validation_metadata : pd.DataFrame
-            the validation metadata data frame
-        test_metadata : pd.DataFrame
-            the test metadata data frame
-
-        Returns
-        -------
-        self
-
-        """
-
-        self.train_metadata = train_metadata
-        self.validation_metadata = validation_metadata
-        self.test_metadata = test_metadata
-
-        return self
-
-    def _generate_train_val_test_metadata(self) -> \
-            Result[Any, Exception]:
+            batch_size: int,
+    ) -> Result[Any, Exception]:
         """
         Generates and returns train/val/test metadata for each of the ranks.
 
@@ -1711,54 +1679,49 @@ class MetadataSyncer(base.BaseWorker):
             resulting dataframes
         """
 
-        if self.is_distributor():
+        res = self._get_batch_sizes(batch_size)
+        if res.is_err():
+            return res
+        batch_sizes = res.get()
 
-            if any([item is None for item in [self.train_metadata, self.validation_metadata, self.test_metadata]]):
-                return Err(
-                    ValueError(
-                        "metadata are not set in the main rank. please set them before calling this function."
-                    )
-                )
+        if self.is_distributor():
 
             # if we should not split the train data
             if self.all_nodes_all_train_data is True:
 
                 # make the train data
-                train_split_metadata = [self.train_metadata]
-                train_split_metadata.extend([
-                    self.train_metadata  # make copies of the train metadata
-                    for _
-                    in range(1, self.dist_size)
-                ])
+                train_split_metadata = [train_metadata] * self.dist_size
 
             # if we should split the train data among the nodes
             else:
                 # split the training metadata
-                train_zero_level_indices = self.train_metadata.index.get_level_values(0).unique()
-                chunk_size = math.floor(train_zero_level_indices.size / self.dist_size)
-                # note that the last chunk, which has a number of data not equal to the other chunks, will be dropped
-                # and not synced
+                # split according to the batch size so that each get the same number of iterations
+                train_zero_level_indices = train_metadata.index.get_level_values(0).unique()
+                chunk_sizes = self._get_counts_based_on_list(train_zero_level_indices.size, batch_sizes)
+                chunk_sizes_cumsum = list(np.cumsum([0, *chunk_sizes]))
                 train_split_indices = \
                     [
-                        train_zero_level_indices[start_idx:(start_idx+chunk_size)]
-                        for start_idx
-                        in range(0, train_zero_level_indices.size, chunk_size)
+                        train_zero_level_indices[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx+1]]
+                        for idx
+                        in range(0, len(chunk_sizes_cumsum) - 1)
                     ]
                 train_split_metadata = \
                     [
-                        self.train_metadata.loc[chunk_indices]
+                        train_metadata.loc[chunk_indices]
                         for chunk_indices
                         in train_split_indices
                     ]
-                # remove the extra training data
-                train_split_metadata = train_split_metadata[:self.dist_size]
 
                 # check that all train metadata have the same length
                 if self.same_train_metadata_length_nodes:
-                    md_lengths = [len(md) for md in train_split_metadata]
+                    md_lengths = [
+                        md.index.get_level_values(0).unique().size / b
+                        for md, b
+                        in zip(train_split_metadata, batch_sizes)
+                    ]
                     if not all([size == md_lengths[0] for size in md_lengths[1:]]):
                         self._log.error(
-                            f"the train metadata across nodes have different sizes:"
+                            f"the train metadata across nodes have different number of iterations:"
                             f"\n\t - "
                             + "\n\t - ".join([f"{node}: {size}" for node, size in enumerate(md_lengths)])
                             + "\n"
@@ -1767,18 +1730,18 @@ class MetadataSyncer(base.BaseWorker):
 
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
-            val_split_metadata = [self.validation_metadata]
+            val_split_metadata = [val_metadata]
             val_split_metadata.extend([
-                self.validation_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                val_metadata.iloc[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
 
             # split the test metadata
             # we only want the distributor to have the test data and not the others
-            test_split_metadata = [self.test_metadata]
+            test_split_metadata = [test_metadata]
             test_split_metadata.extend([
-                self.test_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                test_metadata.iloc[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
@@ -1790,7 +1753,13 @@ class MetadataSyncer(base.BaseWorker):
 
         return Ok((train_split_metadata, val_split_metadata, test_split_metadata))
 
-    def sync_train_val_test_metadata(self) -> Result[Any, Exception]:
+    def sync_train_val_test_metadata(
+            self,
+            train_metadata: pd.DataFrame,
+            val_metadata: pd.DataFrame,
+            test_metadata: pd.DataFrame,
+            batch_size: int,
+    ) -> Result[Any, Exception]:
         """
         Splits the train/val/test metadata into chunks for each process, scatters them, and returns each chunk.
         It should be noted that after this operation, all nodes will have exactly the same amount of data.
@@ -1802,7 +1771,14 @@ class MetadataSyncer(base.BaseWorker):
 
         """
 
-        if (res := self._generate_train_val_test_metadata()).is_err():
+        if (
+                res := self._generate_train_val_test_metadata(
+                    train_metadata,
+                    val_metadata,
+                    test_metadata,
+                    batch_size,
+                )
+        ).is_err():
             return res
         train_split_metadata, val_split_metadata, test_split_metadata = res.get()
 
