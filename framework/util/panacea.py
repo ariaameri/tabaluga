@@ -3340,8 +3340,11 @@ class Modification:
         # again, propagate
         yield from propagate(key, panacea)
 
-    def propagate_all(self,
-                      function_to_call_for_each_element: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]) \
+    def propagate_all(
+            self,
+            function_to_call_for_each_element: Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]],
+            keep_empty: bool,
+    ) \
             -> Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]:
         """Propagation function that goes through all the children of the panacea instance.
 
@@ -3349,6 +3352,8 @@ class Modification:
         ----------
         function_to_call_for_each_element : Callable[[str, PanaceaBase], Option[(str, PanaceaBase)]]
             A function to be called on each of the children elements during the propagation
+        keep_empty : bool
+            whether to keep the empty panaceas or not
 
         Returns
         -------
@@ -3395,7 +3400,7 @@ class Modification:
 
             # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
             # this is the same if panacea was empty in the first place! otherwise, we would remove empty panaceas
-            if new_dict or panacea.is_empty():
+            if new_dict or (keep_empty and panacea.is_empty()):
                 return Some((key, panacea.__class__(new_dict)))
             else:
                 return nothing
@@ -3665,7 +3670,7 @@ class Modification:
         # If the given `panacea` is a leaf node, return nothing, as there is no more children to propagate and
         # the `panacea` instance did not meet the filtering criteria
         if issubclass(type(panacea), Panacea):
-            propagate = self.propagate_all(for_each_element)
+            propagate = self.propagate_all(for_each_element, False)
         elif issubclass(type(panacea), PanaceaLeaf):
             propagate = lambda x, key: nothing
         else:
@@ -4035,7 +4040,7 @@ class Modification:
         # If the given `panacea` is a leaf node, return itself, as there is no more children to propagate and
         # the `panacea` instance did not meet the filtering criteria but we want to leave it untouched
         if issubclass(type(panacea), Panacea):
-            propagate = self.propagate_all(for_each_element)
+            propagate = self.propagate_all(for_each_element, True)
         elif issubclass(type(panacea), PanaceaLeaf):
             propagate = lambda key, x: Some((key, x))
         else:
