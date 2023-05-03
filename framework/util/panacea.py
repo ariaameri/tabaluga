@@ -3395,7 +3395,7 @@ class Modification:
 
             # If the processing resulted in a valid case, make a new class and return it, otherwise, nothing
             # this is the same if panacea was empty in the first place! otherwise, we would remove empty panaceas
-            if new_dict:  # or panacea.is_empty():
+            if new_dict or panacea.is_empty():
                 return Some((key, panacea.__class__(new_dict)))
             else:
                 return nothing
