@@ -331,7 +331,7 @@ class RabbitMQCommunicator(BaseWorker):
 
         queue = self.get_queue_option(name)
         if queue.is_empty():
-            raise ValueError(f"Exchange '{name}' does not exist.")
+            raise ValueError(f"Queue '{name}' does not exist.")
 
         return queue.get()
 
