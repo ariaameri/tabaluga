@@ -103,7 +103,10 @@ class Trainer(base.BaseEventManager, ABC):
 
         from ..communicator.mpi import mpi_communicator
         if mpi_communicator.is_distributed():
-            run_id = mpi_communicator.collective_bcast(run_id.get())
+            run_id = \
+                mpi_communicator\
+                .collective_bcast(run_id.map(lambda _: _.hex).get())\
+                .map(lambda _: uuid.UUID(hex=_))
 
         return run_id
 
