@@ -39,6 +39,7 @@ metadata_columns = {
     'file_extension': 'file_extension',
     'path': 'path',
     'content_type': 'content_type',
+    'metadata_sync_choice': 'metadata_sync_choice',
     'syncable': 'syncable',
 }
 _metadata_columns_internal = {
@@ -272,8 +273,10 @@ class DataManager(base.BaseEventManager, ABC):
     def _generate_train_val_test_metadata(self, metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """The method creates train, validation, and test metadata."""
 
+        metadata_sync, metadata_unsync = MetadataManipulator.separate_sync_choices_metadata(metadata)
+
         # Get count of each set
-        total_data_count = metadata.index.get_level_values(0).unique().size
+        total_data_count = metadata_sync.index.get_level_values(0).unique().size
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -293,14 +296,14 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
             else np.random.permutation(total_data_count)
-        test_indices = indices[:test_count]
-        val_indices = indices[test_count:(test_count+val_count)]
-        train_indices = indices[(test_count+val_count):]
+        test_indices = metadata_sync.index.get_level_values(0).unique()[indices[:test_count]]
+        val_indices = metadata_sync.index.get_level_values(0).unique()[indices[test_count:(test_count+val_count)]]
+        train_indices = metadata_sync.index.get_level_values(0).unique()[indices[(test_count+val_count):]]
 
         # Create the train, validation, and test metadata
-        test_metadata = metadata.loc[test_indices]
-        val_metadata = metadata.loc[val_indices]
-        train_metadata = metadata.loc[train_indices]
+        test_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[test_indices]])
+        val_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[val_indices]])
+        train_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[train_indices]])
 
         # Update the column names of the data frames
         assert(_metadata_columns_internal['original_index'] == 'original_index')  # this is because df.assign can only get kwargs
@@ -691,6 +694,30 @@ class MetadataManipulator(base.BaseWorker):
 
         return metadata
 
+    @staticmethod
+    def separate_sync_choices_metadata(metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+
+        metadata_sync = metadata[metadata[metadata_columns['metadata_sync_choice']] == True]
+        metadata_unsync = metadata[metadata[metadata_columns['metadata_sync_choice']] == False]
+
+        return metadata_sync, metadata_unsync
+
+    @staticmethod
+    def join_metadata_idx_sort(metadatas: List[pd.DataFrame]) -> pd.DataFrame:
+
+        return pd.concat(metadatas).sort_index(level=0)
+
+    @staticmethod
+    def join_to_metadata_level_0_idx_sort(metadata_main: pd.DataFrame, metadata_others: List[pd.DataFrame]) -> pd.DataFrame:
+
+        level_0_indices = metadata_main.index.get_level_values(0).unique()
+
+        metadata_others = [m[m.index.get_level_values(0) in level_0_indices] for m in metadata_others]
+
+        res = MetadataManipulator.join_metadata_idx_sort([metadata_main, *metadata_others])
+
+        return res
+
 
 class FolderReader(base.BaseWorker):
     """This class is a helper class that reads metadata from a path (folder)."""
@@ -889,6 +916,7 @@ class FolderReader(base.BaseWorker):
             metadata_columns['file_extension']: file_extensions,
             metadata_columns['path']: [str(item) for item in file_paths],
             metadata_columns['content_type']: ContentTypes.FILE.value,
+            metadata_columns['metadata_sync_choice']: True,
             metadata_columns['syncable']: True,
         })
 
@@ -1658,9 +1686,12 @@ class MetadataSyncer(base.BaseWorker):
 
             # if we should split the train data among the nodes
             else:
+                train_metadata_sync, train_metadata_unsync = \
+                    MetadataManipulator.separate_sync_choices_metadata(train_metadata)
+
                 # split the training metadata
                 # split according to the batch size so that each get the same number of iterations
-                train_zero_level_indices = train_metadata.index.get_level_values(0).unique()
+                train_zero_level_indices = train_metadata_sync.index.get_level_values(0).unique()
                 chunk_sizes = self._get_counts_based_on_list(train_zero_level_indices.size, batch_sizes)
                 chunk_sizes_cumsum = list(np.cumsum([0, *chunk_sizes]))
                 train_split_indices = \
@@ -1671,7 +1702,7 @@ class MetadataSyncer(base.BaseWorker):
                     ]
                 train_split_metadata = \
                     [
-                        train_metadata.loc[chunk_indices]
+                        train_metadata_sync.loc[chunk_indices]
                         for chunk_indices
                         in train_split_indices
                     ]
@@ -1692,23 +1723,44 @@ class MetadataSyncer(base.BaseWorker):
                         )
                         return Err(RuntimeError("train metadata have different sizes"))
 
+                train_split_metadata = \
+                    [
+                        MetadataManipulator.join_metadata_idx_sort([m, train_metadata_unsync])
+                        for m
+                        in train_split_metadata
+                    ]
+
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
-            val_split_metadata = [val_metadata]
+            val_metadata_sync, val_metadata_unsync = \
+                MetadataManipulator.separate_sync_choices_metadata(train_metadata)
+            val_split_metadata = [val_metadata_sync]
             val_split_metadata.extend([
-                val_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                val_metadata_sync.iloc[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
+            val_split_metadata = [
+                MetadataManipulator.join_metadata_idx_sort([val_metadata_unsync, m])
+                for m
+                in val_split_metadata
+            ]
 
             # split the test metadata
             # we only want the distributor to have the test data and not the others
+            test_metadata_sync, test_metadata_unsync = \
+                MetadataManipulator.separate_sync_choices_metadata(val_metadata)
             test_split_metadata = [test_metadata]
             test_split_metadata.extend([
-                test_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                test_metadata_sync.iloc[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
+            test_split_metadata = [
+                MetadataManipulator.join_metadata_idx_sort([test_metadata_unsync, m])
+                for m
+                in test_split_metadata
+            ]
 
         else:
             train_split_metadata = None
