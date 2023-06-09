@@ -734,13 +734,6 @@ class FolderReader(base.BaseWorker):
         # Folders containing the data
         self._folders: List[str] = []
 
-        # how to create criterion
-        _criterion: List[str] = \
-            self._config.get_value_option('criterion_generation.criterion')\
-            .expect('criterion config does not exist')
-        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
-        self._criterion_function = self._check_process_criterion(_criterion)
-
         # list of extensions to ignore and accept
         self._extension_ignore: List[re.Pattern] = [
             re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
@@ -769,36 +762,6 @@ class FolderReader(base.BaseWorker):
     def get_type(self) -> str:
 
         return self._file_type
-
-    def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
-        """Checks if the given criterion is ok"""
-
-        # the criterion values should be from the columns' names
-        for criteria in criterion:
-            if criteria not in metadata_columns.keys():
-                self._log.error(
-                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
-                    + '\n\t - '
-                    + '\n\t - '.join(metadata_columns.keys())
-                    + '\n'
-                )
-                raise ValueError("unknown criteria")
-
-        if self._criterion_hash:
-            import hashlib
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: \
-                hashlib\
-                .md5(
-                    '+++'.join([row[metadata_columns[item]] for item in criterion])
-                    .encode()
-                )\
-                .hexdigest()
-        else:
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: '+++'.join([row[metadata_columns[item]] for item in criterion])
-
-        return criterion_function
 
     def _check_populate_folder_metadata(self, folders: List[str]):
         """Checks given folders for sanity and existence."""
@@ -934,9 +897,6 @@ class FolderReader(base.BaseWorker):
         # conform the data according to the file format
         metadata = self._conform_to_type(metadata)
 
-        # add criterion column
-        metadata = self._add_criterion_column(metadata)
-
         return metadata
 
     def _conform_to_type(self, metadata: pd.DataFrame) -> pd.DataFrame:
@@ -953,28 +913,6 @@ class FolderReader(base.BaseWorker):
             raise Exception(f"could not conform to type {self._file_type} with error of '{_.get_err()}'")
 
         return _.get()
-
-    def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates the criterion column and returns it
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata
-
-        Returns
-        -------
-        pd.DataFrame
-            the new metadata with criterion column updated
-
-        """
-
-        if len(metadata) > 0:
-            metadata[_metadata_columns_internal['__criterion']] = \
-                metadata.apply(self._criterion_function, axis=1)
-
-        return metadata
 
     def _check_file(self, file_path: Path) -> bool:
         """"Helper function to check a single file.
@@ -1086,6 +1024,8 @@ class FolderReaderExecutor(base.BaseWorker, ABC):
         """
         Processes the metadata and returns the result.
 
+        The dataframe of the result has an extra criterion column for bundling
+
         Parameters
         ----------
         metadata : pd.DataFrame
@@ -1104,7 +1044,73 @@ class FolderReaderExecutor(base.BaseWorker, ABC):
 class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
     """Folder reader metadata for 'separate files' format."""
 
+    def __init__(self, config: ConfigParser):
+
+        super().__init__(config)
+
+        # how to create criterion
+        _criterion: List[str] = \
+            self._config.get_value_option('criterion_generation.criterion')\
+            .expect('criterion config does not exist')
+        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
+        self._criterion_function = self._check_process_criterion(_criterion)
+
+    def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
+        """Checks if the given criterion is ok"""
+
+        # the criterion values should be from the columns' names
+        for criteria in criterion:
+            if criteria not in metadata_columns.keys():
+                self._log.error(
+                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
+                    + '\n\t - '
+                    + '\n\t - '.join(metadata_columns.keys())
+                    + '\n'
+                )
+                raise ValueError("unknown criteria")
+
+        if self._criterion_hash:
+            import hashlib
+            criterion_function: Callable[[pd.Series], str] = \
+                lambda row: \
+                hashlib\
+                .md5(
+                    '+++'.join([row[metadata_columns[item]] for item in criterion])
+                    .encode()
+                )\
+                .hexdigest()
+        else:
+            criterion_function: Callable[[pd.Series], str] = \
+                lambda row: '+++'.join([row[metadata_columns[item]] for item in criterion])
+
+        return criterion_function
+
+    def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Creates the criterion column and returns it
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata
+
+        Returns
+        -------
+        pd.DataFrame
+            the new metadata with criterion column updated
+
+        """
+
+        if len(metadata) > 0:
+            metadata[_metadata_columns_internal['__criterion']] = \
+                metadata.apply(self._criterion_function, axis=1)
+
+        return metadata
+
     def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
+
+        # add criterion column
+        metadata = self._add_criterion_column(metadata)
 
         # do nothing and return the result
         return Ok(metadata)
@@ -1215,6 +1221,28 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         return metadata
 
+    def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Creates the criterion column and returns it
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata
+
+        Returns
+        -------
+        pd.DataFrame
+            the new metadata with criterion column updated
+
+        """
+
+        if len(metadata) > 0:
+            # just use index so that each line ends up in its own bundle
+            metadata[_metadata_columns_internal['__criterion']] = metadata.index
+
+        return metadata
+
     def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
         """Processes the provided metadata, extract image info from the coco json metadata provided and returns the
         result"""
@@ -1222,6 +1250,9 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
         metadata = self._filter_only_jsons(metadata)
 
         coco_metadata = self._construct_metadata(metadata)
+
+        # add criterion column
+        coco_metadata = self._add_criterion_column(coco_metadata)
 
         return Ok(coco_metadata)
 
