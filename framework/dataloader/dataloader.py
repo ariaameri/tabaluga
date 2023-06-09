@@ -48,6 +48,11 @@ _metadata_columns_internal = {
     '__criterion': '__criterion',
 }
 
+metadata_columns_COCO = {
+    'coco_id': 'coco_id',
+    'coco_dataset_id': 'coco_dataset_id',
+}
+
 
 class DataManager(base.BaseEventManager, ABC):
     """This abstract class manages the DataLoader or DataLoader Managers.
@@ -756,8 +761,14 @@ class FolderReader(base.BaseWorker):
         # File names in nested lists
         self._deep_folders: bool = self._config.get_or_else('deep', False)
 
+        self._file_type = self._config.get_value_option('type').expect('type for file type not provided')
+
         # whether we want to find the best multithreading count
         self._find_best_multithreading_count_enabled = self._config.get_or_else('find_best_multithreading_count', False)
+
+    def get_type(self) -> str:
+
+        return self._file_type
 
     def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
         """Checks if the given criterion is ok"""
@@ -920,10 +931,28 @@ class FolderReader(base.BaseWorker):
             metadata_columns['syncable']: True,
         })
 
+        # conform the data according to the file format
+        metadata = self._conform_to_type(metadata)
+
         # add criterion column
         metadata = self._add_criterion_column(metadata)
 
         return metadata
+
+    def _conform_to_type(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """Conforms the provided metadata based on the file format and returns the result or panic."""
+
+        if self._file_type == 'separate_files':
+            _ = FolderReaderExecutorSeparateFiles(self._config.get_or_empty("separate_files")).process(metadata)
+        elif self._file_type == 'coco':
+            _ = FolderReaderExecutorCOCO(self._config.get_or_empty("coco")).process(metadata)
+        else:
+            raise Exception(f"unknown file type of {self._file_type}")
+
+        if _.is_err():
+            raise Exception(f"could not conform to type {self._file_type} with error of '{_.get_err()}'")
+
+        return _.get()
 
     def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """
@@ -1047,6 +1076,154 @@ class FolderReader(base.BaseWorker):
         res = file_syncer.sync(metadata)
 
         return res
+
+
+class FolderReaderExecutor(base.BaseWorker, ABC):
+    """Abstract class to represent the executor on the folder reader metadata, such as a middleware."""
+
+    @abstractmethod
+    def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
+        """
+        Processes the metadata and returns the result.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            input metadata
+
+        Returns
+        -------
+        Result[pd.DataFrame, Exception]
+            resulting metadata, result wrapped
+
+        """
+
+        raise NotImplementedError
+
+
+class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
+    """Folder reader metadata for 'separate files' format."""
+
+    def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
+
+        # do nothing and return the result
+        return Ok(metadata)
+
+
+class FolderReaderExecutorCOCO(FolderReaderExecutor):
+    """Folder reader metadata for 'coco' format."""
+
+    def __init__(self, config: ConfigParser = None):
+
+        super().__init__(config)
+
+    def _filter_only_jsons(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """Filters out only the labels.json files in the metadata and returns the result"""
+
+        return metadata[
+            (metadata[metadata_columns['file_extension']] == '.json') &
+            (metadata[metadata_columns['file_name']] == 'labels')
+            ]
+
+    def _read_json(self, path: pathlib.Path):
+        """Loads the json file given the path"""
+
+        with open(path) as file:
+            import json
+            the_json = json.load(file)
+
+        return the_json
+
+    def _construct_syncable_metadata(self, coco_json: Dict[str, Dict]) -> pd.DataFrame:
+        """
+        Constructs the metadata for syncing (among nodes) based on the provided coco json.
+
+        Parameters
+        ----------
+        coco_json : Dict[str, Dict]
+            coco labels.json in dictionary format
+
+        Returns
+        -------
+        pd.DataFrame
+            resulting dataframe
+
+        """
+
+        coco_images_info = coco_json['images']
+
+        # Check each file based on the criteria
+        file_paths = [pathlib.Path(coco_image_info['path']) for coco_image_info in coco_images_info]
+        # Retrieve the folder path and file names
+        folder_paths = [file_name.parent for file_name in file_paths]
+        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
+        folder_names = [folder_path.name for folder_path in folder_paths]
+        file_names = [file_path.stem for file_path in file_paths]
+        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
+        dataset_ids = [int(coco_image_info['dataset_id']) for coco_image_info in coco_images_info]
+        ids = [int(coco_image_info['id']) for coco_image_info in coco_images_info]
+
+        metadata = pd.DataFrame({
+            metadata_columns['folder_path']: [str(item) for item in folder_paths],
+            metadata_columns['folder_parent_path']: [str(item) for item in folder_parent_paths],
+            metadata_columns['folder_name']: folder_names,
+            metadata_columns['file_name']: file_names,
+            metadata_columns['file_extension']: file_extensions,
+            metadata_columns['path']: [str(item) for item in file_paths],
+            metadata_columns_COCO['coco_id']: ids,
+            metadata_columns_COCO['coco_dataset_id']: dataset_ids,
+            metadata_columns['content_type']: ContentTypes.FILE.value,
+            metadata_columns['metadata_sync_choice']: True,
+            metadata_columns['syncable']: False,
+        })
+
+        return metadata
+
+    def _construct_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Constructs metadata from the provided metadata that must contain only labels.json info.
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            metadata for the labels.json of coco
+
+        Returns
+        -------
+        pd.DataFrame
+            resulting dataframe consisting of the input metadata and the constructed image metadata
+
+        """
+
+        metadata = metadata.copy()
+        metadata[metadata_columns_COCO['coco_dataset_id']] = -1
+
+        coco_metadatas = []
+        for idx, p in metadata[metadata_columns['path']].items():
+            coco_json = self._read_json(pathlib.Path(p))
+            m = self._construct_syncable_metadata(coco_json)
+            coco_metadatas.append(m)
+            coco_dataset_id = \
+                m[~m[metadata_columns_COCO['coco_dataset_id']].isna()][metadata_columns_COCO['coco_dataset_id']].iloc[0]
+            metadata.loc[idx, metadata_columns_COCO['coco_dataset_id']] = coco_dataset_id
+
+        metadata[metadata_columns['metadata_sync_choice']] = False
+
+        metadata = pd.concat([metadata, *coco_metadatas])
+
+        metadata = metadata.reset_index(drop=True)
+
+        return metadata
+
+    def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
+        """Processes the provided metadata, extract image info from the coco json metadata provided and returns the
+        result"""
+
+        metadata = self._filter_only_jsons(metadata)
+
+        coco_metadata = self._construct_metadata(metadata)
+
+        return Ok(coco_metadata)
 
 
 class FileSyncer(OnAndEnabled):
