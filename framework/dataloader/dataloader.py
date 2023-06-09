@@ -248,7 +248,6 @@ class DataManager(base.BaseEventManager, ABC):
         if mpi.mpi_communicator.is_main_rank():
             # get the metadata
             metadata = self.metadata_generator.build_and_get_metadata()
-            metadata = self._modify_metadata(metadata)
             train_metadata, val_metadata, test_metadata = \
                 self._generate_train_val_test_metadata(metadata)
             train_metadata, val_metadata, test_metadata = \
@@ -271,7 +270,7 @@ class DataManager(base.BaseEventManager, ABC):
         metadata_manipulator = MetadataManipulator(metadata=metadata)
 
         # regroup the metadata
-        metadata = metadata_manipulator.modify()
+        metadata = metadata_manipulator.regroup()
 
         return metadata
 
@@ -365,7 +364,6 @@ class DataManager(base.BaseEventManager, ABC):
         def process_df(new_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
             """Processes the new df and concats it with the old one and returns the result."""
 
-            new_df = self._modify_metadata(new_df)
             new_df = add_original_index(new_df)
             new_df = reindex(new_df, len(old_df.index.get_level_values(0).unique()))
             df = pd.concat([old_df, new_df])
@@ -508,7 +506,7 @@ class MetadataManipulator(base.BaseWorker):
         # metadata storage
         self.metadata = metadata
 
-    def modify(self, check_for_sanity: bool = True) -> pd.DataFrame:
+    def regroup(self, check_for_sanity: bool = True) -> pd.DataFrame:
         """Runs the whole modification pipeline and returns the result."""
 
         metadata = self.metadata
@@ -584,7 +582,7 @@ class MetadataManipulator(base.BaseWorker):
         return metadata
 
     @staticmethod
-    def check_for_sanity(metadata: pd.DataFrame, logger) -> None:
+    def check_print_bundle_sanity(metadata: pd.DataFrame, logger) -> None:
         """Checks the given metadata and makes some info if necessary."""
 
         # get the bundle counts and report
@@ -627,7 +625,7 @@ class MetadataManipulator(base.BaseWorker):
     def _check_for_sanity(self, metadata: pd.DataFrame) -> None:
         """Checks the given metadata and makes some info if necessary."""
 
-        return self.check_for_sanity(metadata, self._log)
+        return self.check_print_bundle_sanity(metadata, self._log)
 
     @staticmethod
     def reset_level_0_indices(metadata: pd.DataFrame, offset: int = 0) -> pd.DataFrame:
@@ -1111,6 +1109,8 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
 
         # add criterion column
         metadata = self._add_criterion_column(metadata)
+
+        metadata = MetadataManipulator(metadata=metadata).regroup()
 
         # do nothing and return the result
         return Ok(metadata)
