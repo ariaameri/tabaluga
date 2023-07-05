@@ -35,16 +35,16 @@ class ContentTypes(Enum):
 # a mapping between the column concepts and their names
 @dataclass(frozen=True)
 class MetadataColumns:
-    folder_path: str = 'folder_path',
-    folder_parent_path: str = 'folder_parent_path',
-    folder_name: str = 'folder_name',
-    file_name: str = 'file_name',
-    file_extension: str = 'file_extension',
-    path: str = 'path',
-    content_type: str = 'content_type',
-    metadata_sync_choice: str = 'metadata_sync_choice',
-    syncable: str = 'syncable',
-    id: str = 'id',
+    folder_path: str = 'folder_path'
+    folder_parent_path: str = 'folder_parent_path'
+    folder_name: str = 'folder_name'
+    file_name: str = 'file_name'
+    file_extension: str = 'file_extension'
+    path: str = 'path'
+    content_type: str = 'content_type'
+    metadata_sync_choice: str = 'metadata_sync_choice'
+    syncable: str = 'syncable'
+    id: str = 'id'
 
 
 metadata_columns = MetadataColumns()
@@ -52,9 +52,9 @@ metadata_columns = MetadataColumns()
 
 @dataclass(frozen=True)
 class _MetadataColumnsInternal:
-    original_index: str = '__INTERNAL_original_index',
-    data_raw: str = '__INTERNAL_data_raw',
-    criterion: str = '__INTERNAL___criterion',
+    original_index: str = '__INTERNAL_original_index'
+    data_raw: str = '__INTERNAL_data_raw'
+    criterion: str = '__INTERNAL___criterion'
 
 
 _metadata_columns_internal = _MetadataColumnsInternal()
@@ -62,7 +62,7 @@ _metadata_columns_internal = _MetadataColumnsInternal()
 
 @dataclass(frozen=True)
 class MetadataColumnsSepFiles:
-    bundle_id: str = 'SEPFILES_bundle_id',
+    bundle_id: str = 'SEPFILES_bundle_id'
 
 
 metadata_columns_SEP = MetadataColumnsSepFiles()
@@ -70,8 +70,8 @@ metadata_columns_SEP = MetadataColumnsSepFiles()
 
 @dataclass(frozen=True)
 class MetadataColumnsCOCO:
-    coco_id: str = 'COCO_coco_id',
-    coco_dataset_id: str = 'COCO_coco_dataset_id',
+    coco_id: str = 'COCO_coco_id'
+    coco_dataset_id: str = 'COCO_coco_dataset_id'
 
 
 metadata_columns_COCO = MetadataColumnsCOCO()
@@ -631,7 +631,7 @@ class MetadataManipulator(base.BaseWorker):
                 # get the elements that have c counts
                 c_keys = [k for k, v in idx_0_to_1_count.items() if v == c][:10]
                 # sample them
-                sample_df_str = str(metadata.loc[c_keys][metadata_columns['path']])
+                sample_df_str = str(metadata.loc[c_keys][metadata_columns.path])
                 from tabaluga.framework.util.util import REGEX_INDENT_NEW_LINE_ONLY
                 sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
 
@@ -722,8 +722,8 @@ class MetadataManipulator(base.BaseWorker):
     @staticmethod
     def separate_sync_choices_metadata(metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
 
-        metadata_sync = metadata[metadata[metadata_columns['metadata_sync_choice']] == True]
-        metadata_unsync = metadata[metadata[metadata_columns['metadata_sync_choice']] == False]
+        metadata_sync = metadata[metadata[metadata_columns.metadata_sync_choice] == True]
+        metadata_unsync = metadata[metadata[metadata_columns.metadata_sync_choice] == False]
 
         return metadata_sync, metadata_unsync
 
