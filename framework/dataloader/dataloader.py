@@ -45,9 +45,9 @@ metadata_columns = {
     'id': 'id',
 }
 _metadata_columns_internal = {
-    'original_index': 'original_index',
-    'data_raw': 'data_raw',
-    '__criterion': '__criterion',
+    'original_index': '__INTERNAL_original_index',
+    'data_raw': '__INTERNAL_data_raw',
+    '__criterion': '__INTERNAL___criterion',
 }
 
 metadata_columns_SEP = {
@@ -316,11 +316,10 @@ class DataManager(base.BaseEventManager, ABC):
         train_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[train_indices]])
 
         # Update the column names of the data frames
-        assert(_metadata_columns_internal['original_index'] == 'original_index')  # this is because df.assign can only get kwargs
         [train_metadata, val_metadata, test_metadata] = \
             [
                 df
-                .assign(original_index=df.index.get_level_values(0))
+                .assign(**{_metadata_columns_internal['original_index']: df.index.get_level_values(0)})
                 .rename(
                     index={
                         key: value
