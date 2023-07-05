@@ -54,6 +54,11 @@ metadata_columns_SEP = {
     'bundle_id': 'SEPFILES_bundle_id',
 }
 
+metadata_columns_COCO = {
+    'coco_id': 'COCO_coco_id',
+    'coco_dataset_id': 'COCO_coco_dataset_id',
+}
+
 
 class DataManager(base.BaseEventManager, ABC):
     """This abstract class manages the DataLoader or DataLoader Managers.
@@ -1153,10 +1158,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
     def _filter_only_jsons(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Filters out only the labels.json files in the metadata and returns the result"""
 
-        return metadata[
-            (metadata[metadata_columns['file_extension']] == '.json') &
-            (metadata[metadata_columns['file_name']] == 'labels')
-            ]
+        return metadata[metadata[metadata_columns['file_extension']] == '.json']
 
     def _read_json(self, path: pathlib.Path):
         """Loads the json file given the path"""
@@ -1167,7 +1169,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         return the_json
 
-    def _construct_syncable_metadata(self, coco_json: Dict[str, Dict]) -> pd.DataFrame:
+    def _construct_syncable_metadata(self, coco_json: Dict[str, Dict], coco_json_id: int) -> pd.DataFrame:
         """
         Constructs the metadata for syncing (among nodes) based on the provided coco json.
 
@@ -1175,6 +1177,8 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
         ----------
         coco_json : Dict[str, Dict]
             coco labels.json in dictionary format
+        coco_json_id : int
+            coco labels.json id in the metadata for unique mapping
 
         Returns
         -------
@@ -1193,8 +1197,9 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
         folder_names = [folder_path.name for folder_path in folder_paths]
         file_names = [file_path.stem for file_path in file_paths]
         file_extensions = [file_path.suffix.lower() for file_path in file_paths]
-        dataset_ids = [int(coco_image_info['dataset_id']) for coco_image_info in coco_images_info]
-        ids = [int(coco_image_info['id']) for coco_image_info in coco_images_info]
+        dataset_ids = [coco_json_id for _ in coco_images_info]
+        coco_ids = [int(coco_image_info['id']) for coco_image_info in coco_images_info]
+        ids = [uuid.uuid4().int for _ in file_paths]
 
         metadata = pd.DataFrame({
             metadata_columns['folder_path']: [str(item) for item in folder_paths],
@@ -1203,11 +1208,12 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
             metadata_columns['file_name']: file_names,
             metadata_columns['file_extension']: file_extensions,
             metadata_columns['path']: [str(item) for item in file_paths],
-            metadata_columns_COCO['coco_id']: ids,
+            metadata_columns_COCO['coco_id']: coco_ids,
             metadata_columns_COCO['coco_dataset_id']: dataset_ids,
             metadata_columns['content_type']: ContentTypes.FILE.value,
             metadata_columns['metadata_sync_choice']: True,
             metadata_columns['syncable']: False,
+            metadata_columns['id']: ids,
         })
 
         return metadata
@@ -1228,13 +1234,13 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         """
 
-        metadata = metadata.copy()
-        metadata[metadata_columns_COCO['coco_dataset_id']] = -1
+        metadata = coco_json_metadata = metadata.copy()
 
         coco_metadatas = []
-        for idx, p in metadata[metadata_columns['path']].items():
-            coco_json = self._read_json(pathlib.Path(p))
-            m = self._construct_syncable_metadata(coco_json)
+        for idx, p in metadata.iterrows():
+            coco_json = self._read_json(pathlib.Path(p[metadata_columns['path']]))
+            coco_json_id = p[metadata_columns['id']]
+            m = self._construct_syncable_metadata(coco_json, coco_json_id)
             coco_metadatas.append(m)
             coco_dataset_id = \
                 m[~m[metadata_columns_COCO['coco_dataset_id']].isna()][metadata_columns_COCO['coco_dataset_id']].iloc[0]
@@ -1242,7 +1248,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         metadata[metadata_columns['metadata_sync_choice']] = False
 
-        metadata = pd.concat([metadata, *coco_metadatas])
+        metadata = pd.concat([coco_json_metadata, *coco_metadatas])
 
         metadata = metadata.reset_index(drop=True)
 
