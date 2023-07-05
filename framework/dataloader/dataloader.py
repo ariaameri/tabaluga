@@ -50,9 +50,8 @@ _metadata_columns_internal = {
     '__criterion': '__criterion',
 }
 
-metadata_columns_COCO = {
-    'coco_id': 'coco_id',
-    'coco_dataset_id': 'coco_dataset_id',
+metadata_columns_SEP = {
+    'bundle_id': 'SEPFILES_bundle_id',
 }
 
 
@@ -1106,6 +1105,28 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         if len(metadata) > 0:
             metadata[_metadata_columns_internal['__criterion']] = \
                 metadata.apply(self._criterion_function, axis=1)
+            metadata[metadata_columns_SEP['bundle_id']] = metadata[_metadata_columns_internal['__criterion']]
+
+        return metadata
+
+    def _remove_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
+        """
+        Removes the criterion column and returns it
+
+        Parameters
+        ----------
+        metadata : pd.DataFrame
+            the metadata
+
+        Returns
+        -------
+        pd.DataFrame
+            the new metadata with criterion column updated
+
+        """
+
+        if len(metadata) > 0:
+            metadata = metadata.drop(columns=_metadata_columns_internal['__criterion'])
 
         return metadata
 
@@ -1115,6 +1136,8 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         metadata = self._add_criterion_column(metadata)
 
         metadata = MetadataManipulator(metadata=metadata).regroup()
+
+        metadata = self._remove_criterion_column(metadata)
 
         # do nothing and return the result
         return Ok(metadata)
