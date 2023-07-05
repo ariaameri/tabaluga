@@ -1118,11 +1118,11 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
 
         # the criterion values should be from the columns' names
         for criteria in criterion:
-            if criteria not in metadata_columns.keys():
+            if criteria not in metadata_columns.__dict__.keys():
                 self._log.error(
                     f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
                     + '\n\t - '
-                    + '\n\t - '.join(metadata_columns.keys())
+                    + '\n\t - '.join(metadata_columns.__dict__.keys())
                     + '\n'
                 )
                 raise ValueError("unknown criteria")
@@ -1133,13 +1133,13 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
                 lambda row: \
                 hashlib\
                 .md5(
-                    '+++'.join([row[metadata_columns[item]] for item in criterion])
+                    '+++'.join([row[getattr(metadata_columns, item)] for item in criterion])
                     .encode()
                 )\
                 .hexdigest()
         else:
             criterion_function: Callable[[pd.Series], str] = \
-                lambda row: '+++'.join([row[metadata_columns[item]] for item in criterion])
+                lambda row: '+++'.join([row[getattr(metadata_columns, item)] for item in criterion])
 
         return criterion_function
 
