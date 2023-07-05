@@ -4,6 +4,7 @@ import pathlib
 import re
 import select
 import threading
+import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
 import colored
@@ -41,6 +42,7 @@ metadata_columns = {
     'content_type': 'content_type',
     'metadata_sync_choice': 'metadata_sync_choice',
     'syncable': 'syncable',
+    'id': 'id',
 }
 _metadata_columns_internal = {
     'original_index': 'original_index',
@@ -878,6 +880,7 @@ class FolderReader(base.BaseWorker):
         folder_names = [folder_path.name for folder_path in folder_paths]
         file_names = [file_path.stem for file_path in file_paths]
         file_extensions = [file_path.suffix.lower() for file_path in file_paths]
+        ids = [uuid.uuid4().int for _ in file_paths]
 
         # Create data frame of all the files in the folder
         metadata = pd.DataFrame({
@@ -890,6 +893,7 @@ class FolderReader(base.BaseWorker):
             metadata_columns['content_type']: ContentTypes.FILE.value,
             metadata_columns['metadata_sync_choice']: True,
             metadata_columns['syncable']: True,
+            metadata_columns['id']: ids,
         })
 
         # conform the data according to the file format
