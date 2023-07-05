@@ -6,6 +6,7 @@ import select
 import threading
 import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 import colored
 from jointstemplant.util.util import OnAndEnabled
@@ -32,32 +33,48 @@ class ContentTypes(Enum):
 
 
 # a mapping between the column concepts and their names
-metadata_columns = {
-    'folder_path': 'folder_path',
-    'folder_parent_path': 'folder_parent_path',
-    'folder_name': 'folder_name',
-    'file_name': 'file_name',
-    'file_extension': 'file_extension',
-    'path': 'path',
-    'content_type': 'content_type',
-    'metadata_sync_choice': 'metadata_sync_choice',
-    'syncable': 'syncable',
-    'id': 'id',
-}
-_metadata_columns_internal = {
-    'original_index': '__INTERNAL_original_index',
-    'data_raw': '__INTERNAL_data_raw',
-    '__criterion': '__INTERNAL___criterion',
-}
+@dataclass(frozen=True)
+class MetadataColumns:
+    folder_path: str = 'folder_path',
+    folder_parent_path: str = 'folder_parent_path',
+    folder_name: str = 'folder_name',
+    file_name: str = 'file_name',
+    file_extension: str = 'file_extension',
+    path: str = 'path',
+    content_type: str = 'content_type',
+    metadata_sync_choice: str = 'metadata_sync_choice',
+    syncable: str = 'syncable',
+    id: str = 'id',
 
-metadata_columns_SEP = {
-    'bundle_id': 'SEPFILES_bundle_id',
-}
 
-metadata_columns_COCO = {
-    'coco_id': 'COCO_coco_id',
-    'coco_dataset_id': 'COCO_coco_dataset_id',
-}
+metadata_columns = MetadataColumns()
+
+
+@dataclass(frozen=True)
+class __MetadataColumnsInternal:
+    original_index: str = '__INTERNAL_original_index',
+    data_raw: str = '__INTERNAL_data_raw',
+    __criterion: str = '__INTERNAL___criterion',
+
+
+_metadata_columns_internal = __MetadataColumnsInternal()
+
+
+@dataclass(frozen=True)
+class MetadataColumnsSepFiles:
+    bundle_id: str = 'SEPFILES_bundle_id',
+
+
+metadata_columns_SEP = MetadataColumnsSepFiles()
+
+
+@dataclass(frozen=True)
+class MetadataColumnsCOCO:
+    coco_id: str = 'COCO_coco_id',
+    coco_dataset_id: str = 'COCO_coco_dataset_id',
+
+
+metadata_columns_COCO = MetadataColumnsCOCO()
 
 
 class DataManager(base.BaseEventManager, ABC):
@@ -319,7 +336,7 @@ class DataManager(base.BaseEventManager, ABC):
         [train_metadata, val_metadata, test_metadata] = \
             [
                 df
-                .assign(**{_metadata_columns_internal['original_index']: df.index.get_level_values(0)})
+                .assign(**{_metadata_columns_internal.original_index: df.index.get_level_values(0)})
                 .rename(
                     index={
                         key: value
@@ -362,7 +379,7 @@ class DataManager(base.BaseEventManager, ABC):
         def add_original_index(df: pd.DataFrame) -> pd.DataFrame:
             """adds `original_index` column to the dataframe."""
 
-            df[_metadata_columns_internal['original_index']] = -1
+            df[_metadata_columns_internal.original_index] = -1
 
             return df
 
@@ -519,7 +536,7 @@ class MetadataManipulator(base.BaseWorker):
         if len(self.metadata) > 0:
             # we create a criterion helper column based on the data that we have to assist the groupby call of pandas
             # to groupby int instead of anything else
-            criterion_field_name = _metadata_columns_internal['__criterion']
+            criterion_field_name = _metadata_columns_internal.__criterion
             criterion_set = self.metadata[criterion_field_name].unique()
             mapping = {criterion: idx_groupby for idx_groupby, criterion in enumerate(criterion_set)}
             self.metadata['__criterion_help'] = \
@@ -887,16 +904,16 @@ class FolderReader(base.BaseWorker):
 
         # Create data frame of all the files in the folder
         metadata = pd.DataFrame({
-            metadata_columns['folder_path']: [str(item) for item in folder_paths],
-            metadata_columns['folder_parent_path']: [str(item) for item in folder_parent_paths],
-            metadata_columns['folder_name']: folder_names,
-            metadata_columns['file_name']: file_names,
-            metadata_columns['file_extension']: file_extensions,
-            metadata_columns['path']: [str(item) for item in file_paths],
-            metadata_columns['content_type']: ContentTypes.FILE.value,
-            metadata_columns['metadata_sync_choice']: True,
-            metadata_columns['syncable']: True,
-            metadata_columns['id']: ids,
+            metadata_columns.folder_path: [str(item) for item in folder_paths],
+            metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+            metadata_columns.folder_name: folder_names,
+            metadata_columns.file_name: file_names,
+            metadata_columns.file_extension: file_extensions,
+            metadata_columns.path: [str(item) for item in file_paths],
+            metadata_columns.content_type: ContentTypes.FILE.value,
+            metadata_columns.metadata_sync_choice: True,
+            metadata_columns.syncable: True,
+            metadata_columns.id: ids,
         })
 
         # conform the data according to the file format
@@ -997,7 +1014,7 @@ class FolderReader(base.BaseWorker):
         """
 
         if self._find_best_multithreading_count_enabled:
-            paths = [pathlib.Path(path) for path in metadata[metadata_columns['path']]]
+            paths = [pathlib.Path(path) for path in metadata[metadata_columns.path]]
             self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
             multithreading_count = DataLoaderMultiThreadFinder(
                 paths=paths,
@@ -1107,9 +1124,9 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         """
 
         if len(metadata) > 0:
-            metadata[_metadata_columns_internal['__criterion']] = \
+            metadata[_metadata_columns_internal.__criterion] = \
                 metadata.apply(self._criterion_function, axis=1)
-            metadata[metadata_columns_SEP['bundle_id']] = metadata[_metadata_columns_internal['__criterion']]
+            metadata[metadata_columns_SEP.bundle_id] = metadata[_metadata_columns_internal.__criterion]
 
         return metadata
 
@@ -1130,7 +1147,7 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         """
 
         if len(metadata) > 0:
-            metadata = metadata.drop(columns=_metadata_columns_internal['__criterion'])
+            metadata = metadata.drop(columns=_metadata_columns_internal.__criterion)
 
         return metadata
 
@@ -1157,7 +1174,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
     def _filter_only_jsons(self, metadata: pd.DataFrame) -> pd.DataFrame:
         """Filters out only the labels.json files in the metadata and returns the result"""
 
-        return metadata[metadata[metadata_columns['file_extension']] == '.json']
+        return metadata[metadata[metadata_columns.file_extension] == '.json']
 
     def _read_json(self, path: pathlib.Path):
         """Loads the json file given the path"""
@@ -1201,18 +1218,18 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
         ids = [uuid.uuid4().int for _ in file_paths]
 
         metadata = pd.DataFrame({
-            metadata_columns['folder_path']: [str(item) for item in folder_paths],
-            metadata_columns['folder_parent_path']: [str(item) for item in folder_parent_paths],
-            metadata_columns['folder_name']: folder_names,
-            metadata_columns['file_name']: file_names,
-            metadata_columns['file_extension']: file_extensions,
-            metadata_columns['path']: [str(item) for item in file_paths],
-            metadata_columns_COCO['coco_id']: coco_ids,
-            metadata_columns_COCO['coco_dataset_id']: dataset_ids,
-            metadata_columns['content_type']: ContentTypes.FILE.value,
-            metadata_columns['metadata_sync_choice']: True,
-            metadata_columns['syncable']: False,
-            metadata_columns['id']: ids,
+            metadata_columns.folder_path: [str(item) for item in folder_paths],
+            metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+            metadata_columns.folder_name: folder_names,
+            metadata_columns.file_name: file_names,
+            metadata_columns.file_extension: file_extensions,
+            metadata_columns.path: [str(item) for item in file_paths],
+            metadata_columns_COCO.coco_id: coco_ids,
+            metadata_columns_COCO.coco_dataset_id: dataset_ids,
+            metadata_columns.content_type: ContentTypes.FILE.value,
+            metadata_columns.metadata_sync_choice: True,
+            metadata_columns.syncable: False,
+            metadata_columns.id: ids,
         })
 
         return metadata
@@ -1237,15 +1254,15 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         coco_metadatas = []
         for idx, p in metadata.iterrows():
-            coco_json = self._read_json(pathlib.Path(p[metadata_columns['path']]))
-            coco_json_id = p[metadata_columns['id']]
+            coco_json = self._read_json(pathlib.Path(p[metadata_columns.path]))
+            coco_json_id = p[metadata_columns.id]
             m = self._construct_syncable_metadata(coco_json, coco_json_id)
             coco_metadatas.append(m)
             coco_dataset_id = \
-                m[~m[metadata_columns_COCO['coco_dataset_id']].isna()][metadata_columns_COCO['coco_dataset_id']].iloc[0]
-            metadata.loc[idx, metadata_columns_COCO['coco_dataset_id']] = coco_dataset_id
+                m[~m[metadata_columns_COCO.coco_dataset_id].isna()][metadata_columns_COCO.coco_dataset_id].iloc[0]
+            metadata.loc[idx, metadata_columns_COCO.coco_dataset_id] = coco_dataset_id
 
-        metadata[metadata_columns['metadata_sync_choice']] = False
+        metadata[metadata_columns.metadata_sync_choice] = False
 
         metadata = pd.concat([coco_json_metadata, *coco_metadatas])
 
@@ -1271,7 +1288,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         if len(metadata) > 0:
             # just use index so that each line ends up in its own bundle
-            metadata[_metadata_columns_internal['__criterion']] = metadata.index
+            metadata[_metadata_columns_internal.__criterion] = metadata.index
 
         return metadata
 
@@ -1389,7 +1406,7 @@ class FileSyncer(OnAndEnabled):
 
         # find a selector of the metadata for the files that do exist
         selector = list(
-            thread_pool.map(check_single_data_raw, metadata[metadata_columns['path']])
+            thread_pool.map(check_single_data_raw, metadata[metadata_columns.path])
         )
         # not the selection
         selector = [not item for item in selector]
@@ -1427,7 +1444,7 @@ class FileSyncer(OnAndEnabled):
 
         # Load the data
         data_res = list(
-            thread_pool.map(load_single_data_raw, metadata[metadata_columns['path']])
+            thread_pool.map(load_single_data_raw, metadata[metadata_columns.path])
         )
         for res in data_res:
             if res.is_err():
@@ -1437,7 +1454,7 @@ class FileSyncer(OnAndEnabled):
         data = [item.get() for item in data_res]
 
         # assign them to a new column
-        assert(_metadata_columns_internal['data_raw'] == 'data_raw')  # this is because df.assign can only get kwargs
+        assert(_metadata_columns_internal.data_raw == 'data_raw')  # this is because df.assign can only get kwargs
         res = Result.from_func(metadata.assign, data_raw=data)
 
         return res
@@ -1478,7 +1495,7 @@ class FileSyncer(OnAndEnabled):
         save_res = list(
             thread_pool.map(
                 lambda x: save_single_data_raw(x[0], x[1]),
-                zip(metadata[metadata_columns['path']], metadata[_metadata_columns_internal['data_raw']])
+                zip(metadata[metadata_columns.path], metadata[_metadata_columns_internal.data_raw])
             )
         )
         for res in save_res:
@@ -1798,7 +1815,7 @@ class FileSyncer(OnAndEnabled):
         """
 
         # get the portion of the metadata that is syncable
-        syncable_selection = metadata[metadata_columns['syncable']] == True
+        syncable_selection = metadata[metadata_columns.syncable] == True
         metadata = metadata[syncable_selection]
 
         if self.force_sync is True:
@@ -2223,7 +2240,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
+        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns.path]]
 
         # Update the metadata
         metadata = metadata.iloc[selection]
@@ -2620,7 +2637,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
         # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
+        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns.path]]
 
         # Update the metadata
         metadata = metadata.iloc[selection]
