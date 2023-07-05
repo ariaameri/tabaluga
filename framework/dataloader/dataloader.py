@@ -762,6 +762,13 @@ class FolderReader(base.BaseWorker):
             re.compile(item) for item in self._config.get_or_else('extension_accept', [])
         ]
 
+        self._iwholepath_regex: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex', [])
+        ]
+        self._iwholepath_regex_ignore: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex_ignore', [])
+        ]
+
         # Folders containing the data
         self._folders: List[str] = self._config.get_value_option('folders').expect('folder config does not exist')
         self._add_train_folders: List[str] = self._config.get_or_else('additional_train_folders', [])
@@ -946,12 +953,41 @@ class FolderReader(base.BaseWorker):
         """
 
         # Check that the file is not a folder
-        check = file_path.is_file()
+        if file_path.is_file() is False:
+            return False
+
+        if self._filter_file_path(file_path) is False:
+            return False
 
         # Check criteria for the file name
-        check &= self._filter_file_name(file_path.name)
+        if self._filter_file_name(file_path.name) is False:
+            return False
 
-        return check
+        return True
+
+    def _filter_file_path(self, file_path: Path) -> bool:
+        """
+        Checks the file path to see if it is acceptable or not.
+
+        Parameters
+        ----------
+        file_path : Path
+
+        Returns
+        -------
+        bool
+
+        """
+
+        for reg in self._iwholepath_regex:
+            if reg.match(file_path.as_posix().lower()) is None:
+                return False
+
+        for reg in self._iwholepath_regex_ignore:
+            if reg.match(file_path.as_posix().lower()) is not None:
+                return False
+
+        return True
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
