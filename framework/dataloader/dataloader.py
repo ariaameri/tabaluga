@@ -51,13 +51,13 @@ metadata_columns = MetadataColumns()
 
 
 @dataclass(frozen=True)
-class __MetadataColumnsInternal:
+class _MetadataColumnsInternal:
     original_index: str = '__INTERNAL_original_index',
     data_raw: str = '__INTERNAL_data_raw',
-    __criterion: str = '__INTERNAL___criterion',
+    criterion: str = '__INTERNAL___criterion',
 
 
-_metadata_columns_internal = __MetadataColumnsInternal()
+_metadata_columns_internal = _MetadataColumnsInternal()
 
 
 @dataclass(frozen=True)
@@ -536,7 +536,7 @@ class MetadataManipulator(base.BaseWorker):
         if len(self.metadata) > 0:
             # we create a criterion helper column based on the data that we have to assist the groupby call of pandas
             # to groupby int instead of anything else
-            criterion_field_name = _metadata_columns_internal.__criterion
+            criterion_field_name = _metadata_columns_internal.criterion
             criterion_set = self.metadata[criterion_field_name].unique()
             mapping = {criterion: idx_groupby for idx_groupby, criterion in enumerate(criterion_set)}
             self.metadata['__criterion_help'] = \
@@ -1160,9 +1160,9 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         """
 
         if len(metadata) > 0:
-            metadata[_metadata_columns_internal.__criterion] = \
+            metadata[_metadata_columns_internal.criterion] = \
                 metadata.apply(self._criterion_function, axis=1)
-            metadata[metadata_columns_SEP.bundle_id] = metadata[_metadata_columns_internal.__criterion]
+            metadata[metadata_columns_SEP.bundle_id] = metadata[_metadata_columns_internal.criterion]
 
         return metadata
 
@@ -1183,7 +1183,7 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
         """
 
         if len(metadata) > 0:
-            metadata = metadata.drop(columns=_metadata_columns_internal.__criterion)
+            metadata = metadata.drop(columns=_metadata_columns_internal.criterion)
 
         return metadata
 
@@ -1324,7 +1324,7 @@ class FolderReaderExecutorCOCO(FolderReaderExecutor):
 
         if len(metadata) > 0:
             # just use index so that each line ends up in its own bundle
-            metadata[_metadata_columns_internal.__criterion] = metadata.index
+            metadata[_metadata_columns_internal.criterion] = metadata.index
 
         return metadata
 
