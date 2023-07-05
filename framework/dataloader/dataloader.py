@@ -979,9 +979,8 @@ class FolderReader(base.BaseWorker):
 
         """
 
-        for reg in self._iwholepath_regex:
-            if reg.match(file_path.as_posix().lower()) is None:
-                return False
+        if any([reg.match(file_path.as_posix().lower()) is not None for reg in self._iwholepath_regex]) is False:
+            return False
 
         for reg in self._iwholepath_regex_ignore:
             if reg.match(file_path.as_posix().lower()) is not None:
