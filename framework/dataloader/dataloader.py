@@ -9,6 +9,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 import colored
+import polars as pl
 from jointstemplant.util.util import OnAndEnabled
 from ..base import base
 from ..util.config import ConfigParser
@@ -45,6 +46,7 @@ class MetadataColumns:
     metadata_sync_choice: str = 'metadata_sync_choice'
     syncable: str = 'syncable'
     id: str = 'id'
+    bundle_id: str = 'bundle_id'
 
 
 metadata_columns = MetadataColumns()
@@ -62,7 +64,7 @@ _metadata_columns_internal = _MetadataColumnsInternal()
 
 @dataclass(frozen=True)
 class MetadataColumnsSepFiles:
-    bundle_id: str = 'SEPFILES_bundle_id'
+    pass
 
 
 metadata_columns_SEP = MetadataColumnsSepFiles()
@@ -287,23 +289,13 @@ class DataManager(base.BaseEventManager, ABC):
 
         return Ok((train_metadata, val_metadata, test_metadata))
 
-    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """Modifies the metadata that this instance holds."""
-
-        metadata_manipulator = MetadataManipulator(metadata=metadata)
-
-        # regroup the metadata
-        metadata = metadata_manipulator.regroup()
-
-        return metadata
-
-    def _generate_train_val_test_metadata(self, metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+    def _generate_train_val_test_metadata(self, metadata: pd.DataFrame) -> (pl.DataFrame, pl.DataFrame, pl.DataFrame):
         """The method creates train, validation, and test metadata."""
 
         metadata_sync, metadata_unsync = MetadataManipulator.separate_sync_choices_metadata(metadata)
 
         # Get count of each set
-        total_data_count = metadata_sync.index.get_level_values(0).unique().size
+        total_data_count = len(metadata_sync[metadata_columns.bundle_id].unique())
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -323,31 +315,14 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
             else np.random.permutation(total_data_count)
-        test_indices = metadata_sync.index.get_level_values(0).unique()[indices[:test_count]]
-        val_indices = metadata_sync.index.get_level_values(0).unique()[indices[test_count:(test_count+val_count)]]
-        train_indices = metadata_sync.index.get_level_values(0).unique()[indices[(test_count+val_count):]]
+        test_metadata_sync = metadata_sync[indices[:test_count]]
+        val_metadata_sync = metadata_sync[indices[test_count:(test_count+val_count)]]
+        train_metadata_sync = metadata_sync[indices[(test_count+val_count):]]
 
         # Create the train, validation, and test metadata
-        test_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[test_indices]])
-        val_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[val_indices]])
-        train_metadata = MetadataManipulator.join_metadata_idx_sort([metadata_unsync, metadata_sync.loc[train_indices]])
-
-        # Update the column names of the data frames
-        [train_metadata, val_metadata, test_metadata] = \
-            [
-                df
-                .assign(**{_metadata_columns_internal.original_index: df.index.get_level_values(0)})
-                .rename(
-                    index={
-                        key: value
-                        for value, key
-                        in enumerate(df.index.get_level_values(0).unique(), start=0)
-                    },
-                    level=0,
-                )
-                for df
-                in [train_metadata, val_metadata, test_metadata]
-            ]
+        test_metadata = pl.concat([metadata_unsync, test_metadata_sync])
+        val_metadata = pl.concat([metadata_unsync, val_metadata_sync])
+        train_metadata = pl.concat([metadata_unsync, train_metadata_sync])
 
         # restore the random generator state
         if self._seed is not None:
@@ -363,55 +338,26 @@ class DataManager(base.BaseEventManager, ABC):
     ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
         """Adds the additional metadata to the metadata within"""
 
-        def reindex(df: pd.DataFrame, index_begin: int) -> pd.DataFrame:
-            """Reindexes the 0 level indices of the given pandas dataframe so that the indexing starts from
-            the given value"""
-
-            return df.rename(
-                index={
-                    key: value
-                    for value, key
-                    in enumerate(df.index.get_level_values(0).unique(), start=index_begin)
-                },
-                level=0,
-            )
-
-        def add_original_index(df: pd.DataFrame) -> pd.DataFrame:
-            """adds `original_index` column to the dataframe."""
-
-            df[_metadata_columns_internal.original_index] = -1
-
-            return df
-
-        def process_df(new_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
-            """Processes the new df and concats it with the old one and returns the result."""
-
-            new_df = add_original_index(new_df)
-            new_df = reindex(new_df, len(old_df.index.get_level_values(0).unique()))
-            df = pd.concat([old_df, new_df])
-
-            return df
-
         # get the new train metadata, process it and add it to the train metadata
         train_metadata = \
-            process_df(
+            pl.concat([
                 self.metadata_generator.build_and_get_add_train_metadata(),
                 train_metadata,
-            )
+            ])
 
         # get the new val metadata, process it and add it to the val metadata
         val_metadata = \
-            process_df(
+            pl.concat([
                 self.metadata_generator.build_and_get_add_val_metadata(),
                 val_metadata,
-            )
+            ])
 
         # get the new test metadata, process it and add it to the test metadata
         test_metadata = \
-            process_df(
+            pl.concat([
                 self.metadata_generator.build_and_get_add_test_metadata(),
                 test_metadata,
-            )
+            ])
 
         return train_metadata, val_metadata, test_metadata
 
@@ -720,10 +666,10 @@ class MetadataManipulator(base.BaseWorker):
         return metadata
 
     @staticmethod
-    def separate_sync_choices_metadata(metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+    def separate_sync_choices_metadata(metadata: pl.DataFrame) -> (pl.DataFrame, pl.DataFrame):
 
-        metadata_sync = metadata[metadata[metadata_columns.metadata_sync_choice] == True]
-        metadata_unsync = metadata[metadata[metadata_columns.metadata_sync_choice] == False]
+        metadata_sync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == True)
+        metadata_unsync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == False)
 
         return metadata_sync, metadata_unsync
 
@@ -802,13 +748,13 @@ class FolderReader(base.BaseWorker):
             if Path(folder).exists() is False:
                 raise FileNotFoundError(f'The folder {folder} does not exist!')
 
-    def build_and_get_metadata(self) -> pd.DataFrame:
+    def build_and_get_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             pandas dataframe of the information
 
         """
@@ -818,15 +764,15 @@ class FolderReader(base.BaseWorker):
 
         return metadata
 
-    def build_and_get_add_train_metadata(self) -> pd.DataFrame:
+    def build_and_get_add_train_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders for the additional train data folder, read files and creates
-        and returns a pandas data frame from them.
+        and returns a data frame from them.
 
         Returns
         -------
-        pd.DataFrame
-            pandas dataframe of the information
+        pl.DataFrame
+            dataframe of the information
 
         """
 
@@ -869,7 +815,7 @@ class FolderReader(base.BaseWorker):
 
         return metadata
 
-    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pd.DataFrame:
+    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pl.DataFrame:
         """
         This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
 
@@ -880,8 +826,8 @@ class FolderReader(base.BaseWorker):
 
         Returns
         -------
-        pd.DataFrame
-            pandas dataframe of the information
+        pl.DataFrame
+            dataframe of the information
 
         """
 
@@ -907,21 +853,36 @@ class FolderReader(base.BaseWorker):
         folder_names = [folder_path.name for folder_path in folder_paths]
         file_names = [file_path.stem for file_path in file_paths]
         file_extensions = [file_path.suffix.lower() for file_path in file_paths]
-        ids = [uuid.uuid4().int for _ in file_paths]
+        _id_mask = (1 << 64) - 1  # have to mask the uuid4 to get a 64 bit int because of pl support
+        ids = [uuid.uuid4().int & _id_mask for _ in file_paths]
 
         # Create data frame of all the files in the folder
-        metadata = pd.DataFrame({
-            metadata_columns.folder_path: [str(item) for item in folder_paths],
-            metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
-            metadata_columns.folder_name: folder_names,
-            metadata_columns.file_name: file_names,
-            metadata_columns.file_extension: file_extensions,
-            metadata_columns.path: [str(item) for item in file_paths],
-            metadata_columns.content_type: ContentTypes.FILE.value,
-            metadata_columns.metadata_sync_choice: True,
-            metadata_columns.syncable: True,
-            metadata_columns.id: ids,
-        })
+        metadata = pl.DataFrame(
+            data={
+                metadata_columns.folder_path: [str(item) for item in folder_paths],
+                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+                metadata_columns.folder_name: folder_names,
+                metadata_columns.file_name: file_names,
+                metadata_columns.file_extension: file_extensions,
+                metadata_columns.path: [str(item) for item in file_paths],
+                metadata_columns.content_type: ContentTypes.FILE.value,
+                metadata_columns.metadata_sync_choice: True,
+                metadata_columns.syncable: True,
+                metadata_columns.id: ids,
+            },
+            schema={
+                metadata_columns.folder_path: str,
+                metadata_columns.folder_parent_path: str,
+                metadata_columns.folder_name: str,
+                metadata_columns.file_name: str,
+                metadata_columns.file_extension: str,
+                metadata_columns.path: str,
+                metadata_columns.content_type: str,
+                metadata_columns.metadata_sync_choice: pl.Boolean,
+                metadata_columns.syncable: pl.Boolean,
+                metadata_columns.id: pl.UInt64,
+            }
+        )
 
         # conform the data according to the file format
         metadata = self._conform_to_type(metadata)
@@ -1111,9 +1072,9 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
             self._config.get_value_option('criterion_generation.criterion')\
             .expect('criterion config does not exist')
         self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
-        self._criterion_function = self._check_process_criterion(_criterion)
+        self._check_criterion(self._criterion)
 
-    def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
+    def _check_criterion(self, criterion: List[str]):
         """Checks if the given criterion is ok"""
 
         # the criterion values should be from the columns' names
@@ -1127,76 +1088,42 @@ class FolderReaderExecutorSeparateFiles(FolderReaderExecutor):
                 )
                 raise ValueError("unknown criteria")
 
-        if self._criterion_hash:
+    def _add_bundle_id_column(self, metadata: pl.DataFrame) -> pl.DataFrame:
+        """
+        Creates the bundle id column and returns it
+
+        Parameters
+        ----------
+        metadata : pl.DataFrame
+            the metadata
+
+        Returns
+        -------
+        pl.DataFrame
+            the new metadata with the new column updated
+
+        """
+
+        if len(metadata) > 0:
             import hashlib
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: \
-                hashlib\
-                .md5(
-                    '+++'.join([row[getattr(metadata_columns, item)] for item in criterion])
-                    .encode()
-                )\
-                .hexdigest()
+            metadata = metadata.with_columns(
+                pl.concat_str(
+                    pl.col([getattr(metadata_columns, item) for item in self._criterion]), separator="+++"
+                )
+                .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
+                .alias(metadata_columns.bundle_id)
+            )
         else:
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: '+++'.join([row[getattr(metadata_columns, item)] for item in criterion])
-
-        return criterion_function
-
-    def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates the criterion column and returns it
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata
-
-        Returns
-        -------
-        pd.DataFrame
-            the new metadata with criterion column updated
-
-        """
-
-        if len(metadata) > 0:
-            metadata[_metadata_columns_internal.criterion] = \
-                metadata.apply(self._criterion_function, axis=1)
-            metadata[metadata_columns_SEP.bundle_id] = metadata[_metadata_columns_internal.criterion]
+            # add empty str literal cause the column type is str
+            metadata = metadata.with_columns(pl.lit("").alias(metadata_columns.bundle_id))
 
         return metadata
 
-    def _remove_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """
-        Removes the criterion column and returns it
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata
-
-        Returns
-        -------
-        pd.DataFrame
-            the new metadata with criterion column updated
-
-        """
-
-        if len(metadata) > 0:
-            metadata = metadata.drop(columns=_metadata_columns_internal.criterion)
-
-        return metadata
-
-    def process(self, metadata: pd.DataFrame) -> Result[pd.DataFrame, Exception]:
+    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
 
         # add criterion column
-        metadata = self._add_criterion_column(metadata)
+        metadata = self._add_bundle_id_column(metadata)
 
-        metadata = MetadataManipulator(metadata=metadata).regroup()
-
-        metadata = self._remove_criterion_column(metadata)
-
-        # do nothing and return the result
         return Ok(metadata)
 
 
