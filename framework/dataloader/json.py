@@ -1,7 +1,7 @@
 from . import dataloader
 from ..util.config import ConfigParser
 import pandas as pd
-from typing import List
+from typing import List, Dict, Any
 import json
 
 
@@ -21,12 +21,12 @@ class JSONLoader(dataloader.DataLoader):
 
         super().__init__(metadata, config)
 
-    def _load_single_data(self, row: pd.Series):
+    def _load_single_data(self, row: Dict[str, Any]):
         """Helper method to load a single json.
 
         Parameters
         ----------
-        row: pd.Series
+        row: Dict[str, Any]
             The Pandas dataframe row corresponding to the current element
 
         Returns

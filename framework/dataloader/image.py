@@ -2,7 +2,7 @@ from . import dataloader
 from ..util.config import ConfigParser
 import pandas as pd
 import numpy as np
-from typing import List
+from typing import List, Dict, Any
 import cv2
 
 
@@ -29,12 +29,12 @@ class ImageLoader(dataloader.DataLoader):
     #
     #     return string
 
-    def _load_single_data(self, row: pd.Series) -> np.ndarray:
+    def _load_single_data(self, row: Dict[str, Any]) -> np.ndarray:
         """Helper method to load a single image.
 
         Parameters
         ----------
-        row: pd.Series
+        row: Dict[str, Any]
             The Pandas dataframe row corresponding to the current element
 
         Returns
