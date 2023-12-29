@@ -1011,7 +1011,7 @@ class DataFormatExecutorSeparateFiles(DataFormatExecutor):
             }
         metadata = metadata.with_columns(
             pl.col(metadata_columns.bundle_id)
-            .apply(lambda bundle_id: mapping[bundle_id], return_dtype=metadata_columns_SEP_type.bundle_id)
+            .replace(mapping, return_dtype=metadata_columns_SEP_type.bundle_id)
             .alias(metadata_columns.index)
         )
 
@@ -2706,7 +2706,10 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Find the corresponding metadata
         begin_index = (item * self.batch_size) % self._get_metadata_len()
         end_index = begin_index + self.batch_size
-        metadata = self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left'))
+        metadata = \
+            self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left'))\
+            .sort(by=metadata_columns.index)
+
         if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
             remainder = self.batch_size - (self._get_metadata_len() - 1 - begin_index)
             metadata2 = self.metadata.filter(pl.col(metadata_columns.index).le(remainder-2))
