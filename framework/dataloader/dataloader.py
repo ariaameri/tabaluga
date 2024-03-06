@@ -4,9 +4,12 @@ import pathlib
 import re
 import select
 import threading
+import uuid
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 import colored
+import polars as pl
 from jointstemplant.util.util import OnAndEnabled
 from ..base import base
 from ..util.config import ConfigParser
@@ -31,21 +34,78 @@ class ContentTypes(Enum):
 
 
 # a mapping between the column concepts and their names
-metadata_columns = {
-    'folder_path': 'folder_path',
-    'folder_parent_path': 'folder_parent_path',
-    'folder_name': 'folder_name',
-    'file_name': 'file_name',
-    'file_extension': 'file_extension',
-    'path': 'path',
-    'content_type': 'content_type',
-    'syncable': 'syncable',
-}
-_metadata_columns_internal = {
-    'original_index': 'original_index',
-    'data_raw': 'data_raw',
-    '__criterion': '__criterion',
-}
+@dataclass(frozen=True)
+class MetadataColumns:
+    folder_path: str = 'folder_path'
+    folder_parent_path: str = 'folder_parent_path'
+    folder_name: str = 'folder_name'
+    file_name: str = 'file_name'
+    file_extension: str = 'file_extension'
+    path: str = 'path'
+    content_type: str = 'content_type'
+    metadata_sync_choice: str = 'metadata_sync_choice'
+    syncable: str = 'syncable'
+    id: str = 'id'
+    bundle_id: str = 'bundle_id'
+    index: str = 'index'
+
+
+@dataclass(frozen=True)
+class MetadataColumnsTypes:
+    folder_path = str
+    folder_parent_path = str
+    folder_name = str
+    file_name = str
+    file_extension = str
+    path = str
+    content_type = str
+    metadata_sync_choice = pl.Boolean
+    syncable = pl.Boolean
+    id = pl.UInt64
+    bundle_id = None
+    index = pl.Int64
+
+
+metadata_columns = MetadataColumns()
+metadata_columns_type = MetadataColumnsTypes()
+
+
+@dataclass(frozen=True)
+class _MetadataColumnsInternal:
+    data_raw: str = '__INTERNAL_data_raw'
+    criterion: str = '__INTERNAL___criterion'
+
+
+_metadata_columns_internal = _MetadataColumnsInternal()
+
+
+@dataclass(frozen=True)
+class MetadataColumnsSepFilesType:
+    bundle_id = pl.Int64
+
+
+metadata_columns_SEP_type = MetadataColumnsSepFilesType()
+
+
+@dataclass(frozen=True)
+class MetadataColumnsCOCO:
+    coco_id: str = 'COCO_coco_id'
+    coco_dataset_id: str = 'COCO_coco_dataset_id'
+    coco_json_id: str = 'COCO_coco_json_id'
+
+
+@dataclass(frozen=True)
+class MetadataColumnsCOCOType:
+    bundle_id = str
+    coco_id = pl.UInt32
+    coco_dataset_id = pl.UInt32
+    coco_json_id = metadata_columns_type.id
+
+
+metadata_columns_COCO = MetadataColumnsCOCO()
+metadata_columns_COCO_type = MetadataColumnsCOCOType()
+
+_id_mask = (1 << 64) - 1  # have to mask the uuid4 to get a 64 bit int because of pl support
 
 
 class DataManager(base.BaseEventManager, ABC):
@@ -95,10 +155,14 @@ class DataManager(base.BaseEventManager, ABC):
         # build the metadata generator
         self.metadata_generator = self._build_metadata_generator()
 
+        # build the format executor
+        self._data_type = self._config.get_value_option('data_type.type').expect('data type for file type not provided')
+        self._data_format_executor: DataFormatExecutor = self._build_data_format_executor()
+
         # Pandas data frame to hold the metadata of the data
-        self.train_metadata: pd.DataFrame
-        self.val_metadata: pd.DataFrame
-        self.test_metadata: pd.DataFrame
+        self.train_metadata: pl.DataFrame
+        self.val_metadata: pl.DataFrame
+        self.test_metadata: pl.DataFrame
         if (res := self._create_metadata()).is_err():
             raise res.get_err()
         self.train_metadata, self.val_metadata, self.test_metadata = res.get()
@@ -146,6 +210,17 @@ class DataManager(base.BaseEventManager, ABC):
         # set the batch sizes
         self.set_batch_size(self.batch_size)
 
+    def _build_data_format_executor(self) -> 'DataFormatExecutor':
+
+        if self._data_type == 'separate_files':
+            file_type_executor = DataFormatExecutorSeparateFiles(self._config.get_or_empty("data_type.separate_files"))
+        elif self._data_type == 'coco':
+            file_type_executor = DataFormatExecutorCOCO(self._config.get_or_empty("data_type.coco"))
+        else:
+            raise Exception(f"unknown file type of {self._data_type}")
+
+        return file_type_executor
+
     def _distribute_shared_multithreading_pool(self):
         """distributes the shared multithreading pool among all workers."""
 
@@ -159,10 +234,6 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
-    def get_syncer(self):
-
-        return self._metadata_syncer
-
     def _sync_all_metadata_distributed(self, rand_seed_add: int = 0) -> Result[Any, Exception]:
         """
         Syncs the metadata across processes.
@@ -174,7 +245,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         Returns
         -------
-        Result[(pd.DataFrame, pd.DataFrame, pd.DataFrame), Exception]
+        Result[(pl.DataFrame, pl.DataFrame, pl.DataFrame), Exception]
             train/val/test metadata
         """
 
@@ -205,9 +276,9 @@ class DataManager(base.BaseEventManager, ABC):
         train_metadata, val_metadata, test_metadata = res.get()
 
         # reset the indices
-        train_metadata = MetadataManipulator.reset_level_0_indices(train_metadata)
-        val_metadata = MetadataManipulator.reset_level_0_indices(val_metadata)
-        test_metadata = MetadataManipulator.reset_level_0_indices(test_metadata)
+        train_metadata = self._data_format_executor.reset_index(train_metadata)
+        val_metadata = self._data_format_executor.reset_index(val_metadata)
+        test_metadata = self._data_format_executor.reset_index(test_metadata)
 
         return Ok((train_metadata, val_metadata, test_metadata))
 
@@ -242,7 +313,8 @@ class DataManager(base.BaseEventManager, ABC):
         if mpi.mpi_communicator.is_main_rank():
             # get the metadata
             metadata = self.metadata_generator.build_and_get_metadata()
-            metadata = self._modify_metadata(metadata)
+            metadata = self._data_format_executor.process(metadata).get()
+            # no need to set the indices for the metadata now, we can do it later
             train_metadata, val_metadata, test_metadata = \
                 self._generate_train_val_test_metadata(metadata)
             train_metadata, val_metadata, test_metadata = \
@@ -251,6 +323,17 @@ class DataManager(base.BaseEventManager, ABC):
                     val_metadata,
                     test_metadata
                 )
+            train_metadata = self._data_format_executor.reset_index(train_metadata)
+            val_metadata = self._data_format_executor.reset_index(val_metadata)
+            test_metadata = self._data_format_executor.reset_index(test_metadata)
+
+        if train_metadata.is_empty() is False:
+            MetadataManipulator.check_print_bundle_sanity(train_metadata, self._log)
+        if val_metadata.is_empty() is False:
+            MetadataManipulator.check_print_bundle_sanity(val_metadata, self._log)
+        if test_metadata.is_empty() is False:
+            MetadataManipulator.check_print_bundle_sanity(test_metadata, self._log)
+
         # ask the metadata generator to sync among the nodes
         for md in [train_metadata, val_metadata, test_metadata]:
             if (res := self.metadata_generator.sync(md)).is_err():
@@ -259,21 +342,15 @@ class DataManager(base.BaseEventManager, ABC):
 
         return Ok((train_metadata, val_metadata, test_metadata))
 
-    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """Modifies the metadata that this instance holds."""
-
-        metadata_manipulator = MetadataManipulator(metadata=metadata)
-
-        # regroup the metadata
-        metadata = metadata_manipulator.modify()
-
-        return metadata
-
-    def _generate_train_val_test_metadata(self, metadata: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+    def _generate_train_val_test_metadata(self, metadata: pl.DataFrame) -> (pl.DataFrame, pl.DataFrame, pl.DataFrame):
         """The method creates train, validation, and test metadata."""
 
+        metadata_sync, metadata_unsync = MetadataManipulator.separate_sync_choices_metadata(metadata)
+
+        bundle_ids = metadata_sync[metadata_columns.bundle_id].unique(maintain_order=True)
+
         # Get count of each set
-        total_data_count = metadata.index.get_level_values(0).unique().size
+        total_data_count = len(bundle_ids)
         test_count = int(total_data_count * self._test_ratio)
         val_count = int((total_data_count - test_count) * self._val_ratio)
         train_count = total_data_count - test_count - val_count
@@ -293,32 +370,24 @@ class DataManager(base.BaseEventManager, ABC):
         indices = np.arange(total_data_count) \
             if self._shuffle is False \
             else np.random.permutation(total_data_count)
-        test_indices = indices[:test_count]
-        val_indices = indices[test_count:(test_count+val_count)]
-        train_indices = indices[(test_count+val_count):]
+
+        test_metadata_sync = \
+            metadata_sync.filter(
+                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[:test_count]])
+            )
+        val_metadata_sync = \
+            metadata_sync.filter(
+            pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[test_count:(test_count+val_count)]])
+            )
+        train_metadata_sync = \
+            metadata_sync.filter(
+            pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[(test_count+val_count):]])
+            )
 
         # Create the train, validation, and test metadata
-        test_metadata = metadata.loc[test_indices]
-        val_metadata = metadata.loc[val_indices]
-        train_metadata = metadata.loc[train_indices]
-
-        # Update the column names of the data frames
-        assert(_metadata_columns_internal['original_index'] == 'original_index')  # this is because df.assign can only get kwargs
-        [train_metadata, val_metadata, test_metadata] = \
-            [
-                df
-                .assign(original_index=df.index.get_level_values(0))
-                .rename(
-                    index={
-                        key: value
-                        for value, key
-                        in enumerate(df.index.get_level_values(0).unique(), start=0)
-                    },
-                    level=0,
-                )
-                for df
-                in [train_metadata, val_metadata, test_metadata]
-            ]
+        test_metadata = pl.concat([metadata_unsync, test_metadata_sync])
+        val_metadata = pl.concat([metadata_unsync, val_metadata_sync])
+        train_metadata = pl.concat([metadata_unsync, train_metadata_sync])
 
         # restore the random generator state
         if self._seed is not None:
@@ -331,59 +400,29 @@ class DataManager(base.BaseEventManager, ABC):
             train_metadata,
             val_metadata,
             test_metadata
-    ) -> (pd.DataFrame, pd.DataFrame, pd.DataFrame):
+    ) -> (pl.DataFrame, pl.DataFrame, pl.DataFrame):
         """Adds the additional metadata to the metadata within"""
-
-        def reindex(df: pd.DataFrame, index_begin: int) -> pd.DataFrame:
-            """Reindexes the 0 level indices of the given pandas dataframe so that the indexing starts from
-            the given value"""
-
-            return df.rename(
-                index={
-                    key: value
-                    for value, key
-                    in enumerate(df.index.get_level_values(0).unique(), start=index_begin)
-                },
-                level=0,
-            )
-
-        def add_original_index(df: pd.DataFrame) -> pd.DataFrame:
-            """adds `original_index` column to the dataframe."""
-
-            df[_metadata_columns_internal['original_index']] = -1
-
-            return df
-
-        def process_df(new_df: pd.DataFrame, old_df: pd.DataFrame) -> pd.DataFrame:
-            """Processes the new df and concats it with the old one and returns the result."""
-
-            new_df = self._modify_metadata(new_df)
-            new_df = add_original_index(new_df)
-            new_df = reindex(new_df, len(old_df.index.get_level_values(0).unique()))
-            df = pd.concat([old_df, new_df])
-
-            return df
 
         # get the new train metadata, process it and add it to the train metadata
         train_metadata = \
-            process_df(
-                self.metadata_generator.build_and_get_add_train_metadata(),
+            pl.concat([
+                self._data_format_executor.process(self.metadata_generator.build_and_get_add_train_metadata()).get(),
                 train_metadata,
-            )
+            ])
 
         # get the new val metadata, process it and add it to the val metadata
         val_metadata = \
-            process_df(
-                self.metadata_generator.build_and_get_add_val_metadata(),
+            pl.concat([
+                self._data_format_executor.process(self.metadata_generator.build_and_get_add_val_metadata()).get(),
                 val_metadata,
-            )
+            ])
 
         # get the new test metadata, process it and add it to the test metadata
         test_metadata = \
-            process_df(
-                self.metadata_generator.build_and_get_add_test_metadata(),
+            pl.concat([
+                self._data_format_executor.process(self.metadata_generator.build_and_get_add_test_metadata()).get(),
                 test_metadata,
-            )
+            ])
 
         return train_metadata, val_metadata, test_metadata
 
@@ -402,13 +441,13 @@ class DataManager(base.BaseEventManager, ABC):
         self.val_metadata = self._shuffle_metadata(self.val_metadata, rand_seed_add)
         self.test_metadata = self._shuffle_metadata(self.test_metadata, rand_seed_add)
 
-    def _shuffle_metadata(self, metadata: pd.DataFrame, rand_seed_add: int = 0) -> pd.DataFrame:
+    def _shuffle_metadata(self, metadata: pl.DataFrame, rand_seed_add: int = 0) -> pl.DataFrame:
         """
         Shuffles the given metadata if necessary
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             metadata to shuffle
         rand_seed_add : int, optional
             number to add with the random seed generator to have different random number generation each time
@@ -431,11 +470,9 @@ class DataManager(base.BaseEventManager, ABC):
         np.random.seed(seed)
 
         # shuffle the metadata
-        metadata_count = metadata.index.get_level_values(0).unique().size
-        indices = np.random.permutation(metadata_count)
-        if len(indices) > 0:
-            metadata = metadata.loc[indices]
-            metadata = MetadataManipulator.reset_level_0_indices(metadata)
+        indices = np.random.permutation(len(metadata))
+        metadata = metadata[indices]
+        metadata = self._data_format_executor.reset_index(metadata)
 
         # restore the random generator state
         np.random.set_state(rng_state)
@@ -493,99 +530,21 @@ class DataManager(base.BaseEventManager, ABC):
 class MetadataManipulator(base.BaseWorker):
     """Class to modify and manipulate metadata."""
 
-    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
+    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
 
         super().__init__(config)
 
         # metadata storage
         self.metadata = metadata
 
-    def modify(self, check_for_sanity: bool = True) -> pd.DataFrame:
-        """Runs the whole modification pipeline and returns the result."""
-
-        metadata = self.metadata
-
-        if len(self.metadata) > 0:
-            # we create a criterion helper column based on the data that we have to assist the groupby call of pandas
-            # to groupby int instead of anything else
-            criterion_field_name = _metadata_columns_internal['__criterion']
-            criterion_set = self.metadata[criterion_field_name].unique()
-            mapping = {criterion: idx_groupby for idx_groupby, criterion in enumerate(criterion_set)}
-            self.metadata['__criterion_help'] = \
-                self.metadata.apply(lambda row: mapping[row[criterion_field_name]], axis=1)
-
-            # regroup based on the file name
-            metadata = self.regroup_metadata(self.metadata, criterion='__criterion_help')
-            self.metadata = metadata = metadata.drop(['__criterion_help'], axis=1)
-
-            if check_for_sanity:
-                self._check_for_sanity(metadata)
-
-        return metadata
-
     @staticmethod
-    def regroup_metadata(metadata: pd.DataFrame, criterion: str = None, reset_index: bool = True) -> pd.DataFrame:
-        """Groups the metadata.
-
-        Each group of data (e.g. containing data and label) should have.
-        Each group must have its own unique index, where indices are range.
-        Each group will be recovered by metadata.loc[index]
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            metadata to process
-        criterion : str or List[str]
-            The name of the columns based on which the metadata should be categorized
-        reset_index : bool
-            whether to reset the level 0 indices
-
-        Returns
-        -------
-        pd.DataFrame
-            the result
-
-        """
-
-        if criterion is None or metadata.empty:
-            return metadata
-
-        # check if criterion is a column concept
-        if isinstance(criterion, str) and criterion not in metadata.columns:
-            raise ValueError(f"criterion '{criterion}' does not exists as a metadata column.")
-        elif isinstance(criterion, list) and any([(c not in metadata.columns) for c in criterion]):
-            raise ValueError(f"part of criterion '{criterion}' does not exists as a metadata column.")
-
-        new_indices = []
-        new_indices_count = {}
-        for k in metadata[criterion]:
-            n = new_indices_count.get(k, 0)
-            new_indices_count[k] = n + 1
-            new_indices.append((k, n))
-        metadata = metadata.copy(True)
-        metadata.index = pd.MultiIndex.from_tuples(new_indices)
-        # sort the indices
-        metadata = metadata.loc[metadata.index.sort_values()]
-
-        if reset_index:
-            # Rename the indices to be range
-            # Also rename the index level 0 name to be 'index' (instead of `criterion`)
-            metadata = MetadataManipulator.reset_level_0_indices(metadata)
-            metadata.index.names = [None, *metadata.index.names[1:]]
-
-        return metadata
-
-    @staticmethod
-    def check_for_sanity(metadata: pd.DataFrame, logger) -> None:
+    def check_print_bundle_sanity(metadata: pl.DataFrame, logger) -> None:
         """Checks the given metadata and makes some info if necessary."""
 
-        # get the bundle counts and report
-        idx_0_to_1_count: Dict[int, int] = {}
-        for (l_0, _) in metadata.index:
-            idx_0_to_1_count[l_0] = (idx_0_to_1_count.get(l_0) or 0) + 1
+        count_df = metadata.groupby(metadata_columns.bundle_id).count()
 
         from collections import Counter
-        count = Counter(idx_0_to_1_count.values())
+        count = Counter(count_df['count'])
         if (length := len(count.values())) == 0:
             logger.error(f"ended up in a weird situation: data bundles seem to not exist!")
         elif length == 1:
@@ -595,15 +554,11 @@ class MetadataManipulator(base.BaseWorker):
                 "data bundles contain different amount of elements. I found:" \
                 "\n\t (bundle size) (count)" \
                 "\n\t\t (samples' path)"
-            # get the pd max_colwidth and set it to something big
-            pd_max_col_width = pd.get_option('display.max_colwidth')
-            pd.set_option('display.max_colwidth', 1000)
             for c, v in count.items():
                 warn += f"\n\t- {c}: {v}"
                 # get the elements that have c counts
-                c_keys = [k for k, v in idx_0_to_1_count.items() if v == c][:10]
-                # sample them
-                sample_df_str = str(metadata.loc[c_keys][metadata_columns['path']])
+                bundle_ids = count_df.filter(pl.col('count') == c)[:10][metadata_columns.bundle_id]
+                sample_df_str = str(metadata.filter(pl.col(metadata_columns.bundle_id).is_in(bundle_ids)))
                 from tabaluga.framework.util.util import REGEX_INDENT_NEW_LINE_ONLY
                 sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
 
@@ -611,85 +566,15 @@ class MetadataManipulator(base.BaseWorker):
 
             warn += "\n"
 
-            # revert pandas setting
-            pd.set_option('display.max_colwidth', pd_max_col_width)
-
             logger.warning(warn)
 
-    def _check_for_sanity(self, metadata: pd.DataFrame) -> None:
-        """Checks the given metadata and makes some info if necessary."""
-
-        return self.check_for_sanity(metadata, self._log)
-
     @staticmethod
-    def reset_level_0_indices(metadata: pd.DataFrame, offset: int = 0) -> pd.DataFrame:
-        """
-        Resets the level 0 indices to start from 0 and returns the result.
+    def separate_sync_choices_metadata(metadata: pl.DataFrame) -> (pl.DataFrame, pl.DataFrame):
 
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the data frame to reset the indices
-        offset : int
-            the offset for setting the index
+        metadata_sync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == True)
+        metadata_unsync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == False)
 
-        Returns
-        -------
-        pd.DataFrame
-            the result
-
-        """
-
-        metadata = metadata.rename(
-            index={key: value for value, key in enumerate(metadata.index.get_level_values(0).unique(), start=offset)},
-            level=0,
-        )
-
-        return metadata
-
-    @staticmethod
-    def bundle_exist_name(metadata: pd.DataFrame, exist_names: List[str], criterion_column: str):
-        """
-        Takes the two level indexed metadata, for each of the levels checks if the criterion column contains all names.
-        If not, removes that bundle (level 0 index) and returns the result.
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the two-level indexed metadata
-        exist_names : List[str]
-            the names that must exist in each bundle according to criterion_column values
-        criterion_column : str
-            the column name to use to search for exist_names
-
-        Returns
-        -------
-        pd.DataFrame
-            the result
-
-        """
-
-        names_count: int = len(exist_names)
-        locs_drop = []
-
-        for i0 in metadata.index.get_level_values(0).unique():
-            loc = metadata.loc[i0]
-
-            # if the bundle has a smaller number of elements from the "exist" names, drop it
-            if len(loc) < names_count:
-                locs_drop.append(i0)
-                continue
-
-            # if it does not have all names, then it should be removed
-            loc_criterion = loc[criterion_column].values
-            for name in exist_names:
-                if name not in loc_criterion:
-                    locs_drop.append(i0)
-                    break
-
-        metadata = metadata.drop(locs_drop)
-
-        return metadata
+        return metadata_sync, metadata_unsync
 
 
 class FolderReader(base.BaseWorker):
@@ -702,19 +587,19 @@ class FolderReader(base.BaseWorker):
         # Folders containing the data
         self._folders: List[str] = []
 
-        # how to create criterion
-        _criterion: List[str] = \
-            self._config.get_value_option('criterion_generation.criterion')\
-            .expect('criterion config does not exist')
-        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
-        self._criterion_function = self._check_process_criterion(_criterion)
-
         # list of extensions to ignore and accept
         self._extension_ignore: List[re.Pattern] = [
             re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
         ]
         self._extension_accept: List[re.Pattern] = [
             re.compile(item) for item in self._config.get_or_else('extension_accept', [])
+        ]
+
+        self._iwholepath_regex: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex', [])
+        ]
+        self._iwholepath_regex_ignore: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex_ignore', [])
         ]
 
         # Folders containing the data
@@ -732,36 +617,6 @@ class FolderReader(base.BaseWorker):
         # whether we want to find the best multithreading count
         self._find_best_multithreading_count_enabled = self._config.get_or_else('find_best_multithreading_count', False)
 
-    def _check_process_criterion(self, criterion: List[str]) -> Callable[[pd.Series], str]:
-        """Checks if the given criterion is ok"""
-
-        # the criterion values should be from the columns' names
-        for criteria in criterion:
-            if criteria not in metadata_columns.keys():
-                self._log.error(
-                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
-                    + '\n\t - '
-                    + '\n\t - '.join(metadata_columns.keys())
-                    + '\n'
-                )
-                raise ValueError("unknown criteria")
-
-        if self._criterion_hash:
-            import hashlib
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: \
-                hashlib\
-                .md5(
-                    '+++'.join([row[metadata_columns[item]] for item in criterion])
-                    .encode()
-                )\
-                .hexdigest()
-        else:
-            criterion_function: Callable[[pd.Series], str] = \
-                lambda row: '+++'.join([row[metadata_columns[item]] for item in criterion])
-
-        return criterion_function
-
     def _check_populate_folder_metadata(self, folders: List[str]):
         """Checks given folders for sanity and existence."""
 
@@ -774,13 +629,13 @@ class FolderReader(base.BaseWorker):
             if Path(folder).exists() is False:
                 raise FileNotFoundError(f'The folder {folder} does not exist!')
 
-    def build_and_get_metadata(self) -> pd.DataFrame:
+    def build_and_get_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             pandas dataframe of the information
 
         """
@@ -790,31 +645,31 @@ class FolderReader(base.BaseWorker):
 
         return metadata
 
-    def build_and_get_add_train_metadata(self) -> pd.DataFrame:
+    def build_and_get_add_train_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders for the additional train data folder, read files and creates
-        and returns a pandas data frame from them.
+        and returns a data frame from them.
 
         Returns
         -------
-        pd.DataFrame
-            pandas dataframe of the information
+        pl.DataFrame
+            dataframe of the information
 
         """
 
         self._check_populate_folder_metadata(self._add_train_folders)
-        metadata = self._build_and_get_metadata_folders(self._add_train_folders)
+        m = self._build_and_get_metadata_folders(self._add_train_folders)
 
-        return metadata
+        return m
 
-    def build_and_get_add_val_metadata(self) -> pd.DataFrame:
+    def build_and_get_add_val_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders for the additional validation data folder, read files and creates
         and returns a pandas data frame from them.
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             pandas dataframe of the information
 
         """
@@ -824,14 +679,14 @@ class FolderReader(base.BaseWorker):
 
         return metadata
 
-    def build_and_get_add_test_metadata(self) -> pd.DataFrame:
+    def build_and_get_add_test_metadata(self) -> pl.DataFrame:
         """
         This method goes over the specified folders for the additional test data folder, read files and creates
         and returns a pandas data frame from them.
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             pandas dataframe of the information
 
         """
@@ -841,7 +696,7 @@ class FolderReader(base.BaseWorker):
 
         return metadata
 
-    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pd.DataFrame:
+    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pl.DataFrame:
         """
         This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
 
@@ -852,8 +707,8 @@ class FolderReader(base.BaseWorker):
 
         Returns
         -------
-        pd.DataFrame
-            pandas dataframe of the information
+        pl.DataFrame
+            dataframe of the information
 
         """
 
@@ -879,43 +734,35 @@ class FolderReader(base.BaseWorker):
         folder_names = [folder_path.name for folder_path in folder_paths]
         file_names = [file_path.stem for file_path in file_paths]
         file_extensions = [file_path.suffix.lower() for file_path in file_paths]
+        ids = [uuid.uuid4().int & _id_mask for _ in file_paths]
 
         # Create data frame of all the files in the folder
-        metadata = pd.DataFrame({
-            metadata_columns['folder_path']: [str(item) for item in folder_paths],
-            metadata_columns['folder_parent_path']: [str(item) for item in folder_parent_paths],
-            metadata_columns['folder_name']: folder_names,
-            metadata_columns['file_name']: file_names,
-            metadata_columns['file_extension']: file_extensions,
-            metadata_columns['path']: [str(item) for item in file_paths],
-            metadata_columns['content_type']: ContentTypes.FILE.value,
-            metadata_columns['syncable']: True,
-        })
-
-        # add criterion column
-        metadata = self._add_criterion_column(metadata)
-
-        return metadata
-
-    def _add_criterion_column(self, metadata: pd.DataFrame) -> pd.DataFrame:
-        """
-        Creates the criterion column and returns it
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata
-
-        Returns
-        -------
-        pd.DataFrame
-            the new metadata with criterion column updated
-
-        """
-
-        if len(metadata) > 0:
-            metadata[_metadata_columns_internal['__criterion']] = \
-                metadata.apply(self._criterion_function, axis=1)
+        metadata = pl.DataFrame(
+            data={
+                metadata_columns.folder_path: [str(item) for item in folder_paths],
+                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+                metadata_columns.folder_name: folder_names,
+                metadata_columns.file_name: file_names,
+                metadata_columns.file_extension: file_extensions,
+                metadata_columns.path: [str(item) for item in file_paths],
+                metadata_columns.content_type: ContentTypes.FILE.value,
+                metadata_columns.metadata_sync_choice: True,
+                metadata_columns.syncable: True,
+                metadata_columns.id: ids,
+            },
+            schema={
+                metadata_columns.folder_path: metadata_columns_type.folder_path,
+                metadata_columns.folder_parent_path: metadata_columns_type.folder_parent_path,
+                metadata_columns.folder_name: metadata_columns_type.folder_name,
+                metadata_columns.file_name: metadata_columns_type.file_name,
+                metadata_columns.file_extension: metadata_columns_type.file_extension,
+                metadata_columns.path: metadata_columns_type.path,
+                metadata_columns.content_type: metadata_columns_type.content_type,
+                metadata_columns.metadata_sync_choice: metadata_columns_type.metadata_sync_choice,
+                metadata_columns.syncable: metadata_columns_type.syncable,
+                metadata_columns.id: metadata_columns_type.id,
+            }
+        )
 
         return metadata
 
@@ -929,12 +776,41 @@ class FolderReader(base.BaseWorker):
         """
 
         # Check that the file is not a folder
-        check = file_path.is_file()
+        if file_path.is_file() is False:
+            return False
+
+        if self._filter_file_path(file_path) is False:
+            return False
 
         # Check criteria for the file name
-        check &= self._filter_file_name(file_path.name)
+        if self._filter_file_name(file_path.name) is False:
+            return False
 
-        return check
+        return True
+
+    def _filter_file_path(self, file_path: Path) -> bool:
+        """
+        Checks the file path to see if it is acceptable or not.
+
+        Parameters
+        ----------
+        file_path : Path
+
+        Returns
+        -------
+        bool
+
+        """
+
+        if self._iwholepath_regex and \
+                (any([reg.match(file_path.as_posix().lower()) is not None for reg in self._iwholepath_regex]) is False):
+            return False
+
+        for reg in self._iwholepath_regex_ignore:
+            if reg.match(file_path.as_posix().lower()) is not None:
+                return False
+
+        return True
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
@@ -980,14 +856,14 @@ class FolderReader(base.BaseWorker):
 
         return True
 
-    def get_best_multithreading_count(self, metadata: pd.DataFrame) -> Option[int]:
+    def get_best_multithreading_count(self, metadata: pl.DataFrame) -> Option[int]:
         """
         Finds the best number of threads to load the data.
         Will return `nothing` if not enabled
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             metadata to test with
 
         Returns
@@ -997,7 +873,7 @@ class FolderReader(base.BaseWorker):
         """
 
         if self._find_best_multithreading_count_enabled:
-            paths = [pathlib.Path(path) for path in metadata[metadata_columns['path']]]
+            paths = [pathlib.Path(path) for path in metadata[metadata_columns.path]]
             self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
             multithreading_count = DataLoaderMultiThreadFinder(
                 paths=paths,
@@ -1008,7 +884,7 @@ class FolderReader(base.BaseWorker):
 
         return nothing
 
-    def sync(self, metadata: pd.DataFrame = None) -> Result[None, Exception]:
+    def sync(self, metadata: pl.DataFrame = None) -> Result[None, Exception]:
         """Syncs the data across nodes."""
 
         if not mpi.mpi_communicator.is_distributed():
@@ -1019,6 +895,294 @@ class FolderReader(base.BaseWorker):
         res = file_syncer.sync(metadata)
 
         return res
+
+
+class DataFormatExecutor(base.BaseWorker, ABC):
+    """Abstract class to represent the executor on the folder reader metadata, such as a middleware."""
+
+    @abstractmethod
+    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
+        """
+        Processes the metadata and returns the result.
+
+        The dataframe of the result has an extra criterion column for bundling
+
+        Parameters
+        ----------
+        metadata : pl.DataFrame
+            input metadata
+
+        Returns
+        -------
+        Result[pl.DataFrame, Exception]
+            resulting metadata, result wrapped
+
+        """
+
+        raise NotImplementedError
+
+    @abstractmethod
+    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_data_type(self) -> str:
+        raise NotImplementedError
+
+
+class DataFormatExecutorSeparateFiles(DataFormatExecutor):
+    """Folder reader metadata for 'separate files' format."""
+
+    def __init__(self, config: ConfigParser):
+
+        super().__init__(config)
+
+        # how to create criterion
+        self._criterion: List[str] = \
+            self._config.get_value_option('criterion_generation.criterion')\
+            .expect('criterion config does not exist')
+        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
+        self._check_criterion(self._criterion)
+
+    def get_data_type(self) -> str:
+        return "separate_files"
+
+    def _check_criterion(self, criterion: List[str]):
+        """Checks if the given criterion is ok"""
+
+        # the criterion values should be from the columns' names
+        for criteria in criterion:
+            if criteria not in metadata_columns.__dict__.keys():
+                self._log.error(
+                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
+                    + '\n\t - '
+                    + '\n\t - '.join(metadata_columns.__dict__.keys())
+                    + '\n'
+                )
+                raise ValueError("unknown criteria")
+
+    def _add_bundle_id_column(self, metadata: pl.DataFrame) -> pl.DataFrame:
+        """
+        Creates the bundle id column and returns it
+
+        Parameters
+        ----------
+        metadata : pl.DataFrame
+            the metadata
+
+        Returns
+        -------
+        pl.DataFrame
+            the new metadata with the new column updated
+
+        """
+
+        if len(metadata) > 0:
+            import hashlib
+            metadata = metadata.with_columns(
+                pl.concat_str(
+                    pl.col([getattr(metadata_columns, item) for item in self._criterion]), separator="+++"
+                )
+                .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
+                .alias(metadata_columns.bundle_id)
+            )
+        else:
+            # add empty str literal cause the column type is str
+            metadata = metadata.with_columns(
+                pl.lit("").alias(metadata_columns.bundle_id),
+            )
+
+        return metadata
+
+    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
+
+        # add criterion column
+        metadata = self._add_bundle_id_column(metadata)
+
+        return Ok(metadata)
+
+    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
+
+        mapping = \
+            {
+                bundle_id: idx
+                for idx, bundle_id
+                in enumerate(metadata[metadata_columns.bundle_id].unique(maintain_order=True))
+            }
+        metadata = metadata.with_columns(
+            pl.col(metadata_columns.bundle_id)
+            .replace(mapping, return_dtype=metadata_columns_SEP_type.bundle_id)
+            .alias(metadata_columns.index)
+        )
+
+        return metadata
+
+
+class DataFormatExecutorCOCO(DataFormatExecutor):
+    """Folder reader metadata for 'coco' format."""
+
+    def __init__(self, config: ConfigParser = None):
+
+        super().__init__(config)
+
+    def get_data_type(self) -> str:
+        return "coco"
+
+    def _filter_only_jsons(self, metadata: pl.DataFrame) -> pl.DataFrame:
+        """Filters out only the labels.json files in the metadata and returns the result"""
+
+        return metadata.filter(pl.col(metadata_columns.file_extension) == ".json")
+
+    def _read_json(self, path: pathlib.Path):
+        """Loads the json file given the path"""
+
+        with open(path) as file:
+            import json
+            the_json = json.load(file)
+
+        return the_json
+
+    def _construct_syncable_metadata(self, coco_json: Dict[str, Dict], coco_json_id: int, schema) -> pl.DataFrame:
+        """
+        Constructs the metadata for syncing (among nodes) based on the provided coco json.
+
+        Parameters
+        ----------
+        coco_json : Dict[str, Dict]
+            coco labels.json in dictionary format
+        coco_json_id : int
+            coco labels.json id in the metadata for unique mapping
+
+        Returns
+        -------
+        pl.DataFrame
+            resulting dataframe
+
+        """
+
+        coco_images_info = coco_json['images']
+
+        # Check each file based on the criteria
+        file_paths = [pathlib.Path(coco_image_info['path']) for coco_image_info in coco_images_info]
+        # Retrieve the folder path and file names
+        folder_paths = [file_name.parent for file_name in file_paths]
+        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
+        folder_names = [folder_path.name for folder_path in folder_paths]
+        file_names = [file_path.stem for file_path in file_paths]
+        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
+        coco_json_ids = [coco_json_id for _ in coco_images_info]
+        coco_dataset_ids = [int(coco_image_info['dataset_id']) for coco_image_info in coco_images_info]
+        coco_ids = [int(coco_image_info['id']) for coco_image_info in coco_images_info]
+        ids = [uuid.uuid4().int & _id_mask for _ in file_paths]
+        bundle_ids = [uuid.uuid4().hex for _ in file_paths]
+
+        metadata = pl.DataFrame(
+            data={
+                metadata_columns.folder_path: [str(item) for item in folder_paths],
+                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+                metadata_columns.folder_name: folder_names,
+                metadata_columns.file_name: file_names,
+                metadata_columns.file_extension: file_extensions,
+                metadata_columns.path: [str(item) for item in file_paths],
+                metadata_columns_COCO.coco_json_id: coco_json_ids,
+                metadata_columns_COCO.coco_id: coco_ids,
+                metadata_columns_COCO.coco_dataset_id: coco_dataset_ids,
+                metadata_columns.content_type: ContentTypes.FILE.value,
+                metadata_columns.metadata_sync_choice: True,
+                metadata_columns.syncable: False,
+                metadata_columns.id: ids,
+                metadata_columns.bundle_id: bundle_ids,
+            },
+            schema={
+                **schema,
+                **{
+                    metadata_columns_COCO.coco_json_id: metadata_columns_COCO_type.coco_json_id,
+                    metadata_columns_COCO.coco_id: metadata_columns_COCO_type.coco_id,
+                    metadata_columns_COCO.coco_dataset_id: metadata_columns_COCO_type.coco_dataset_id,
+                    metadata_columns.bundle_id: metadata_columns_COCO_type.bundle_id,
+                }
+            }
+        )
+
+        return metadata
+
+    def _construct_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
+        """
+        Constructs metadata from the provided metadata that must contain only labels.json info.
+
+        Parameters
+        ----------
+        metadata : pl.DataFrame
+            metadata for the labels.json of coco
+
+        Returns
+        -------
+        pl.DataFrame
+            resulting dataframe consisting of the input metadata and the constructed image metadata
+
+        """
+
+        schema = metadata.schema
+
+        metadata = metadata.with_columns(
+            pl.lit(None, dtype=metadata_columns_COCO_type.coco_json_id).alias(metadata_columns_COCO.coco_json_id),
+            pl.lit(None, dtype=metadata_columns_COCO_type.coco_id).alias(metadata_columns_COCO.coco_id),
+            pl.lit(None, dtype=metadata_columns_COCO_type.coco_dataset_id).alias(metadata_columns_COCO.coco_dataset_id),
+            pl.lit(False, dtype=metadata_columns_type.metadata_sync_choice).alias(metadata_columns.metadata_sync_choice),
+            pl.col(metadata_columns.id).apply(lambda x: uuid.uuid4().hex, return_dtype=metadata_columns_COCO_type.bundle_id).alias(metadata_columns.bundle_id),
+        )
+
+        coco_metadatas = []
+        for idx, p in enumerate(metadata.iter_rows(named=True)):
+            coco_json = self._read_json(pathlib.Path(p[metadata_columns.path]))
+            coco_json_id = p[metadata_columns.id]
+            m = self._construct_syncable_metadata(coco_json, coco_json_id, schema)
+            if m.is_empty():
+                continue
+            coco_metadatas.append(m)
+            coco_dataset_id = m[metadata_columns_COCO.coco_dataset_id][0]
+            metadata[idx, metadata_columns_COCO.coco_dataset_id] = coco_dataset_id
+
+        metadata = pl.concat([metadata, *coco_metadatas])
+
+        metadata = self.reset_index(metadata)
+
+        return metadata
+
+    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
+        """Processes the provided metadata, extract image info from the coco json metadata provided and returns the
+        result"""
+
+        metadata = self._filter_only_jsons(metadata)
+
+        coco_metadata = self._construct_metadata(metadata)
+
+        # add criterion column
+
+        return Ok(coco_metadata)
+
+    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
+
+        metadata_json = \
+            metadata\
+            .filter(pl.col(metadata_columns.file_extension) == '.json')\
+            .with_columns(pl.lit(-1, dtype=metadata_columns_type.index).alias(metadata_columns.index))
+        metadata_non_json = metadata.filter(pl.col(metadata_columns.file_extension) != '.json')
+        mapping = \
+            {
+                bundle_id: idx
+                for idx, bundle_id
+                in enumerate(metadata_non_json[metadata_columns.bundle_id].unique(maintain_order=True))
+            }
+        metadata_non_json = metadata_non_json.with_columns(
+            pl.col(metadata_columns.bundle_id)
+            .apply(lambda bundle_id: mapping[bundle_id], return_dtype=metadata_columns_type.index)
+            .alias(metadata_columns.index)
+        )
+
+        metadata = pl.concat([metadata_json, metadata_non_json])
+
+        return metadata
 
 
 class FileSyncer(OnAndEnabled):
@@ -1064,18 +1228,18 @@ class FileSyncer(OnAndEnabled):
 
         return self.receiver
 
-    def _sync_metadata(self, metadata: Optional[pd.DataFrame] = None) -> Result[pd.DataFrame, Exception]:
+    def _sync_metadata(self, metadata: Optional[pl.DataFrame] = None) -> Result[pl.DataFrame, Exception]:
         """
         Syncs the metadata and returns it.
 
         Parameters
         ----------
-        metadata : Optional[pd.DataFrame]
+        metadata : Optional[pl.DataFrame]
             must be provided if we are the main rank
 
         Returns
         -------
-        Result[pd.DataFrame, Exception]
+        Result[pl.DataFrame, Exception]
         """
 
         # make sure we have all the metadata if we are the main rank
@@ -1085,7 +1249,7 @@ class FileSyncer(OnAndEnabled):
             )
 
         # let everyone get the metadata
-        res: Result[pd.DataFrame, Exception] = mpi.mpi_communicator.collective_bcast(
+        res: Result[pl.DataFrame, Exception] = mpi.mpi_communicator.collective_bcast(
                 data=metadata,
                 root_rank=0,
                 name=self.mpi_comm_main_local_name,
@@ -1093,21 +1257,21 @@ class FileSyncer(OnAndEnabled):
 
         return res
 
-    def _check_local_data(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> pd.DataFrame:
+    def _check_local_data(self, metadata: pl.DataFrame, thread_pool: ThreadPoolExecutor) -> pl.DataFrame:
         """
         Checks the local machine for existence of data in the given data frame and returns a new data frame with the
         items that do not exist.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata to use for checking for data
         thread_pool : ThreadPoolExecutor
             the thread pool to use for checking the data
 
         Returns
         -------
-        pd.DataFrame
+        pl.DataFrame
             a new metadata with rows of the original data frame whose data do not exist on the local machine
 
         """
@@ -1121,7 +1285,7 @@ class FileSyncer(OnAndEnabled):
 
         # find a selector of the metadata for the files that do exist
         selector = list(
-            thread_pool.map(check_single_data_raw, metadata[metadata_columns['path']])
+            thread_pool.map(check_single_data_raw, metadata[metadata_columns.path])
         )
         # not the selection
         selector = [not item for item in selector]
@@ -1159,7 +1323,7 @@ class FileSyncer(OnAndEnabled):
 
         # Load the data
         data_res = list(
-            thread_pool.map(load_single_data_raw, metadata[metadata_columns['path']])
+            thread_pool.map(load_single_data_raw, metadata[metadata_columns.path])
         )
         for res in data_res:
             if res.is_err():
@@ -1169,7 +1333,7 @@ class FileSyncer(OnAndEnabled):
         data = [item.get() for item in data_res]
 
         # assign them to a new column
-        assert(_metadata_columns_internal['data_raw'] == 'data_raw')  # this is because df.assign can only get kwargs
+        assert(_metadata_columns_internal.data_raw == 'data_raw')  # this is because df.assign can only get kwargs
         res = Result.from_func(metadata.assign, data_raw=data)
 
         return res
@@ -1210,7 +1374,7 @@ class FileSyncer(OnAndEnabled):
         save_res = list(
             thread_pool.map(
                 lambda x: save_single_data_raw(x[0], x[1]),
-                zip(metadata[metadata_columns['path']], metadata[_metadata_columns_internal['data_raw']])
+                zip(metadata[metadata_columns.path], metadata[_metadata_columns_internal.data_raw])
             )
         )
         for res in save_res:
@@ -1223,9 +1387,9 @@ class FileSyncer(OnAndEnabled):
     def _sync_missing_metadata(
             self,
             rank: int,
-            metadata: pd.DataFrame,
+            metadata: pl.DataFrame,
             thread_pool: ThreadPoolExecutor
-    ) -> Result[pd.DataFrame, Exception]:
+    ) -> Result[pl.DataFrame, Exception]:
         """
         Finds and syncs the metadata of the missing files
 
@@ -1233,14 +1397,14 @@ class FileSyncer(OnAndEnabled):
         ----------
         rank : int
             destination rank
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata to use for syncing
         thread_pool : ThreadPoolExecutor
             the thread pool to use for the operations
 
         Returns
         -------
-        Result[pd.DataFrame, Exception]
+        Result[pl.DataFrame, Exception]
         """
 
         if self.receiver:
@@ -1340,7 +1504,7 @@ class FileSyncer(OnAndEnabled):
     def _sync_local_data_with_rank(
             self,
             rank: int,
-            metadata: pd.DataFrame,
+            metadata: pl.DataFrame,
             thread_pool: ThreadPoolExecutor
     ) -> Result[None, Exception]:
         """
@@ -1350,7 +1514,7 @@ class FileSyncer(OnAndEnabled):
         ----------
         rank : int
             destination rank
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata to use for syncing
         thread_pool : ThreadPoolExecutor
             the thread pool to use for the operations
@@ -1390,18 +1554,18 @@ class FileSyncer(OnAndEnabled):
 
         return Ok(None)
 
-    def _sync_local_data_selective(self, metadata: pd.DataFrame) -> Result[None, Exception]:
+    def _sync_local_data_selective(self, metadata: pl.DataFrame) -> Result[None, Exception]:
         """
         Syncs only the missing portion of the local data with all the processes and makes sure everyone has all.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata to use for syncing
 
         Returns
         -------
-        Result[pd.DataFrame, Exception]
+        Result[pl.DataFrame, Exception]
         """
 
         if self.distributor:
@@ -1446,13 +1610,13 @@ class FileSyncer(OnAndEnabled):
 
         return Ok(None)
 
-    def _sync_local_data_broadcast(self, metadata: pd.DataFrame) -> Result[None, Exception]:
+    def _sync_local_data_broadcast(self, metadata: pl.DataFrame) -> Result[None, Exception]:
         """
         Broadcasts all the local data to all the processes and makes sure everyone has it.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata to use for syncing
 
         """
@@ -1480,7 +1644,7 @@ class FileSyncer(OnAndEnabled):
                 # first, load the data into a new dataframe
                 if (
                         metadata_updated_res := self._load_local_data_raw(
-                            metadata.iloc[start_idx:(start_idx+self.batch_size)],
+                            metadata[start_idx:(start_idx+self.batch_size)],
                             thread_pool,
                         )
                 ).is_err():
@@ -1515,23 +1679,22 @@ class FileSyncer(OnAndEnabled):
         if self.is_distributor():
             self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
 
-    def _sync_local_data(self, metadata: pd.DataFrame) -> Result[None, Exception]:
+    def _sync_local_data(self, metadata: pl.DataFrame) -> Result[None, Exception]:
         """
         Reads the metadata and syncs the local data within.
 
         Parameters
         ----------
-        metadata : pd.DataFrame, optional
+        metadata : pl.DataFrame, optional
             metadata to use for syncing
 
         Returns
         -------
-        Result[pd.DataFrame, Exception]
+        Result[pl.DataFrame, Exception]
         """
 
         # get the portion of the metadata that is syncable
-        syncable_selection = metadata[metadata_columns['syncable']] == True
-        metadata = metadata[syncable_selection]
+        metadata = metadata.filter(pl.col(metadata_columns.syncable) == True)
 
         if self.force_sync is True:
             # force sync if necessary
@@ -1542,13 +1705,13 @@ class FileSyncer(OnAndEnabled):
 
         return res
 
-    def sync(self, metadata: pd.DataFrame = None) -> Result[None, Exception]:
+    def sync(self, metadata: pl.DataFrame = None) -> Result[None, Exception]:
         """
         Syncs the data of the given metadata.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             the metadata of the data to be synced, must be provided if main rank, for others, it does not matter
 
         Returns
@@ -1566,7 +1729,7 @@ class FileSyncer(OnAndEnabled):
                 )
 
             # sync the whole metadata
-            res: Result[pd.DataFrame, Exception] = self._sync_metadata(metadata)
+            res: Result[pl.DataFrame, Exception] = self._sync_metadata(metadata)
             if res.is_err():
                 return res
 
@@ -1629,9 +1792,9 @@ class MetadataSyncer(base.BaseWorker):
 
     def _generate_train_val_test_metadata(
             self,
-            train_metadata: pd.DataFrame,
-            val_metadata: pd.DataFrame,
-            test_metadata: pd.DataFrame,
+            train_metadata: pl.DataFrame,
+            val_metadata: pl.DataFrame,
+            test_metadata: pl.DataFrame,
             batch_size: int,
     ) -> Result[Any, Exception]:
         """
@@ -1639,7 +1802,7 @@ class MetadataSyncer(base.BaseWorker):
 
         Returns
         -------
-        Result[(List[pd.DataFrame], List[pd.DataFrame], List[pd.DataFrame]), Exception]
+        Result[(List[pl.DataFrame], List[pl.DataFrame], List[pl.DataFrame]), Exception]
             resulting dataframes
         """
 
@@ -1658,20 +1821,23 @@ class MetadataSyncer(base.BaseWorker):
 
             # if we should split the train data among the nodes
             else:
+                train_metadata_sync, train_metadata_unsync = \
+                    MetadataManipulator.separate_sync_choices_metadata(train_metadata)
+
                 # split the training metadata
                 # split according to the batch size so that each get the same number of iterations
-                train_zero_level_indices = train_metadata.index.get_level_values(0).unique()
-                chunk_sizes = self._get_counts_based_on_list(train_zero_level_indices.size, batch_sizes)
+                train_bundles = train_metadata_sync[metadata_columns.bundle_id].unique(maintain_order=True)
+                chunk_sizes = self._get_counts_based_on_list(len(train_bundles), batch_sizes)
                 chunk_sizes_cumsum = list(np.cumsum([0, *chunk_sizes]))
                 train_split_indices = \
                     [
-                        train_zero_level_indices[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx+1]]
+                        train_bundles[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx+1]]
                         for idx
                         in range(0, len(chunk_sizes_cumsum) - 1)
                     ]
                 train_split_metadata = \
                     [
-                        train_metadata.loc[chunk_indices]
+                        train_metadata_sync.filter(pl.col(metadata_columns.bundle_id).is_in(chunk_indices))
                         for chunk_indices
                         in train_split_indices
                     ]
@@ -1679,7 +1845,7 @@ class MetadataSyncer(base.BaseWorker):
                 # check that all train metadata have the same length
                 if self.same_train_metadata_length_nodes:
                     md_lengths = [
-                        md.index.get_level_values(0).unique().size / b
+                        len(md[metadata_columns.bundle_id].unique()) / b
                         for md, b
                         in zip(train_split_metadata, batch_sizes)
                     ]
@@ -1692,23 +1858,44 @@ class MetadataSyncer(base.BaseWorker):
                         )
                         return Err(RuntimeError("train metadata have different sizes"))
 
+                train_split_metadata = \
+                    [
+                        pl.concat([m, train_metadata_unsync])
+                        for m
+                        in train_split_metadata
+                    ]
+
             # split the validation metadata
             # we only want the distributor to have the validation data and not the others
-            val_split_metadata = [val_metadata]
+            val_metadata_sync, val_metadata_unsync = \
+                MetadataManipulator.separate_sync_choices_metadata(train_metadata)
+            val_split_metadata = [val_metadata_sync]
             val_split_metadata.extend([
-                val_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                val_metadata_sync[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
+            val_split_metadata = [
+                pl.concat([val_metadata_unsync, m])
+                for m
+                in val_split_metadata
+            ]
 
             # split the test metadata
             # we only want the distributor to have the test data and not the others
+            test_metadata_sync, test_metadata_unsync = \
+                MetadataManipulator.separate_sync_choices_metadata(val_metadata)
             test_split_metadata = [test_metadata]
             test_split_metadata.extend([
-                test_metadata.iloc[:0]  # this will surely result in an empty dataframe
+                test_metadata_sync.iloc[:0]  # this will surely result in an empty dataframe
                 for _
                 in range(1, self.dist_size)
             ])
+            test_split_metadata = [
+                pl.concat([test_metadata_unsync, m])
+                for m
+                in test_split_metadata
+            ]
 
         else:
             train_split_metadata = None
@@ -1719,9 +1906,9 @@ class MetadataSyncer(base.BaseWorker):
 
     def sync_train_val_test_metadata(
             self,
-            train_metadata: pd.DataFrame,
-            val_metadata: pd.DataFrame,
-            test_metadata: pd.DataFrame,
+            train_metadata: pl.DataFrame,
+            val_metadata: pl.DataFrame,
+            test_metadata: pl.DataFrame,
             batch_size: int,
     ) -> Result[Any, Exception]:
         """
@@ -1730,7 +1917,7 @@ class MetadataSyncer(base.BaseWorker):
 
         Returns
         -------
-        Result[(pd.DataFrame, pd.DataFrame, pd.DataFrame), Exception]
+        Result[(pl.DataFrame, pl.DataFrame, pl.DataFrame), Exception]
             the data frames for the metadata of train, val, and test
 
         """
@@ -1860,12 +2047,12 @@ class DataLoaderMultiThreadFinder(base.BaseWorker):
 class DataLoaderManager(base.BaseEventManager, ABC):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
-    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
+    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
         """Initializer for data loader manager.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             The metadata for the data to be loaded
         config : ConfigParser
             The configuration for the instance
@@ -1927,14 +2114,10 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         pass
 
-    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def _modify_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
-        # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
-
-        # Update the metadata
-        metadata = metadata.iloc[selection]
+        metadata = self.metadata.filter(pl.col(metadata_columns.path).apply(self._check_file))
 
         return metadata
 
@@ -2226,7 +2409,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return data
 
-    def set_metadata(self, metadata: pd.DataFrame, distribute: bool = True) -> (pd.DataFrame, pd.DataFrame):
+    def set_metadata(self, metadata: pl.DataFrame, distribute: bool = True) -> (pl.DataFrame, pl.DataFrame):
         """Sets the internal metadata and returns the same thing."""
 
         metadata_original = self.metadata_original = metadata
@@ -2247,12 +2430,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 class DataLoader(base.BaseEventWorker, ABC):
     """This abstract class loads the data."""
 
-    def __init__(self, metadata: pd.DataFrame, config: ConfigParser = None):
+    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
         """Initializer for data loader.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             The metadata for the data to be loaded
         config : ConfigParser
             The configuration for the instance
@@ -2261,7 +2444,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         super().__init__(config)
 
         # Set the metadata
-        self.metadata: pd.DataFrame = self.set_metadata(metadata)
+        self.metadata: pl.DataFrame = self.set_metadata(metadata)
 
         # Flag for if we should load the data with multithreading
         self.multithreading: bool = self._config.get_or_else('multithreading', True)
@@ -2304,7 +2487,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         # bookkeeping for iterator
         self._iterator_count = 0
 
-    def set_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def set_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
         """Sets the internal metadata and returns the same thing."""
 
         metadata = self.metadata = self._modify_metadata(metadata)
@@ -2324,14 +2507,10 @@ class DataLoader(base.BaseEventWorker, ABC):
         if self.use_shared_multithreading:
             self.thread_pool = pool
 
-    def _modify_metadata(self, metadata: pd.DataFrame) -> pd.DataFrame:
+    def _modify_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
         """Checks how to create metadata from input source and create train, validation, and test metadata."""
 
-        # Make a selection of the metadata
-        selection = [self._check_file(file_path) for file_path in metadata[metadata_columns['path']]]
-
-        # Update the metadata
-        metadata = metadata.iloc[selection]
+        metadata = metadata.filter(pl.col(metadata_columns.path).apply(self._check_file, return_dtype=pl.Boolean))
 
         return metadata
 
@@ -2429,12 +2608,12 @@ class DataLoader(base.BaseEventWorker, ABC):
 
         return self._get_metadata_len()
 
-    def _load_data(self, metadata: pd.DataFrame):
+    def _load_data(self, metadata: pl.DataFrame):
         """Loads data provided in the metadata data frame.
 
         Parameters
         ----------
-        metadata : pd.DataFrame
+        metadata : pl.DataFrame
             Panda's data frame containing the data metadata to be loaded
 
         Returns
@@ -2442,6 +2621,8 @@ class DataLoader(base.BaseEventWorker, ABC):
         Loaded data
 
         """
+
+        _metadata_columns = metadata.columns
 
         # Load the data
         # Load data with multithreading
@@ -2453,11 +2634,16 @@ class DataLoader(base.BaseEventWorker, ABC):
                 )
             # Load the data with threads
             data = list(
-                    self.thread_pool.map(lambda row: self._load_single_data(row[1]), metadata.iterrows())
+                    self.thread_pool.map(
+                        self._load_single_data,
+                        metadata.iter_rows(named=True)
+                    )
                 )
         else:
             data = [
-                self._load_single_data(row[1]) for row in metadata.iterrows()
+                self._load_single_data(row)
+                for row
+                in metadata.iter_rows(named=True)
             ]
 
         data = self._load_data_post(data)
@@ -2465,12 +2651,12 @@ class DataLoader(base.BaseEventWorker, ABC):
         return data
 
     @abstractmethod
-    def _load_single_data(self, row: pd.Series):
+    def _load_single_data(self, row: Dict[str, Any]):
         """Loads a single file whose path is given.
 
         Parameters
         ----------
-        row : pd.Series
+        row : Dict[str, Any]
             Pandas row entry of that specific data
 
         Returns
@@ -2520,11 +2706,14 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Find the corresponding metadata
         begin_index = (item * self.batch_size) % self._get_metadata_len()
         end_index = begin_index + self.batch_size
-        metadata = self.metadata.loc[begin_index:(end_index-1)]
+        metadata = \
+            self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left'))\
+            .sort(by=metadata_columns.index)
+
         if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
             remainder = self.batch_size - (self._get_metadata_len() - 1 - begin_index)
-            metadata2 = self.metadata.loc[:(remainder-1)]
-            metadata = pd.concat([metadata, metadata2])
+            metadata2 = self.metadata.filter(pl.col(metadata_columns.index).le(remainder-2))
+            metadata = pl.concat([metadata, metadata2])
 
         # Load the images
         data = self._load_data(metadata)
