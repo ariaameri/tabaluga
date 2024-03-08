@@ -1,11 +1,12 @@
 import os
 import pathlib
+import re
 import subprocess
 import sys
-import re
 from enum import Enum
-from tabaluga.framework.util.option import Option, Some
-from tabaluga.framework.util.result import Result
+
+from tabaluga.tabaluga.util.option import Option, Some
+from tabaluga.tabaluga.util.result import Result
 
 REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
@@ -13,7 +14,6 @@ REGEX_REMOVE_NONPRINT_CHARS = re.compile(r'(\x9B|\x1B\[)[0-?]*[ -\/]*[@-~]')
 
 
 class EventMode(Enum):
-
     train: str = "train"
     validation: str = "validation"
     test: str = "test"
@@ -119,11 +119,11 @@ def get_tty_fd() -> Option[pathlib.Path]:
     try:
         return Some(pathlib.Path(os.ttyname(sys.stdout.fileno())))
     except:
-        out = Result\
+        out = Result \
             .from_func(
-                subprocess.check_output,
-                ['readlink', '-f', f'/proc/{os.getpid()}/fd/1'],
-                stderr=subprocess.DEVNULL,
-            )\
+            subprocess.check_output,
+            ['readlink', '-f', f'/proc/{os.getpid()}/fd/1'],
+            stderr=subprocess.DEVNULL,
+        ) \
             .map(lambda x: x.decode('utf-8').strip()).map(lambda x: pathlib.Path(x))
         return out.ok()

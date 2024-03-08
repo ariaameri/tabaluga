@@ -1,16 +1,17 @@
+import asyncio
+import functools
 import time
+import typing
+from threading import Thread
+
+from tabaluga.tabaluga.util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
+from tabaluga.tabaluga.util.data_muncher import UPDATE_OPERATIONS as UO
+
 from ..base.base import Logger, ConfigReader
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
-from tabaluga.framework.util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
-from tabaluga.framework.util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
-from ..util.option import Option, Some, nothing
+from ..util.option import Option
 from ..util.result import Result, Ok, Err
-import asyncio
-from threading import Thread
-import functools
-import typing
-
 
 _EVENT_LOOP_NAMES = DataMuncher({
     "main": "__main__",
@@ -255,12 +256,10 @@ class _AsyncerGlobal:
     """
 
     def __init__(self):
-
         # a placeholder for the global asyncer instance
         self._asyncer_global: typing.Optional[Asyncer] = None
 
     def __del__(self):
-
         del self._asyncer_global
 
     def _create_instance(self) -> None:

@@ -1,7 +1,8 @@
 from typing import List
+
 from jointstemplant.util.util import OnAndEnabled
-from tabaluga.framework.util.config import ConfigParser
-from tabaluga.framework.util.data_muncher import DataMuncher
+from tabaluga.tabaluga.util.config import ConfigParser
+from tabaluga.tabaluga.util.data_muncher import DataMuncher
 
 
 class BatchSizeChanger(OnAndEnabled):
@@ -27,16 +28,16 @@ class BatchSizeChanger(OnAndEnabled):
     def _calculate_new_batch_size(self, config: DataMuncher, batch_size_current: int) -> int:
 
         # go over the config in order
-        batch_size = config\
-            .get_value_option('set').filter(lambda x: x is not None).map(lambda x: int(x))\
+        batch_size = config \
+            .get_value_option('set').filter(lambda x: x is not None).map(lambda x: int(x)) \
             .or_else(
-            config\
+            config \
                 .get_value_option('mult').filter(lambda x: x is not None).map(lambda x: int(batch_size_current * x))
-            )\
+        ) \
             .or_else(
             config \
                 .get_value_option('add').filter(lambda x: x is not None).map(lambda x: int(batch_size_current + x))
-            ).get()
+        ).get()
 
         return batch_size
 

@@ -1,34 +1,32 @@
 import concurrent.futures
-import math
 import pathlib
 import re
 import select
 import threading
 import uuid
 from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
+from typing import List, Optional, Any, Dict
+
 import colored
+import numpy as np
+import pandas as pd
 import polars as pl
 from jointstemplant.util.util import OnAndEnabled
+
 from ..base import base
+from ..communicator import mpi
 from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
-from ..util.data_muncher import UPDATE_MODIFIERS as UM, UPDATE_OPERATIONS as UO, UPDATE_CONDITIONALS as UC
-from ..util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
 from ..util.option import Some, Option, nothing
-from ..communicator import mpi
-from typing import List, Optional, Callable, Any, Dict
-import pandas as pd
-import numpy as np
-from concurrent.futures import ThreadPoolExecutor
-from enum import Enum
 from ..util.result import Result, Err, Ok
 
 
 # an enum to hold the content type of data to be loaded
 class ContentTypes(Enum):
-
     FILE = 'file'
     MONGO = 'mongo'
 
@@ -198,7 +196,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         if self._multithreading:
             self._multithreading_count = \
-                self.metadata_generator.get_best_multithreading_count(self.train_metadata)\
+                self.metadata_generator.get_best_multithreading_count(self.train_metadata) \
                     .get_or_else(self._config.get_or_else('multithreading_count', 5))
 
             if self._multithreading is True:
@@ -377,11 +375,11 @@ class DataManager(base.BaseEventManager, ABC):
             )
         val_metadata_sync = \
             metadata_sync.filter(
-            pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[test_count:(test_count+val_count)]])
+                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[test_count:(test_count + val_count)]])
             )
         train_metadata_sync = \
             metadata_sync.filter(
-            pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[(test_count+val_count):]])
+                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[(test_count + val_count):]])
             )
 
         # Create the train, validation, and test metadata
@@ -559,7 +557,7 @@ class MetadataManipulator(base.BaseWorker):
                 # get the elements that have c counts
                 bundle_ids = count_df.filter(pl.col('count') == c)[:10][metadata_columns.bundle_id]
                 sample_df_str = str(metadata.filter(pl.col(metadata_columns.bundle_id).is_in(bundle_ids)))
-                from tabaluga.framework.util.util import REGEX_INDENT_NEW_LINE_ONLY
+                from tabaluga.tabaluga.util.util import REGEX_INDENT_NEW_LINE_ONLY
                 sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
 
                 warn += f"\n\t\t {sample_df_str}"
@@ -939,8 +937,8 @@ class DataFormatExecutorSeparateFiles(DataFormatExecutor):
 
         # how to create criterion
         self._criterion: List[str] = \
-            self._config.get_value_option('criterion_generation.criterion')\
-            .expect('criterion config does not exist')
+            self._config.get_value_option('criterion_generation.criterion') \
+                .expect('criterion config does not exist')
         self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
         self._check_criterion(self._criterion)
 
@@ -1128,8 +1126,11 @@ class DataFormatExecutorCOCO(DataFormatExecutor):
             pl.lit(None, dtype=metadata_columns_COCO_type.coco_json_id).alias(metadata_columns_COCO.coco_json_id),
             pl.lit(None, dtype=metadata_columns_COCO_type.coco_id).alias(metadata_columns_COCO.coco_id),
             pl.lit(None, dtype=metadata_columns_COCO_type.coco_dataset_id).alias(metadata_columns_COCO.coco_dataset_id),
-            pl.lit(False, dtype=metadata_columns_type.metadata_sync_choice).alias(metadata_columns.metadata_sync_choice),
-            pl.col(metadata_columns.id).apply(lambda x: uuid.uuid4().hex, return_dtype=metadata_columns_COCO_type.bundle_id).alias(metadata_columns.bundle_id),
+            pl.lit(False, dtype=metadata_columns_type.metadata_sync_choice).alias(
+                metadata_columns.metadata_sync_choice),
+            pl.col(metadata_columns.id).apply(lambda x: uuid.uuid4().hex,
+                                              return_dtype=metadata_columns_COCO_type.bundle_id).alias(
+                metadata_columns.bundle_id),
         )
 
         coco_metadatas = []
@@ -1164,9 +1165,9 @@ class DataFormatExecutorCOCO(DataFormatExecutor):
     def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
 
         metadata_json = \
-            metadata\
-            .filter(pl.col(metadata_columns.file_extension) == '.json')\
-            .with_columns(pl.lit(-1, dtype=metadata_columns_type.index).alias(metadata_columns.index))
+            metadata \
+                .filter(pl.col(metadata_columns.file_extension) == '.json') \
+                .with_columns(pl.lit(-1, dtype=metadata_columns_type.index).alias(metadata_columns.index))
         metadata_non_json = metadata.filter(pl.col(metadata_columns.file_extension) != '.json')
         mapping = \
             {
@@ -1250,10 +1251,10 @@ class FileSyncer(OnAndEnabled):
 
         # let everyone get the metadata
         res: Result[pl.DataFrame, Exception] = mpi.mpi_communicator.collective_bcast(
-                data=metadata,
-                root_rank=0,
-                name=self.mpi_comm_main_local_name,
-            )
+            data=metadata,
+            root_rank=0,
+            name=self.mpi_comm_main_local_name,
+        )
 
         return res
 
@@ -1333,7 +1334,7 @@ class FileSyncer(OnAndEnabled):
         data = [item.get() for item in data_res]
 
         # assign them to a new column
-        assert(_metadata_columns_internal.data_raw == 'data_raw')  # this is because df.assign can only get kwargs
+        assert (_metadata_columns_internal.data_raw == 'data_raw')  # this is because df.assign can only get kwargs
         res = Result.from_func(metadata.assign, data_raw=data)
 
         return res
@@ -1525,11 +1526,11 @@ class FileSyncer(OnAndEnabled):
         """
 
         if (
-            res := self._sync_missing_metadata(
-                rank,
-                metadata,
-                thread_pool,
-            )
+                res := self._sync_missing_metadata(
+                    rank,
+                    metadata,
+                    thread_pool,
+                )
         ).is_err():
             return res
         metadata_missing_files = res.get()
@@ -1540,11 +1541,11 @@ class FileSyncer(OnAndEnabled):
 
         # sync the data
         if (
-            res := self._sync_data(
-                rank,
-                metadata_missing_files,
-                thread_pool,
-            )
+                res := self._sync_data(
+                    rank,
+                    metadata_missing_files,
+                    thread_pool,
+                )
         ).is_err():
             return res
 
@@ -1631,7 +1632,7 @@ class FileSyncer(OnAndEnabled):
 
         # log
         if self.is_distributor():
-            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
+            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size - 1} workers")
 
         # make a thread pool ot be used for loading the data
         thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-broadcast")
@@ -1644,7 +1645,7 @@ class FileSyncer(OnAndEnabled):
                 # first, load the data into a new dataframe
                 if (
                         metadata_updated_res := self._load_local_data_raw(
-                            metadata[start_idx:(start_idx+self.batch_size)],
+                            metadata[start_idx:(start_idx + self.batch_size)],
                             thread_pool,
                         )
                 ).is_err():
@@ -1677,7 +1678,7 @@ class FileSyncer(OnAndEnabled):
 
         # log
         if self.is_distributor():
-            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size-1} workers")
+            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size - 1} workers")
 
     def _sync_local_data(self, metadata: pl.DataFrame) -> Result[None, Exception]:
         """
@@ -1831,7 +1832,7 @@ class MetadataSyncer(base.BaseWorker):
                 chunk_sizes_cumsum = list(np.cumsum([0, *chunk_sizes]))
                 train_split_indices = \
                     [
-                        train_bundles[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx+1]]
+                        train_bundles[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx + 1]]
                         for idx
                         in range(0, len(chunk_sizes_cumsum) - 1)
                     ]
@@ -1967,7 +1968,6 @@ class MetadataSyncer(base.BaseWorker):
 class DataLoaderMultiThreadFinder(base.BaseWorker):
 
     def __init__(self, paths: List[pathlib.Path], config: ConfigParser = None):
-
         super().__init__(config)
 
         self.paths = paths
@@ -1984,7 +1984,6 @@ class DataLoaderMultiThreadFinder(base.BaseWorker):
             return f.read()
 
     def _loader(self, paths: List[pathlib.Path], multi_thread_count: int) -> List[concurrent.futures.Future]:
-
         pool = ThreadPoolExecutor(
             max_workers=multi_thread_count,
         )
@@ -1996,7 +1995,6 @@ class DataLoaderMultiThreadFinder(base.BaseWorker):
         return tasks
 
     def _runner(self, multithread_count: int) -> float:
-
         import time
         start_time = time.time()
         for _ in range(self.average_count):
@@ -2009,7 +2007,6 @@ class DataLoaderMultiThreadFinder(base.BaseWorker):
         return delta_time_sync
 
     def find_best_thread_count(self) -> int:
-
         result = [
             {
                 'thread_count': thread_count,
@@ -2168,14 +2165,14 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         # Check if all the returned number of iterations are the same
         assert all([no == number_of_iterations_workers[0] for no in number_of_iterations_workers]) is True, \
             (
-                f'Returned number_of_iterations from all DataLoader\'s must be the same.\n'
-                f'I received number of iterations from the workers as follows:\n'
-                f'\t- ' +
-                "\n\t- ".join(
-                    [f"{name}: {no}" for name, no in zip(self.workers.get_names(), number_of_iterations_workers)]
-                ) +
-                f"\n\n"
-                f"Possibly, the amount of data you have is not the same across different parent folders.\n"
+                    f'Returned number_of_iterations from all DataLoader\'s must be the same.\n'
+                    f'I received number of iterations from the workers as follows:\n'
+                    f'\t- ' +
+                    "\n\t- ".join(
+                        [f"{name}: {no}" for name, no in zip(self.workers.get_names(), number_of_iterations_workers)]
+                    ) +
+                    f"\n\n"
+                    f"Possibly, the amount of data you have is not the same across different parent folders.\n"
             )
 
         # Set the number of iterations
@@ -2366,7 +2363,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
             # correct the batch indices if necessary
             if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
-                batches_to_be_loaded = list(range(start_idx,  self.get_number_of_iterations()))
+                batches_to_be_loaded = list(range(start_idx, self.get_number_of_iterations()))
 
             # do the batch ahead loading
             self._load_ahead_batches(batches_to_be_loaded)
@@ -2634,11 +2631,11 @@ class DataLoader(base.BaseEventWorker, ABC):
                 )
             # Load the data with threads
             data = list(
-                    self.thread_pool.map(
-                        self._load_single_data,
-                        metadata.iter_rows(named=True)
-                    )
+                self.thread_pool.map(
+                    self._load_single_data,
+                    metadata.iter_rows(named=True)
                 )
+            )
         else:
             data = [
                 self._load_single_data(row)
@@ -2707,12 +2704,12 @@ class DataLoader(base.BaseEventWorker, ABC):
         begin_index = (item * self.batch_size) % self._get_metadata_len()
         end_index = begin_index + self.batch_size
         metadata = \
-            self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left'))\
-            .sort(by=metadata_columns.index)
+            self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left')) \
+                .sort(by=metadata_columns.index)
 
         if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
             remainder = self.batch_size - (self._get_metadata_len() - 1 - begin_index)
-            metadata2 = self.metadata.filter(pl.col(metadata_columns.index).le(remainder-2))
+            metadata2 = self.metadata.filter(pl.col(metadata_columns.index).le(remainder - 2))
             metadata = pl.concat([metadata, metadata2])
 
         # Load the images
@@ -2742,7 +2739,7 @@ class DataLoader(base.BaseEventWorker, ABC):
         # Find the corresponding metadata
         begin_index = item % self._get_metadata_len()
         end_index = begin_index + 1
-        metadata = self.metadata.loc[begin_index:(end_index-1)]
+        metadata = self.metadata.loc[begin_index:(end_index - 1)]
 
         # Load the images
         data = self._load_data(metadata)
@@ -2804,7 +2801,7 @@ class DataLoader(base.BaseEventWorker, ABC):
 
             # correct the batch indices if necessary
             if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
-                batches_to_be_loaded = list(range(start_idx,  self.get_number_of_iterations()))
+                batches_to_be_loaded = list(range(start_idx, self.get_number_of_iterations()))
 
             # do the batch ahead loading
             self._load_ahead_batches(batches_to_be_loaded)
