@@ -188,6 +188,12 @@ class Result(Generic[T, S], ABC):
 
         raise NotImplementedError
 
+    @abstractmethod
+    def expect(self, msg: str) -> Any:
+        """Returns the value or raises error with the provided msg."""
+
+        raise NotImplementedError
+
 
 class Ok(Result):
     """Ok Result class. This class represents an operation that has succeeded and potentially has a value."""
@@ -359,6 +365,11 @@ class Ok(Result):
 
         return self
 
+    def expect(self, msg: str) -> Any:
+        """Returns the value or raises error with the provided msg."""
+
+        return self.get()
+
 
 class Err(Result):
     """Err Result class. This class represents an operation that has failed and contains an error."""
@@ -521,3 +532,8 @@ class Err(Result):
         """
 
         return Err(func(self._error))
+
+    def expect(self, msg: str) -> Any:
+        """Returns the value or raises error with the provided msg."""
+
+        raise ValueError(msg)
