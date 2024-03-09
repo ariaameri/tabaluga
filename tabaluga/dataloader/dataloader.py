@@ -131,7 +131,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         # the shared multithreading pool
         self._multithreading = self._config.get_or_else('multithreading', False)
-        self.thread_pool: Optional[ThreadPoolExecutor] = None
+        self._thread_pool: Optional[ThreadPoolExecutor] = None
 
         if self._multithreading:
             multithreading_count = self._config.get_or_else('multithreading_count', 5)
@@ -205,7 +205,7 @@ class DataManager(base.BaseEventManager, ABC):
 
         if self._multithreading:
             for worker in self._get_dataloader_workers():
-                worker.set_shared_multithreading_pool(self.thread_pool)
+                worker.set_shared_multithreading_pool(self._thread_pool)
 
     @abstractmethod
     def _get_dataloader_workers(self) -> List:
@@ -261,6 +261,9 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         self._indices: List[int] = []
 
+        # placeholder for the multithreading pool
+        self._thread_pool: Optional[ThreadPoolExecutor] = None
+
         # for loading ahead batches
         self._loaded_data_mu = threading.Lock()
         self._loaded_data = DataMuncher()  # will be a mapping from str(batch) to the loaded data
@@ -294,9 +297,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        self._shared_multithreading_pool = pool
-        for worker in self._get_dataloader_workers():
-            worker.set_shared_multithreading_pool(pool)
+        self._thread_pool = pool
 
     @abstractmethod
     def _get_dataloader_workers(self) -> List:
@@ -423,11 +424,19 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         start_idx = item * self.batch_size
-        data = [
-            self._idx_2_processor[idx].load_bundle(idx)
-            for idx in
-            self._indices[start_idx:(start_idx+self.batch_size)]
-        ]
+        if self._thread_pool is not None:
+            data = [
+                self._thread_pool.submit(self._idx_2_processor[idx].load_bundle, idx)
+                for idx
+                in self._indices[start_idx:(start_idx+self.batch_size)]
+            ]
+            data = [_.result() for _ in data]
+        else:
+            data = [
+                self._idx_2_processor[idx].load_bundle(idx)
+                for idx in
+                self._indices[start_idx:(start_idx+self.batch_size)]
+            ]
 
         return self._prepare_loaded_data(data)
 
