@@ -1,4 +1,5 @@
 import concurrent.futures
+import json
 import pathlib
 import re
 import select
@@ -15,7 +16,6 @@ import colored
 import numpy as np
 import pandas as pd
 import polars as pl
-from jointstemplant.util.util import OnAndEnabled
 
 from ..base import base
 from ..communicator import mpi
@@ -23,12 +23,6 @@ from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Some, Option, nothing
 from ..util.result import Result, Err, Ok
-
-
-# an enum to hold the content type of data to be loaded
-class ContentTypes(Enum):
-    FILE = 'file'
-    MONGO = 'mongo'
 
 
 # a mapping between the column concepts and their names
@@ -40,12 +34,12 @@ class MetadataColumns:
     file_name: str = 'file_name'
     file_extension: str = 'file_extension'
     path: str = 'path'
-    content_type: str = 'content_type'
-    metadata_sync_choice: str = 'metadata_sync_choice'
-    syncable: str = 'syncable'
-    id: str = 'id'
+    # content_type: str = 'content_type'
+    # metadata_sync_choice: str = 'metadata_sync_choice'
+    # syncable: str = 'syncable'
+    # id: str = 'id'
     bundle_id: str = 'bundle_id'
-    index: str = 'index'
+    # index: str = 'index'
 
 
 @dataclass(frozen=True)
@@ -56,12 +50,12 @@ class MetadataColumnsTypes:
     file_name = str
     file_extension = str
     path = str
-    content_type = str
-    metadata_sync_choice = pl.Boolean
-    syncable = pl.Boolean
-    id = pl.UInt64
+    # content_type = str
+    # metadata_sync_choice = pl.Boolean
+    # syncable = pl.Boolean
+    # id = pl.UInt64
     bundle_id = None
-    index = pl.Int64
+    # index = pl.Int64
 
 
 metadata_columns = MetadataColumns()
@@ -69,41 +63,17 @@ metadata_columns_type = MetadataColumnsTypes()
 
 
 @dataclass(frozen=True)
-class _MetadataColumnsInternal:
-    data_raw: str = '__INTERNAL_data_raw'
-    criterion: str = '__INTERNAL___criterion'
-
-
-_metadata_columns_internal = _MetadataColumnsInternal()
-
-
-@dataclass(frozen=True)
-class MetadataColumnsSepFilesType:
-    bundle_id = pl.Int64
-
-
-metadata_columns_SEP_type = MetadataColumnsSepFilesType()
-
-
-@dataclass(frozen=True)
 class MetadataColumnsCOCO:
-    coco_id: str = 'COCO_coco_id'
-    coco_dataset_id: str = 'COCO_coco_dataset_id'
-    coco_json_id: str = 'COCO_coco_json_id'
+    image_id: str = 'image_id'
 
 
 @dataclass(frozen=True)
 class MetadataColumnsCOCOType:
-    bundle_id = str
-    coco_id = pl.UInt32
-    coco_dataset_id = pl.UInt32
-    coco_json_id = metadata_columns_type.id
+    image_id = pl.UInt64
 
 
 metadata_columns_COCO = MetadataColumnsCOCO()
 metadata_columns_COCO_type = MetadataColumnsCOCOType()
-
-_id_mask = (1 << 64) - 1  # have to mask the uuid4 to get a 64 bit int because of pl support
 
 
 class DataManager(base.BaseEventManager, ABC):
@@ -150,42 +120,11 @@ class DataManager(base.BaseEventManager, ABC):
         self._batch_size_val: int = self._config.get_or_else('batch_size_val', None)
         self._batch_size_test: int = self._config.get_or_else('batch_size_test', None)
 
-        # build the metadata generator
-        self.metadata_generator = self._build_metadata_generator()
+        # build the data generator
+        self._data_infos = self._config.get("data")
+        self._data_processors, self._bundle_ids, self._bundle_id_2_processor = self._build_dataloaders()
 
-        # build the format executor
-        self._data_type = self._config.get_value_option('data_type.type').expect('data type for file type not provided')
-        self._data_format_executor: DataFormatExecutor = self._build_data_format_executor()
-
-        # Pandas data frame to hold the metadata of the data
-        self.train_metadata: pl.DataFrame
-        self.val_metadata: pl.DataFrame
-        self.test_metadata: pl.DataFrame
-        if (res := self._create_metadata()).is_err():
-            raise res.get_err()
-        self.train_metadata, self.val_metadata, self.test_metadata = res.get()
-
-        # keep a copy of the original metadata
-        self.test_metadata_original = self.test_metadata
-        self.val_metadata_original = self.val_metadata
-        self.train_metadata_original = self.train_metadata
-
-        # Train, val, and test DataLoaderManager placeholders
-        self.workers['train']: DataLoaderManager
-        self.workers['validation']: DataLoaderManager
-        self.workers['test']: DataLoaderManager
-
-        # if in distributed mode, do the initial setup
-        if mpi.mpi_communicator.is_distributed():
-
-            # make a syncer to sync metadata among processes
-            self._metadata_syncer: MetadataSyncer = MetadataSyncer(self._config.get_or_empty('metadata_syncer'))
-
-            # now, sync the train/val/test metadata
-            if (res := self._sync_all_metadata_distributed()).is_err():
-                self._log.error(f"error while syncing the metadata with error of {res.get_err()}")
-                raise RuntimeError("error while syncing metadata")
-            self.train_metadata, self.val_metadata, self.test_metadata = res.get()
+        self._train_ids, self._val_ids, self._test_ids = self._get_train_val_test_indices()
 
         # Create workers
         self.create_workers()
@@ -195,29 +134,71 @@ class DataManager(base.BaseEventManager, ABC):
         self.thread_pool: Optional[ThreadPoolExecutor] = None
 
         if self._multithreading:
-            self._multithreading_count = \
-                self.metadata_generator.get_best_multithreading_count(self.train_metadata) \
-                    .get_or_else(self._config.get_or_else('multithreading_count', 5))
+            multithreading_count = self._config.get_or_else('multithreading_count', 5)
+            self._thread_pool = ThreadPoolExecutor(
+                multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
+            )
+            self._distribute_shared_multithreading_pool()
 
-            if self._multithreading is True:
-                self.thread_pool = ThreadPoolExecutor(
-                    self._multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
-                )
-        self._distribute_shared_multithreading_pool()
+        self._distribute_train_val_test_ids()
 
         # set the batch sizes
         self.set_batch_size(self.batch_size)
 
-    def _build_data_format_executor(self) -> 'DataFormatExecutor':
+    def _build_dataloaders(self):
 
-        if self._data_type == 'separate_files':
-            file_type_executor = DataFormatExecutorSeparateFiles(self._config.get_or_empty("data_type.separate_files"))
-        elif self._data_type == 'coco':
-            file_type_executor = DataFormatExecutorCOCO(self._config.get_or_empty("data_type.coco"))
-        else:
-            raise Exception(f"unknown file type of {self._data_type}")
+        data = []
+        bundle_count = 0
+        bundle_mapping = {}
+        bundle_ids = []
+        for data_info in self._data_infos:
 
-        return file_type_executor
+            if len(data_info.keys()) != 1:
+                raise ValueError("data must have a single key")
+
+            match list(data_info.keys())[0]:
+                case "separate_files":
+                    data_processor = SeparateFilesData(ConfigParser(data_info["separate_files"]))
+                case "coco":
+                    data_processor = CocoData(ConfigParser(data_info["coco"]))
+                case x:
+                    raise ValueError(f"unsupported data type of {x}")
+
+            # update the cumulative bundle ids
+            current_bundle_count = data_processor.get_bundle_count()
+            new_ids = list(range(bundle_count, bundle_count + current_bundle_count))
+            bundle_ids.extend(new_ids)
+            data_processor.set_bundle_ids(new_ids)
+            for new_id in new_ids:
+                bundle_mapping[new_id] = data_processor
+            bundle_count += current_bundle_count
+            data.append(data_processor)
+
+        return data, bundle_ids, bundle_mapping
+
+    def _get_train_val_test_indices(self):
+
+        bundle_ids = self._bundle_ids
+        if self._shuffle:
+            rand_state = np.random.get_state()
+            np.random.seed(self._seed)
+            bundle_ids = list(np.random.permutation(bundle_ids))
+            np.random.set_state(rand_state)
+
+        test_count = int(len(bundle_ids) * self._test_ratio)
+        val_count = int((len(bundle_ids) - test_count) * self._val_ratio)
+
+        test_ids = bundle_ids[:test_count]
+        val_ids = bundle_ids[test_count:(test_count+val_count)]
+        train_ids = bundle_ids[(test_count+val_count):]
+
+        return train_ids, val_ids, test_ids
+
+    @abstractmethod
+    def _distribute_train_val_test_ids(self):
+        """distributes the shared multithreading pool among all workers."""
+
+        pass
 
     def _distribute_shared_multithreading_pool(self):
         """distributes the shared multithreading pool among all workers."""
@@ -232,273 +213,15 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
-    def _sync_all_metadata_distributed(self, rand_seed_add: int = 0) -> Result[Any, Exception]:
-        """
-        Syncs the metadata across processes.
+    def shuffle(self, rand_seed_add: int):
 
-        Parameters
-        ----------
-        rand_seed_add : int, optional
-            number to add with the random seed generator to have different random number generation each time
+        if self._shuffle:
+            rand_state = np.random.get_state()
+            np.random.seed(self._seed + rand_seed_add)
+            self._train_ids = list(np.random.permutation(self._train_ids))
+            np.random.set_state(rand_state)
 
-        Returns
-        -------
-        Result[(pl.DataFrame, pl.DataFrame, pl.DataFrame), Exception]
-            train/val/test metadata
-        """
-
-        train_metadata_original = self.train_metadata_original
-        val_metadata_original = self.val_metadata_original
-        test_metadata_original = self.test_metadata_original
-
-        if mpi.mpi_communicator.is_distributed() is False:
-            return Ok((train_metadata_original, val_metadata_original, test_metadata_original))
-
-        if self._metadata_syncer.is_distributor():
-
-            # if we have to shuffle, shuffle
-            if self._shuffle is True:
-                train_metadata_original = self._shuffle_metadata(train_metadata_original, rand_seed_add)
-                val_metadata_original = self._shuffle_metadata(val_metadata_original, rand_seed_add)
-                test_metadata_original = self._shuffle_metadata(test_metadata_original, rand_seed_add)
-
-        # get the metadata from the syncer
-        if (res := self._metadata_syncer.sync_train_val_test_metadata(
-                train_metadata_original,
-                val_metadata_original,
-                test_metadata_original,
-                self.batch_size,
-        )).is_err():
-            self._log.error(f"error happened while syncing the metadata between nodes with error of {res.get_err()}")
-            return Err(RuntimeError("failed syncing metadata"))
-        train_metadata, val_metadata, test_metadata = res.get()
-
-        # reset the indices
-        train_metadata = self._data_format_executor.reset_index(train_metadata)
-        val_metadata = self._data_format_executor.reset_index(val_metadata)
-        test_metadata = self._data_format_executor.reset_index(test_metadata)
-
-        return Ok((train_metadata, val_metadata, test_metadata))
-
-    def _check_process_config(self) -> None:
-        """Reconfigures the config file for this class."""
-
-        pass
-
-    def _build_folder_reader(self) -> 'FolderReader':
-        """Builds and return the FolderReader instance for this instance."""
-
-        return FolderReader(self._config.get_or_empty('folder_reader'))
-
-    def _build_metadata_generator(self):
-        """Builds and return the metadata generator"""
-
-        # Read and create the data metadata
-        if self._input_type == 'folder_path':
-            metadata_generator = self._build_folder_reader()
-        elif self._input_type == 'mongo':
-            raise NotImplementedError
-        else:
-            raise ValueError(f"input type of {self._input_type} not recognized")
-
-        return metadata_generator
-
-    def _create_metadata(self) -> Result[Any, Exception]:
-        """Checks how to create metadata from input source and create train, validation, and test metadata."""
-
-        train_metadata = val_metadata = test_metadata = None
-
-        if mpi.mpi_communicator.is_main_rank():
-            # get the metadata
-            metadata = self.metadata_generator.build_and_get_metadata()
-            metadata = self._data_format_executor.process(metadata).get()
-            # no need to set the indices for the metadata now, we can do it later
-            train_metadata, val_metadata, test_metadata = \
-                self._generate_train_val_test_metadata(metadata)
-            train_metadata, val_metadata, test_metadata = \
-                self._add_additional_metadata(
-                    train_metadata,
-                    val_metadata,
-                    test_metadata
-                )
-            train_metadata = self._data_format_executor.reset_index(train_metadata)
-            val_metadata = self._data_format_executor.reset_index(val_metadata)
-            test_metadata = self._data_format_executor.reset_index(test_metadata)
-
-        if train_metadata.is_empty() is False:
-            MetadataManipulator.check_print_bundle_sanity(train_metadata, self._log)
-        if val_metadata.is_empty() is False:
-            MetadataManipulator.check_print_bundle_sanity(val_metadata, self._log)
-        if test_metadata.is_empty() is False:
-            MetadataManipulator.check_print_bundle_sanity(test_metadata, self._log)
-
-        # ask the metadata generator to sync among the nodes
-        for md in [train_metadata, val_metadata, test_metadata]:
-            if (res := self.metadata_generator.sync(md)).is_err():
-                self._log.error(f"error while asking the metadata generator to sync with error of {res.get_err()}")
-                return res
-
-        return Ok((train_metadata, val_metadata, test_metadata))
-
-    def _generate_train_val_test_metadata(self, metadata: pl.DataFrame) -> (pl.DataFrame, pl.DataFrame, pl.DataFrame):
-        """The method creates train, validation, and test metadata."""
-
-        metadata_sync, metadata_unsync = MetadataManipulator.separate_sync_choices_metadata(metadata)
-
-        bundle_ids = metadata_sync[metadata_columns.bundle_id].unique(maintain_order=True)
-
-        # Get count of each set
-        total_data_count = len(bundle_ids)
-        test_count = int(total_data_count * self._test_ratio)
-        val_count = int((total_data_count - test_count) * self._val_ratio)
-        train_count = total_data_count - test_count - val_count
-
-        # store the previous state of the random generator
-        # Find the indices of each set
-        rng_state = np.random.get_state()
-        seed = self._seed
-        if self._seed is not None:
-
-            # add rank
-            if self._shuffle_add_node_rank is True:
-                seed += mpi.mpi_communicator.get_rank()
-
-            np.random.seed(seed)
-
-        indices = np.arange(total_data_count) \
-            if self._shuffle is False \
-            else np.random.permutation(total_data_count)
-
-        test_metadata_sync = \
-            metadata_sync.filter(
-                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[:test_count]])
-            )
-        val_metadata_sync = \
-            metadata_sync.filter(
-                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[test_count:(test_count + val_count)]])
-            )
-        train_metadata_sync = \
-            metadata_sync.filter(
-                pl.col(metadata_columns.bundle_id).is_in(bundle_ids[indices[(test_count + val_count):]])
-            )
-
-        # Create the train, validation, and test metadata
-        test_metadata = pl.concat([metadata_unsync, test_metadata_sync])
-        val_metadata = pl.concat([metadata_unsync, val_metadata_sync])
-        train_metadata = pl.concat([metadata_unsync, train_metadata_sync])
-
-        # restore the random generator state
-        if self._seed is not None:
-            np.random.set_state(rng_state)
-
-        return train_metadata, val_metadata, test_metadata
-
-    def _add_additional_metadata(
-            self,
-            train_metadata,
-            val_metadata,
-            test_metadata
-    ) -> (pl.DataFrame, pl.DataFrame, pl.DataFrame):
-        """Adds the additional metadata to the metadata within"""
-
-        # get the new train metadata, process it and add it to the train metadata
-        train_metadata = \
-            pl.concat([
-                self._data_format_executor.process(self.metadata_generator.build_and_get_add_train_metadata()).get(),
-                train_metadata,
-            ])
-
-        # get the new val metadata, process it and add it to the val metadata
-        val_metadata = \
-            pl.concat([
-                self._data_format_executor.process(self.metadata_generator.build_and_get_add_val_metadata()).get(),
-                val_metadata,
-            ])
-
-        # get the new test metadata, process it and add it to the test metadata
-        test_metadata = \
-            pl.concat([
-                self._data_format_executor.process(self.metadata_generator.build_and_get_add_test_metadata()).get(),
-                test_metadata,
-            ])
-
-        return train_metadata, val_metadata, test_metadata
-
-    def _shuffle_all_metadata(self, rand_seed_add: int = 0) -> None:
-        """
-        Shuffles each of the metadata separately.
-
-        Parameters
-        ----------
-        rand_seed_add : int, optional
-            number to add with the random seed generator to have different random number generation each time
-
-        """
-
-        self.train_metadata = self._shuffle_metadata(self.train_metadata, rand_seed_add)
-        self.val_metadata = self._shuffle_metadata(self.val_metadata, rand_seed_add)
-        self.test_metadata = self._shuffle_metadata(self.test_metadata, rand_seed_add)
-
-    def _shuffle_metadata(self, metadata: pl.DataFrame, rand_seed_add: int = 0) -> pl.DataFrame:
-        """
-        Shuffles the given metadata if necessary
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            metadata to shuffle
-        rand_seed_add : int, optional
-            number to add with the random seed generator to have different random number generation each time
-
-        """
-
-        if self._shuffle is False:
-            return metadata
-
-        # store the previous state of the random generator and set the seed
-        rng_state = np.random.get_state()
-
-        seed = self._seed
-        # add the given number
-        seed += rand_seed_add
-        # add rank
-        if self._shuffle_add_node_rank is True:
-            seed += mpi.mpi_communicator.get_rank()
-
-        np.random.seed(seed)
-
-        # shuffle the metadata
-        indices = np.random.permutation(len(metadata))
-        metadata = metadata[indices]
-        metadata = self._data_format_executor.reset_index(metadata)
-
-        # restore the random generator state
-        np.random.set_state(rng_state)
-
-        return metadata
-
-    def sync_metadata(self, rand_seed_add: int = 0) -> None:
-        """
-        Does the necessary things to sync the metadata. Should be called at each epoch.
-
-        Parameters
-        ----------
-        rand_seed_add : int, optional
-            number to add with the random seed generator to have different random number generation each time
-
-        """
-
-        # first, sync all metadata across nodes in distributed mode
-        if (res := self._sync_all_metadata_distributed(rand_seed_add)).is_err():
-            self._log.error(f"error while syncing the metadata with error of {res.get_err()}")
-            raise RuntimeError("error while syncing metadata")
-        self.train_metadata, self.val_metadata, self.test_metadata = res.get()
-
-        # shuffle
-        self._shuffle_all_metadata(rand_seed_add)
-
-        # send the new metadata to all the workers
-        self._distribute_metadata_to_workers()
+            self._distribute_train_val_test_ids()
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size
@@ -518,1547 +241,15 @@ class DataManager(base.BaseEventManager, ABC):
 
         self._log.info(f"batch size set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
 
-    @abstractmethod
-    def _distribute_metadata_to_workers(self) -> None:
-        """distribute the metadata to workers."""
-
-        pass
-
-
-class MetadataManipulator(base.BaseWorker):
-    """Class to modify and manipulate metadata."""
-
-    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
-
-        super().__init__(config)
-
-        # metadata storage
-        self.metadata = metadata
-
-    @staticmethod
-    def check_print_bundle_sanity(metadata: pl.DataFrame, logger) -> None:
-        """Checks the given metadata and makes some info if necessary."""
-
-        count_df = metadata.groupby(metadata_columns.bundle_id).count()
-
-        from collections import Counter
-        count = Counter(count_df['count'])
-        if (length := len(count.values())) == 0:
-            logger.error(f"ended up in a weird situation: data bundles seem to not exist!")
-        elif length == 1:
-            logger.info(f"data bundles contain {list(count.keys())[0]} elements each")
-        else:
-            warn = \
-                "data bundles contain different amount of elements. I found:" \
-                "\n\t (bundle size) (count)" \
-                "\n\t\t (samples' path)"
-            for c, v in count.items():
-                warn += f"\n\t- {c}: {v}"
-                # get the elements that have c counts
-                bundle_ids = count_df.filter(pl.col('count') == c)[:10][metadata_columns.bundle_id]
-                sample_df_str = str(metadata.filter(pl.col(metadata_columns.bundle_id).is_in(bundle_ids)))
-                from tabaluga.tabaluga.util.util import REGEX_INDENT_NEW_LINE_ONLY
-                sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
-
-                warn += f"\n\t\t {sample_df_str}"
-
-            warn += "\n"
-
-            logger.warning(warn)
-
-    @staticmethod
-    def separate_sync_choices_metadata(metadata: pl.DataFrame) -> (pl.DataFrame, pl.DataFrame):
-
-        metadata_sync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == True)
-        metadata_unsync = metadata.filter(pl.col(metadata_columns.metadata_sync_choice) == False)
-
-        return metadata_sync, metadata_unsync
-
-
-class FolderReader(base.BaseWorker):
-    """This class is a helper class that reads metadata from a path (folder)."""
-
-    def __init__(self, config: ConfigParser = None):
-
-        super().__init__(config)
-
-        # Folders containing the data
-        self._folders: List[str] = []
-
-        # list of extensions to ignore and accept
-        self._extension_ignore: List[re.Pattern] = [
-            re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
-        ]
-        self._extension_accept: List[re.Pattern] = [
-            re.compile(item) for item in self._config.get_or_else('extension_accept', [])
-        ]
-
-        self._iwholepath_regex: List[re.Pattern] = [
-            re.compile(item) for item in self._config.get_or_else('iwholepath_regex', [])
-        ]
-        self._iwholepath_regex_ignore: List[re.Pattern] = [
-            re.compile(item) for item in self._config.get_or_else('iwholepath_regex_ignore', [])
-        ]
-
-        # Folders containing the data
-        self._folders: List[str] = self._config.get_value_option('folders').expect('folder config does not exist')
-        self._add_train_folders: List[str] = self._config.get_or_else('additional_train_folders', [])
-        self._add_val_folders: List[str] = self._config.get_or_else('additional_val_folders', [])
-        self._add_test_folders: List[str] = self._config.get_or_else('additional_test_folders', [])
-        self._add_train_folders = [] if self._add_train_folders == [None] else self._add_train_folders
-        self._add_val_folders = [] if self._add_val_folders == [None] else self._add_val_folders
-        self._add_test_folders = [] if self._add_test_folders == [None] else self._add_test_folders
-
-        # File names in nested lists
-        self._deep_folders: bool = self._config.get_or_else('deep', False)
-
-        # whether we want to find the best multithreading count
-        self._find_best_multithreading_count_enabled = self._config.get_or_else('find_best_multithreading_count', False)
-
-    def _check_populate_folder_metadata(self, folders: List[str]):
-        """Checks given folders for sanity and existence."""
-
-        # Check if folder list is given
-        if folders is None:
-            raise ValueError("No folders given to read files from!")
-        for folder in folders:
-            if not isinstance(folder, str):
-                raise ValueError(f"given folder {folder} is not string")
-            if Path(folder).exists() is False:
-                raise FileNotFoundError(f'The folder {folder} does not exist!')
-
-    def build_and_get_metadata(self) -> pl.DataFrame:
-        """
-        This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
-
-        Returns
-        -------
-        pl.DataFrame
-            pandas dataframe of the information
-
-        """
-
-        self._check_populate_folder_metadata(self._folders)
-        metadata = self._build_and_get_metadata_folders(self._folders)
-
-        return metadata
-
-    def build_and_get_add_train_metadata(self) -> pl.DataFrame:
-        """
-        This method goes over the specified folders for the additional train data folder, read files and creates
-        and returns a data frame from them.
-
-        Returns
-        -------
-        pl.DataFrame
-            dataframe of the information
-
-        """
-
-        self._check_populate_folder_metadata(self._add_train_folders)
-        m = self._build_and_get_metadata_folders(self._add_train_folders)
-
-        return m
-
-    def build_and_get_add_val_metadata(self) -> pl.DataFrame:
-        """
-        This method goes over the specified folders for the additional validation data folder, read files and creates
-        and returns a pandas data frame from them.
-
-        Returns
-        -------
-        pl.DataFrame
-            pandas dataframe of the information
-
-        """
-
-        self._check_populate_folder_metadata(self._add_val_folders)
-        metadata = self._build_and_get_metadata_folders(self._add_val_folders)
-
-        return metadata
-
-    def build_and_get_add_test_metadata(self) -> pl.DataFrame:
-        """
-        This method goes over the specified folders for the additional test data folder, read files and creates
-        and returns a pandas data frame from them.
-
-        Returns
-        -------
-        pl.DataFrame
-            pandas dataframe of the information
-
-        """
-
-        self._check_populate_folder_metadata(self._add_test_folders)
-        metadata = self._build_and_get_metadata_folders(self._add_test_folders)
-
-        return metadata
-
-    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pl.DataFrame:
-        """
-        This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
-
-        Parameters
-        ----------
-        folders : List[str], optional
-            list of folders to look into. if not given, the default folder is assumed
-
-        Returns
-        -------
-        pl.DataFrame
-            dataframe of the information
-
-        """
-
-        folders = folders if folders is not None else self._folders
-
-        # File names in nested lists
-        if self._deep_folders is False:
-            # only one level deep
-            file_nested_paths = [list(Path(folder).iterdir()) for folder in folders]
-        else:
-            # grab everything!
-            file_nested_paths = [list(Path(folder).glob('**/*')) for folder in folders]
-
-        # Flatten the file names and make absolute paths
-        file_paths = [file_path
-                      for file_paths in file_nested_paths
-                      for file_path in file_paths]
-        # Check each file based on the criteria
-        file_paths = [file_path for file_path in file_paths if self._check_file(file_path)]
-        # Retrieve the folder path and file names
-        folder_paths = [file_name.parent for file_name in file_paths]
-        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
-        folder_names = [folder_path.name for folder_path in folder_paths]
-        file_names = [file_path.stem for file_path in file_paths]
-        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
-        ids = [uuid.uuid4().int & _id_mask for _ in file_paths]
-
-        # Create data frame of all the files in the folder
-        metadata = pl.DataFrame(
-            data={
-                metadata_columns.folder_path: [str(item) for item in folder_paths],
-                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
-                metadata_columns.folder_name: folder_names,
-                metadata_columns.file_name: file_names,
-                metadata_columns.file_extension: file_extensions,
-                metadata_columns.path: [str(item) for item in file_paths],
-                metadata_columns.content_type: ContentTypes.FILE.value,
-                metadata_columns.metadata_sync_choice: True,
-                metadata_columns.syncable: True,
-                metadata_columns.id: ids,
-            },
-            schema={
-                metadata_columns.folder_path: metadata_columns_type.folder_path,
-                metadata_columns.folder_parent_path: metadata_columns_type.folder_parent_path,
-                metadata_columns.folder_name: metadata_columns_type.folder_name,
-                metadata_columns.file_name: metadata_columns_type.file_name,
-                metadata_columns.file_extension: metadata_columns_type.file_extension,
-                metadata_columns.path: metadata_columns_type.path,
-                metadata_columns.content_type: metadata_columns_type.content_type,
-                metadata_columns.metadata_sync_choice: metadata_columns_type.metadata_sync_choice,
-                metadata_columns.syncable: metadata_columns_type.syncable,
-                metadata_columns.id: metadata_columns_type.id,
-            }
-        )
-
-        return metadata
-
-    def _check_file(self, file_path: Path) -> bool:
-        """"Helper function to check a single file.
-
-        Parameters
-        ----------
-        file_path : Path
-            The path of the file
-        """
-
-        # Check that the file is not a folder
-        if file_path.is_file() is False:
-            return False
-
-        if self._filter_file_path(file_path) is False:
-            return False
-
-        # Check criteria for the file name
-        if self._filter_file_name(file_path.name) is False:
-            return False
-
-        return True
-
-    def _filter_file_path(self, file_path: Path) -> bool:
-        """
-        Checks the file path to see if it is acceptable or not.
-
-        Parameters
-        ----------
-        file_path : Path
-
-        Returns
-        -------
-        bool
-
-        """
-
-        if self._iwholepath_regex and \
-                (any([reg.match(file_path.as_posix().lower()) is not None for reg in self._iwholepath_regex]) is False):
-            return False
-
-        for reg in self._iwholepath_regex_ignore:
-            if reg.match(file_path.as_posix().lower()) is not None:
-                return False
-
-        return True
-
-    def _filter_file_name(self, file_name: str) -> bool:
-        """"Helper function to filter a single file based on its name and criteria.
-
-        Parameters
-        ----------
-        file_name : str
-            The path of the file
-        """
-
-        check = False if file_name.startswith('.') else True
-        # Take care of MacOS special files
-        check &= file_name not in ['Icon\r']
-
-        # criteria for the file extension
-        check &= self._filter_file_extension(
-            pathlib.Path(file_name).suffix[1:].lower()
-        )  # remove the leading . from the ext
-
-        return check
-
-    def _filter_file_extension(self, extension: str) -> bool:
-        """
-        Method to check whether the extension is acceptable or not.
-
-        Parameters
-        ----------
-        extension : str
-            the extension
-
-        Returns
-        -------
-        bool
-            whether the extension is acceptable
-
-        """
-
-        if any(pattern.match(extension) is not None for pattern in self._extension_ignore):
-            return False
-
-        if self._extension_accept and all(pattern.match(extension) is None for pattern in self._extension_accept):
-            return False
-
-        return True
-
-    def get_best_multithreading_count(self, metadata: pl.DataFrame) -> Option[int]:
-        """
-        Finds the best number of threads to load the data.
-        Will return `nothing` if not enabled
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            metadata to test with
-
-        Returns
-        -------
-        Option[int]
-            returns Some[int] if enabled and `nothing` if not
-        """
-
-        if self._find_best_multithreading_count_enabled:
-            paths = [pathlib.Path(path) for path in metadata[metadata_columns.path]]
-            self._log.info(f"performing multithread count finder on training data with size of {len(paths)}")
-            multithreading_count = DataLoaderMultiThreadFinder(
-                paths=paths,
-                config=self._config.get_or_empty('multithread_count_finder'),
-            ).find_best_thread_count()
-
-            return Some(multithreading_count)
-
-        return nothing
-
-    def sync(self, metadata: pl.DataFrame = None) -> Result[None, Exception]:
-        """Syncs the data across nodes."""
-
-        if not mpi.mpi_communicator.is_distributed():
-            return Ok(None)
-
-        # make a syncer to sync the files
-        file_syncer: FileSyncer = FileSyncer(self._config.get_or_empty('file_syncer'))
-        res = file_syncer.sync(metadata)
-
-        return res
-
-
-class DataFormatExecutor(base.BaseWorker, ABC):
-    """Abstract class to represent the executor on the folder reader metadata, such as a middleware."""
-
-    @abstractmethod
-    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
-        """
-        Processes the metadata and returns the result.
-
-        The dataframe of the result has an extra criterion column for bundling
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            input metadata
-
-        Returns
-        -------
-        Result[pl.DataFrame, Exception]
-            resulting metadata, result wrapped
-
-        """
-
-        raise NotImplementedError
-
-    @abstractmethod
-    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_data_type(self) -> str:
-        raise NotImplementedError
-
-
-class DataFormatExecutorSeparateFiles(DataFormatExecutor):
-    """Folder reader metadata for 'separate files' format."""
-
-    def __init__(self, config: ConfigParser):
-
-        super().__init__(config)
-
-        # how to create criterion
-        self._criterion: List[str] = \
-            self._config.get_value_option('criterion_generation.criterion') \
-                .expect('criterion config does not exist')
-        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
-        self._check_criterion(self._criterion)
-
-    def get_data_type(self) -> str:
-        return "separate_files"
-
-    def _check_criterion(self, criterion: List[str]):
-        """Checks if the given criterion is ok"""
-
-        # the criterion values should be from the columns' names
-        for criteria in criterion:
-            if criteria not in metadata_columns.__dict__.keys():
-                self._log.error(
-                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
-                    + '\n\t - '
-                    + '\n\t - '.join(metadata_columns.__dict__.keys())
-                    + '\n'
-                )
-                raise ValueError("unknown criteria")
-
-    def _add_bundle_id_column(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """
-        Creates the bundle id column and returns it
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            the metadata
-
-        Returns
-        -------
-        pl.DataFrame
-            the new metadata with the new column updated
-
-        """
-
-        if len(metadata) > 0:
-            import hashlib
-            metadata = metadata.with_columns(
-                pl.concat_str(
-                    pl.col([getattr(metadata_columns, item) for item in self._criterion]), separator="+++"
-                )
-                .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
-                .alias(metadata_columns.bundle_id)
-            )
-        else:
-            # add empty str literal cause the column type is str
-            metadata = metadata.with_columns(
-                pl.lit("").alias(metadata_columns.bundle_id),
-            )
-
-        return metadata
-
-    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
-
-        # add criterion column
-        metadata = self._add_bundle_id_column(metadata)
-
-        return Ok(metadata)
-
-    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
-
-        mapping = \
-            {
-                bundle_id: idx
-                for idx, bundle_id
-                in enumerate(metadata[metadata_columns.bundle_id].unique(maintain_order=True))
-            }
-        metadata = metadata.with_columns(
-            pl.col(metadata_columns.bundle_id)
-            .replace(mapping, return_dtype=metadata_columns_SEP_type.bundle_id)
-            .alias(metadata_columns.index)
-        )
-
-        return metadata
-
-
-class DataFormatExecutorCOCO(DataFormatExecutor):
-    """Folder reader metadata for 'coco' format."""
-
-    def __init__(self, config: ConfigParser = None):
-
-        super().__init__(config)
-
-    def get_data_type(self) -> str:
-        return "coco"
-
-    def _filter_only_jsons(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """Filters out only the labels.json files in the metadata and returns the result"""
-
-        return metadata.filter(pl.col(metadata_columns.file_extension) == ".json")
-
-    def _read_json(self, path: pathlib.Path):
-        """Loads the json file given the path"""
-
-        with open(path) as file:
-            import json
-            the_json = json.load(file)
-
-        return the_json
-
-    def _construct_syncable_metadata(self, coco_json: Dict[str, Dict], coco_json_id: int, schema) -> pl.DataFrame:
-        """
-        Constructs the metadata for syncing (among nodes) based on the provided coco json.
-
-        Parameters
-        ----------
-        coco_json : Dict[str, Dict]
-            coco labels.json in dictionary format
-        coco_json_id : int
-            coco labels.json id in the metadata for unique mapping
-
-        Returns
-        -------
-        pl.DataFrame
-            resulting dataframe
-
-        """
-
-        coco_images_info = coco_json['images']
-
-        # Check each file based on the criteria
-        file_paths = [pathlib.Path(coco_image_info['path']) for coco_image_info in coco_images_info]
-        # Retrieve the folder path and file names
-        folder_paths = [file_name.parent for file_name in file_paths]
-        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
-        folder_names = [folder_path.name for folder_path in folder_paths]
-        file_names = [file_path.stem for file_path in file_paths]
-        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
-        coco_json_ids = [coco_json_id for _ in coco_images_info]
-        coco_dataset_ids = [int(coco_image_info['dataset_id']) for coco_image_info in coco_images_info]
-        coco_ids = [int(coco_image_info['id']) for coco_image_info in coco_images_info]
-        ids = [uuid.uuid4().int & _id_mask for _ in file_paths]
-        bundle_ids = [uuid.uuid4().hex for _ in file_paths]
-
-        metadata = pl.DataFrame(
-            data={
-                metadata_columns.folder_path: [str(item) for item in folder_paths],
-                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
-                metadata_columns.folder_name: folder_names,
-                metadata_columns.file_name: file_names,
-                metadata_columns.file_extension: file_extensions,
-                metadata_columns.path: [str(item) for item in file_paths],
-                metadata_columns_COCO.coco_json_id: coco_json_ids,
-                metadata_columns_COCO.coco_id: coco_ids,
-                metadata_columns_COCO.coco_dataset_id: coco_dataset_ids,
-                metadata_columns.content_type: ContentTypes.FILE.value,
-                metadata_columns.metadata_sync_choice: True,
-                metadata_columns.syncable: False,
-                metadata_columns.id: ids,
-                metadata_columns.bundle_id: bundle_ids,
-            },
-            schema={
-                **schema,
-                **{
-                    metadata_columns_COCO.coco_json_id: metadata_columns_COCO_type.coco_json_id,
-                    metadata_columns_COCO.coco_id: metadata_columns_COCO_type.coco_id,
-                    metadata_columns_COCO.coco_dataset_id: metadata_columns_COCO_type.coco_dataset_id,
-                    metadata_columns.bundle_id: metadata_columns_COCO_type.bundle_id,
-                }
-            }
-        )
-
-        return metadata
-
-    def _construct_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """
-        Constructs metadata from the provided metadata that must contain only labels.json info.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            metadata for the labels.json of coco
-
-        Returns
-        -------
-        pl.DataFrame
-            resulting dataframe consisting of the input metadata and the constructed image metadata
-
-        """
-
-        schema = metadata.schema
-
-        metadata = metadata.with_columns(
-            pl.lit(None, dtype=metadata_columns_COCO_type.coco_json_id).alias(metadata_columns_COCO.coco_json_id),
-            pl.lit(None, dtype=metadata_columns_COCO_type.coco_id).alias(metadata_columns_COCO.coco_id),
-            pl.lit(None, dtype=metadata_columns_COCO_type.coco_dataset_id).alias(metadata_columns_COCO.coco_dataset_id),
-            pl.lit(False, dtype=metadata_columns_type.metadata_sync_choice).alias(
-                metadata_columns.metadata_sync_choice),
-            pl.col(metadata_columns.id).apply(lambda x: uuid.uuid4().hex,
-                                              return_dtype=metadata_columns_COCO_type.bundle_id).alias(
-                metadata_columns.bundle_id),
-        )
-
-        coco_metadatas = []
-        for idx, p in enumerate(metadata.iter_rows(named=True)):
-            coco_json = self._read_json(pathlib.Path(p[metadata_columns.path]))
-            coco_json_id = p[metadata_columns.id]
-            m = self._construct_syncable_metadata(coco_json, coco_json_id, schema)
-            if m.is_empty():
-                continue
-            coco_metadatas.append(m)
-            coco_dataset_id = m[metadata_columns_COCO.coco_dataset_id][0]
-            metadata[idx, metadata_columns_COCO.coco_dataset_id] = coco_dataset_id
-
-        metadata = pl.concat([metadata, *coco_metadatas])
-
-        metadata = self.reset_index(metadata)
-
-        return metadata
-
-    def process(self, metadata: pl.DataFrame) -> Result[pl.DataFrame, Exception]:
-        """Processes the provided metadata, extract image info from the coco json metadata provided and returns the
-        result"""
-
-        metadata = self._filter_only_jsons(metadata)
-
-        coco_metadata = self._construct_metadata(metadata)
-
-        # add criterion column
-
-        return Ok(coco_metadata)
-
-    def reset_index(self, metadata: pl.DataFrame) -> pl.DataFrame:
-
-        metadata_json = \
-            metadata \
-                .filter(pl.col(metadata_columns.file_extension) == '.json') \
-                .with_columns(pl.lit(-1, dtype=metadata_columns_type.index).alias(metadata_columns.index))
-        metadata_non_json = metadata.filter(pl.col(metadata_columns.file_extension) != '.json')
-        mapping = \
-            {
-                bundle_id: idx
-                for idx, bundle_id
-                in enumerate(metadata_non_json[metadata_columns.bundle_id].unique(maintain_order=True))
-            }
-        metadata_non_json = metadata_non_json.with_columns(
-            pl.col(metadata_columns.bundle_id)
-            .apply(lambda bundle_id: mapping[bundle_id], return_dtype=metadata_columns_type.index)
-            .alias(metadata_columns.index)
-        )
-
-        metadata = pl.concat([metadata_json, metadata_non_json])
-
-        return metadata
-
-
-class FileSyncer(OnAndEnabled):
-
-    def __init__(self, config: ConfigParser = None):
-
-        super().__init__(config)
-
-        # make a new communicator for broadcasting
-        self.mpi_comm_main_local_name = 'file_syncer_main_local'
-        if (
-                mpi_comm_main_local_res := mpi.mpi_communicator.split(
-                    # communicator=mpi_comm_res.get(),
-                    color=0 if mpi.mpi_communicator.is_main_local_rank() is True else 1
-                )
-        ).is_err():
-            self._log.error(f"could not get the mpi split with error of {mpi_comm_main_local_res.get_err()}")
-            raise RuntimeError("could not get the mpi split")
-        self.mpi_comm_main_local = mpi_comm_main_local_res.get()
-        mpi.mpi_communicator.register_communicator(self.mpi_comm_main_local, name=self.mpi_comm_main_local_name)
-
-        # cache some distributed-mode-related data
-        self.rank, self.dist_size = mpi.mpi_communicator.get_rank_size(self.mpi_comm_main_local)
-        self.is_main_rank: bool = self.rank == 0
-        self.distributor = True if self.is_main_rank is True else False
-        self.receiver = True if self.is_main_rank is False else False
-
-        # get the batch size for syncing
-        self.batch_size = self._config.get_or_else('batch_size', 16)
-
-        # bookkeeping
-        self.thread_count: int = self._config.get_or_else('multithreading_count', 10)
-        # whether we should force the data syncing initially
-        self.force_sync = self._config.get_or_else('force_sync', False)
-
-    def is_distributor(self) -> bool:
-        """Returns a boolean regarding whether we are the distributor."""
-
-        return self.distributor
-
-    def is_receiver(self) -> bool:
-        """Returns a boolean regarding whether we are a receiver."""
-
-        return self.receiver
-
-    def _sync_metadata(self, metadata: Optional[pl.DataFrame] = None) -> Result[pl.DataFrame, Exception]:
-        """
-        Syncs the metadata and returns it.
-
-        Parameters
-        ----------
-        metadata : Optional[pl.DataFrame]
-            must be provided if we are the main rank
-
-        Returns
-        -------
-        Result[pl.DataFrame, Exception]
-        """
-
-        # make sure we have all the metadata if we are the main rank
-        if self.distributor and metadata is None:
-            return Err(
-                RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
-            )
-
-        # let everyone get the metadata
-        res: Result[pl.DataFrame, Exception] = mpi.mpi_communicator.collective_bcast(
-            data=metadata,
-            root_rank=0,
-            name=self.mpi_comm_main_local_name,
-        )
-
-        return res
-
-    def _check_local_data(self, metadata: pl.DataFrame, thread_pool: ThreadPoolExecutor) -> pl.DataFrame:
-        """
-        Checks the local machine for existence of data in the given data frame and returns a new data frame with the
-        items that do not exist.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            the metadata to use for checking for data
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for checking the data
-
-        Returns
-        -------
-        pl.DataFrame
-            a new metadata with rows of the original data frame whose data do not exist on the local machine
-
-        """
-
-        def check_single_data_raw(path: str) -> bool:
-            """Checks if the given path exists and returns a boolean result of it."""
-
-            dest = pathlib.Path(path)
-
-            return dest.exists() and dest.is_file()
-
-        # find a selector of the metadata for the files that do exist
-        selector = list(
-            thread_pool.map(check_single_data_raw, metadata[metadata_columns.path])
-        )
-        # not the selection
-        selector = [not item for item in selector]
-
-        # get the new metadata and return it based on the criteria
-        return metadata.iloc[selector]
-
-    def _load_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) \
-            -> Result[pd.DataFrame, Exception]:
-        """
-        Loads the local data and returns them.
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata to use for loading the data
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for loading the data
-
-        Returns
-        -------
-        Result[pd.DataFrame, Exception]
-            a new metadata with the data loaded in it
-
-        """
-
-        def load_single_data_raw(path: str) -> Result[bytes, Exception]:
-            """Loads a single raw data from the given path in binary form and returns it."""
-
-            try:
-                with open(path, 'rb') as file:
-                    return Ok(file.read())
-            except Exception as e:
-                return Err(RuntimeError(f"cannot open {path} with error of {e}"))
-
-        # Load the data
-        data_res = list(
-            thread_pool.map(load_single_data_raw, metadata[metadata_columns.path])
-        )
-        for res in data_res:
-            if res.is_err():
-                self._log.error(f"{res.get_err()}")
-                return Err(RuntimeError("could not read a file"))
-
-        data = [item.get() for item in data_res]
-
-        # assign them to a new column
-        assert (_metadata_columns_internal.data_raw == 'data_raw')  # this is because df.assign can only get kwargs
-        res = Result.from_func(metadata.assign, data_raw=data)
-
-        return res
-
-    def _save_local_data_raw(self, metadata: pd.DataFrame, thread_pool: ThreadPoolExecutor) -> Result[None, Exception]:
-        """
-        saves the data
-
-        Parameters
-        ----------
-        metadata : pd.DataFrame
-            the metadata to use for saving the data
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for saving the data
-
-        Returns
-        -------
-        Result[None, Exception]
-        """
-
-        def save_single_data_raw(path: str, data: bytes) -> Result[None, Exception]:
-            """saves a single raw data to the given path in binary form."""
-
-            try:
-                # create the folder if it does not exist
-                pathlib.Path(path).parent.mkdir(parents=True, exist_ok=True)
-
-                # now save the result
-                with open(path, 'wb') as file:
-                    file.write(data)
-
-                return Ok(None)
-
-            except Exception as e:
-                return Err(RuntimeError(f"could not save file at {path} with error of {e}"))
-
-        # save the data
-        save_res = list(
-            thread_pool.map(
-                lambda x: save_single_data_raw(x[0], x[1]),
-                zip(metadata[metadata_columns.path], metadata[_metadata_columns_internal.data_raw])
-            )
-        )
-        for res in save_res:
-            if res.is_err():
-                self._log.error(f"{res.get_err()}")
-                return Err(RuntimeError("could not save a file"))
-
-        return Ok(None)
-
-    def _sync_missing_metadata(
-            self,
-            rank: int,
-            metadata: pl.DataFrame,
-            thread_pool: ThreadPoolExecutor
-    ) -> Result[pl.DataFrame, Exception]:
-        """
-        Finds and syncs the metadata of the missing files
-
-        Parameters
-        ----------
-        rank : int
-            destination rank
-        metadata : pl.DataFrame
-            the metadata to use for syncing
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for the operations
-
-        Returns
-        -------
-        Result[pl.DataFrame, Exception]
-        """
-
-        if self.receiver:
-            # find out the missing data and send it to the main rank
-            metadata_missing_files = self._check_local_data(metadata, thread_pool)
-            if (
-                    res := mpi.mpi_communicator.p2p_send(
-                        data=metadata_missing_files,
-                        destination=0,
-                        name=self.mpi_comm_main_local_name,
-                    )
-            ).is_err():
-                return res
-            else:
-                return Ok(metadata_missing_files)
-
-        elif self.distributor:
-            # get the data sent by this rank
-            res = mpi.mpi_communicator.p2p_receive(
-                source=rank,
-                name=self.mpi_comm_main_local_name,
-            )
-            return res
-
-        else:
-            raise RuntimeError("we should not have ended up here!")
-
-    def _sync_data(
-            self,
-            rank: int,
-            metadata_missing_files: pd.DataFrame,
-            thread_pool: ThreadPoolExecutor,
-    ) -> Result[None, Exception]:
-        """
-        Syncs data according to the metadata of the missing files
-
-        Parameters
-        ----------
-        rank : int
-            destination rank
-        metadata : pd.DataFrame
-            the metadata to use for syncing
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for the operations
-
-        Returns
-        -------
-        Result[None, Exception]
-        """
-
-        # go over the data in batch_size chunks
-        for start_idx in range(0, len(metadata_missing_files), self.batch_size):
-
-            # load if we are the distributor
-            if self.distributor:
-                # first, load the data into a new dataframe
-                if (
-                        metadata_updated_res := self._load_local_data_raw(
-                            metadata_missing_files.iloc[start_idx:(start_idx + self.batch_size)],
-                            thread_pool,
-                        )
-                ).is_err():
-                    return metadata_updated_res
-
-                # now send to the rank
-                if (
-                        res := mpi.mpi_communicator.p2p_send(
-                            data=metadata_updated_res.get(),
-                            destination=rank,
-                            tag=start_idx,
-                            name=self.mpi_comm_main_local_name,
-                        )
-                ).is_err():
-                    return res
-
-            else:
-                # just receive the data and store them
-                if (
-                        metadata_updated_res := mpi.mpi_communicator.p2p_receive(
-                            source=0,
-                            tag=start_idx,
-                            name=self.mpi_comm_main_local_name,
-                        )
-                ).is_err():
-                    return metadata_updated_res
-
-                if (
-                        res := self._save_local_data_raw(
-                            metadata_updated_res.get(),
-                            thread_pool
-                        )
-                ).is_err():
-                    return res
-
-        return Ok(None)
-
-    def _sync_local_data_with_rank(
-            self,
-            rank: int,
-            metadata: pl.DataFrame,
-            thread_pool: ThreadPoolExecutor
-    ) -> Result[None, Exception]:
-        """
-        Syncs only the missing portion of the local data with the given rank.
-
-        Parameters
-        ----------
-        rank : int
-            destination rank
-        metadata : pl.DataFrame
-            the metadata to use for syncing
-        thread_pool : ThreadPoolExecutor
-            the thread pool to use for the operations
-
-        Returns
-        -------
-        Result[None, Exception]
-        """
-
-        if (
-                res := self._sync_missing_metadata(
-                    rank,
-                    metadata,
-                    thread_pool,
-                )
-        ).is_err():
-            return res
-        metadata_missing_files = res.get()
-
-        # log
-        if self.is_distributor() and len(metadata_missing_files) > 0:
-            self._log.info(f"syncing {len(metadata_missing_files)} local data selectively with rank {rank}")
-
-        # sync the data
-        if (
-                res := self._sync_data(
-                    rank,
-                    metadata_missing_files,
-                    thread_pool,
-                )
-        ).is_err():
-            return res
-
-        # log
-        if self.is_distributor() and len(metadata_missing_files) > 0:
-            self._log.info(f"done syncing {len(metadata_missing_files)} local data selectively with rank {rank}")
-
-        return Ok(None)
-
-    def _sync_local_data_selective(self, metadata: pl.DataFrame) -> Result[None, Exception]:
-        """
-        Syncs only the missing portion of the local data with all the processes and makes sure everyone has all.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            the metadata to use for syncing
-
-        Returns
-        -------
-        Result[pl.DataFrame, Exception]
-        """
-
-        if self.distributor:
-            try:
-                # make a thread pool to be used for interacting with other ranks
-                thread_pool = \
-                    ThreadPoolExecutor(
-                        self.thread_count,
-                        thread_name_prefix="tabaluga-syncer-local-data-selective-distributor"
-                    )
-            except Exception as e:
-                return Err(e)
-
-            result: List[Result[None, Exception]] = list(
-                thread_pool.map(
-                    lambda rank: self._sync_local_data_with_rank(rank, metadata, thread_pool),
-                    range(1, self.dist_size)
-                )
-            )
-
-        else:
-
-            try:
-                # make a thread pool to be used for the subthreads
-                thread_pool = ThreadPoolExecutor(
-                    self.thread_count,
-                    thread_name_prefix="tabaluga-syncer-local-data-selective"
-                )
-            except Exception as e:
-                return Err(e)
-
-            # just receive the data!
-            result: List[Result[None, Exception]] = \
-                [self._sync_local_data_with_rank(self.rank, metadata, thread_pool)]
-
-        # shutdown the threadpool as it is no longer needed
-        thread_pool.shutdown(wait=True)
-
-        for item in result:
-            if item.is_err():
-                return Err(RuntimeError(f"error while syncing data with error of {item.get_err()}"))
-
-        return Ok(None)
-
-    def _sync_local_data_broadcast(self, metadata: pl.DataFrame) -> Result[None, Exception]:
-        """
-        Broadcasts all the local data to all the processes and makes sure everyone has it.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            the metadata to use for syncing
-
-        """
-
-        # we should not continue if we are not the main local rank
-        if mpi.mpi_communicator.is_main_local_rank() is False:
-            return Ok(None)
-
-        # get the rank and size
-        rank, size = \
-            mpi.mpi_communicator.get_rank_size(mpi.mpi_communicator.get_communicator(self.mpi_comm_main_local_name))
-
-        # log
-        if self.is_distributor():
-            self._log.info(f"syncing {len(metadata)} local data via force broadcasting with {size - 1} workers")
-
-        # make a thread pool ot be used for loading the data
-        thread_pool = ThreadPoolExecutor(self.thread_count, thread_name_prefix="tabaluga-syncer-local-data-broadcast")
-
-        # go over the data in batch_size chunks
-        for start_idx in range(0, len(metadata), self.batch_size):
-
-            # load if we are the distributor
-            if self.distributor:
-                # first, load the data into a new dataframe
-                if (
-                        metadata_updated_res := self._load_local_data_raw(
-                            metadata[start_idx:(start_idx + self.batch_size)],
-                            thread_pool,
-                        )
-                ).is_err():
-                    return metadata_updated_res
-                metadata_updated = metadata_updated_res.get()
-            else:
-                metadata_updated = None
-
-            # now broadcast
-            if (
-                    metadata_updated_res := mpi.mpi_communicator.collective_bcast(
-                        data=metadata_updated,
-                        root_rank=0,
-                        name=self.mpi_comm_main_local_name,
-                    )
-            ).is_err():
-                return metadata_updated_res
-
-            metadata_updated = metadata_updated_res.get()
-
-            # save only if we are not the main rank
-            if self.receiver:
-                if (
-                        res := self._save_local_data_raw(metadata_updated, thread_pool)
-                ).is_err():
-                    return res
-
-        # shutdown the threadpool as it is no longer needed
-        thread_pool.shutdown(wait=True)
-
-        # log
-        if self.is_distributor():
-            self._log.info(f"done syncing {len(metadata)} local data via force broadcasting with {size - 1} workers")
-
-    def _sync_local_data(self, metadata: pl.DataFrame) -> Result[None, Exception]:
-        """
-        Reads the metadata and syncs the local data within.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame, optional
-            metadata to use for syncing
-
-        Returns
-        -------
-        Result[pl.DataFrame, Exception]
-        """
-
-        # get the portion of the metadata that is syncable
-        metadata = metadata.filter(pl.col(metadata_columns.syncable) == True)
-
-        if self.force_sync is True:
-            # force sync if necessary
-            res = self._sync_local_data_broadcast(metadata)
-        else:
-            # sync selectively
-            res = self._sync_local_data_selective(metadata)
-
-        return res
-
-    def sync(self, metadata: pl.DataFrame = None) -> Result[None, Exception]:
-        """
-        Syncs the data of the given metadata.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            the metadata of the data to be synced, must be provided if main rank, for others, it does not matter
-
-        Returns
-        -------
-        Result[None, Exception]
-            the result of the sync
-
-        """
-
-        if self._is_enabled_main_local_rank() and self.dist_size > 1:
-
-            if self.distributor and metadata is None:
-                return Err(
-                    RuntimeError("metadata are not set in the main rank. please set them before calling this function.")
-                )
-
-            # sync the whole metadata
-            res: Result[pl.DataFrame, Exception] = self._sync_metadata(metadata)
-            if res.is_err():
-                return res
-
-            # sync the local data that is syncable
-            self._sync_local_data(res.get())
-
-        mpi.mpi_communicator.barrier()
-
-        return Ok(None)
-
-
-class MetadataSyncer(base.BaseWorker):
-
-    def __init__(self, config: ConfigParser = None):
-        super().__init__(config)
-
-        # cache some distributed-mode-related data
-        self.rank: int = mpi.mpi_communicator.get_rank()
-        self.dist_size: int = mpi.mpi_communicator.get_size()
-        self.is_main_rank: bool = mpi.mpi_communicator.is_main_rank()
-        self.distributor = True if self.is_main_rank is True else False
-        self.receiver = True if self.is_main_rank is False else False
-
-        # whether we should split the train data among nodes
-        self.all_nodes_all_train_data = self._config.get_or_else('all_nodes_all_train_data', False)
-
-        # if we want the train metadata to have the same length across nodes
-        self.same_train_metadata_length_nodes = self._config.get_or_else('same_train_metadata_length_nodes', True)
-
-        # get a new mpi communicator
-        self.mpi_comm_name = 'metadata_syncer'
-        if (
-                mpi_comm_res := mpi.mpi_communicator.get_or_create_communicator('metadata_syncer')
-        ).is_err():
-            self._log.error(f"could not get the mpi communicator with error of {mpi_comm_res.get_err()}")
-            raise RuntimeError("could not get the mpi communicator")
-
-    def is_distributor(self) -> bool:
-        """Returns a boolean regarding whether we are the distributor."""
-
-        return self.distributor
-
-    def is_receiver(self) -> bool:
-        """Returns a boolean regarding whether we are a receiver."""
-
-        return self.receiver
-
-    def _get_batch_sizes(self, batch_size: int) -> Result[List[int], Exception]:
-
-        return mpi.mpi_communicator.collective_gather(batch_size, name=self.mpi_comm_name)
-
-    def _get_counts_based_on_list(self, total_count: int, weights: List[int]) -> List[int]:
-
-        total = sum(weights)
-        common_fact = [int(int(c / total * total_count) / c) for c in weights]
-        main_common_fact = min(common_fact)
-        final_counts = [int(main_common_fact * c) for c in weights]
-
-        return final_counts
-
-    def _generate_train_val_test_metadata(
-            self,
-            train_metadata: pl.DataFrame,
-            val_metadata: pl.DataFrame,
-            test_metadata: pl.DataFrame,
-            batch_size: int,
-    ) -> Result[Any, Exception]:
-        """
-        Generates and returns train/val/test metadata for each of the ranks.
-
-        Returns
-        -------
-        Result[(List[pl.DataFrame], List[pl.DataFrame], List[pl.DataFrame]), Exception]
-            resulting dataframes
-        """
-
-        res = self._get_batch_sizes(batch_size)
-        if res.is_err():
-            return res
-        batch_sizes = res.get()
-
-        if self.is_distributor():
-
-            # if we should not split the train data
-            if self.all_nodes_all_train_data is True:
-
-                # make the train data
-                train_split_metadata = [train_metadata] * self.dist_size
-
-            # if we should split the train data among the nodes
-            else:
-                train_metadata_sync, train_metadata_unsync = \
-                    MetadataManipulator.separate_sync_choices_metadata(train_metadata)
-
-                # split the training metadata
-                # split according to the batch size so that each get the same number of iterations
-                train_bundles = train_metadata_sync[metadata_columns.bundle_id].unique(maintain_order=True)
-                chunk_sizes = self._get_counts_based_on_list(len(train_bundles), batch_sizes)
-                chunk_sizes_cumsum = list(np.cumsum([0, *chunk_sizes]))
-                train_split_indices = \
-                    [
-                        train_bundles[chunk_sizes_cumsum[idx]:chunk_sizes_cumsum[idx + 1]]
-                        for idx
-                        in range(0, len(chunk_sizes_cumsum) - 1)
-                    ]
-                train_split_metadata = \
-                    [
-                        train_metadata_sync.filter(pl.col(metadata_columns.bundle_id).is_in(chunk_indices))
-                        for chunk_indices
-                        in train_split_indices
-                    ]
-
-                # check that all train metadata have the same length
-                if self.same_train_metadata_length_nodes:
-                    md_lengths = [
-                        len(md[metadata_columns.bundle_id].unique()) / b
-                        for md, b
-                        in zip(train_split_metadata, batch_sizes)
-                    ]
-                    if not all([size == md_lengths[0] for size in md_lengths[1:]]):
-                        self._log.error(
-                            f"the train metadata across nodes have different number of iterations:"
-                            f"\n\t - "
-                            + "\n\t - ".join([f"{node}: {size}" for node, size in enumerate(md_lengths)])
-                            + "\n"
-                        )
-                        return Err(RuntimeError("train metadata have different sizes"))
-
-                train_split_metadata = \
-                    [
-                        pl.concat([m, train_metadata_unsync])
-                        for m
-                        in train_split_metadata
-                    ]
-
-            # split the validation metadata
-            # we only want the distributor to have the validation data and not the others
-            val_metadata_sync, val_metadata_unsync = \
-                MetadataManipulator.separate_sync_choices_metadata(train_metadata)
-            val_split_metadata = [val_metadata_sync]
-            val_split_metadata.extend([
-                val_metadata_sync[:0]  # this will surely result in an empty dataframe
-                for _
-                in range(1, self.dist_size)
-            ])
-            val_split_metadata = [
-                pl.concat([val_metadata_unsync, m])
-                for m
-                in val_split_metadata
-            ]
-
-            # split the test metadata
-            # we only want the distributor to have the test data and not the others
-            test_metadata_sync, test_metadata_unsync = \
-                MetadataManipulator.separate_sync_choices_metadata(val_metadata)
-            test_split_metadata = [test_metadata]
-            test_split_metadata.extend([
-                test_metadata_sync.iloc[:0]  # this will surely result in an empty dataframe
-                for _
-                in range(1, self.dist_size)
-            ])
-            test_split_metadata = [
-                pl.concat([test_metadata_unsync, m])
-                for m
-                in test_split_metadata
-            ]
-
-        else:
-            train_split_metadata = None
-            val_split_metadata = None
-            test_split_metadata = None
-
-        return Ok((train_split_metadata, val_split_metadata, test_split_metadata))
-
-    def sync_train_val_test_metadata(
-            self,
-            train_metadata: pl.DataFrame,
-            val_metadata: pl.DataFrame,
-            test_metadata: pl.DataFrame,
-            batch_size: int,
-    ) -> Result[Any, Exception]:
-        """
-        Splits the train/val/test metadata into chunks for each process, scatters them, and returns each chunk.
-        It should be noted that after this operation, all nodes will have exactly the same amount of data.
-
-        Returns
-        -------
-        Result[(pl.DataFrame, pl.DataFrame, pl.DataFrame), Exception]
-            the data frames for the metadata of train, val, and test
-
-        """
-
-        if (
-                res := self._generate_train_val_test_metadata(
-                    train_metadata,
-                    val_metadata,
-                    test_metadata,
-                    batch_size,
-                )
-        ).is_err():
-            return res
-        train_split_metadata, val_split_metadata, test_split_metadata = res.get()
-
-        # scatter all the metadata
-        if (
-                train_metadata_res := mpi.mpi_communicator.collective_scatter(
-                    data=train_split_metadata,
-                    root_rank=0,
-                    name=self.mpi_comm_name
-                )
-        ).is_err():
-            return train_metadata_res
-
-        if (
-                val_metadata_res := mpi.mpi_communicator.collective_scatter(
-                    data=val_split_metadata,
-                    root_rank=0,
-                    name=self.mpi_comm_name
-                )
-        ).is_err():
-            return val_metadata_res
-
-        if (
-                test_metadata_res := mpi.mpi_communicator.collective_scatter(
-                    data=test_split_metadata,
-                    root_rank=0,
-                    name=self.mpi_comm_name
-                )
-        ).is_err():
-            return test_metadata_res
-
-        return Ok((train_metadata_res.get(), val_metadata_res.get(), test_metadata_res.get()))
-
-
-class DataLoaderMultiThreadFinder(base.BaseWorker):
-
-    def __init__(self, paths: List[pathlib.Path], config: ConfigParser = None):
-        super().__init__(config)
-
-        self.paths = paths
-
-        # get the batch size for syncing
-        self.min_thread_count = self._config.get_or_else('min_thread_count', 1)
-        self.max_thread_count = self._config.get_or_else('max_thread_count', 50)
-        self.error_margin_allowed = self._config.get_or_else('error_margin_allowed', .1)
-        self.average_count = self._config.get_or_else('average_count', 10)
-
-    @staticmethod
-    def _load_file(path: pathlib.Path) -> bytes:
-        with open(path.as_posix(), mode='rb') as f:
-            return f.read()
-
-    def _loader(self, paths: List[pathlib.Path], multi_thread_count: int) -> List[concurrent.futures.Future]:
-        pool = ThreadPoolExecutor(
-            max_workers=multi_thread_count,
-        )
-
-        tasks = [pool.submit(self._load_file, item) for item in paths]
-
-        [task.result() for task in tasks]
-
-        return tasks
-
-    def _runner(self, multithread_count: int) -> float:
-        import time
-        start_time = time.time()
-        for _ in range(self.average_count):
-            self._loader(self.paths, multithread_count)
-        delta_time_sync = time.time() - start_time
-        self._log.info(
-            f"elapsed time for loading files with thread count of {multithread_count: 4} "
-            f"is {delta_time_sync / self.average_count * 1e3: 10.2f} ms")
-
-        return delta_time_sync
-
-    def find_best_thread_count(self) -> int:
-        result = [
-            {
-                'thread_count': thread_count,
-                'time': self._runner(
-                    multithread_count=thread_count,
-                ),
-            }
-            for thread_count
-            in range(self.min_thread_count, self.max_thread_count)
-        ]
-
-        # find the minimum time taken
-        min_time = min([res['time'] for res in result])
-        # now, allow up to some percentage of the time taken then choose the one with the lowest thread count
-        sorted_result = sorted(
-            [
-                res
-                for res
-                in result
-                if res['time'] / min_time <= (1 + self.error_margin_allowed)
-            ],
-            key=lambda x: x['thread_count']
-        )
-        best_thread_count = sorted_result[0]['thread_count']
-        best_thread_count_time = sorted_result[0]['time']
-        self._log.info(
-            f"best thread count found is {best_thread_count} "
-            f"with time of {best_thread_count_time / self.average_count * 1e3:5.3f} ms to load all the data"
-        )
-
-        # return the one with minimum thread count
-        return best_thread_count
-
 
 class DataLoaderManager(base.BaseEventManager, ABC):
     """This abstract class manages the data loaders and gets input from DataManager."""
 
-    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
-        """Initializer for data loader manager.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            The metadata for the data to be loaded
-        config : ConfigParser
-            The configuration for the instance
-        """
+    def __init__(self, idx_2_processor: Dict[int, 'Data'], config: ConfigParser = None):
 
         super().__init__(config)
 
-        # Set the metadata
-        self.metadata_original, self.metadata = self.set_metadata(metadata, False)
+        self._idx_2_processor: Dict[int, 'Data'] = idx_2_processor
 
         # placeholder for the shared multithreading pool
         self._shared_multithreading_pool: Optional[ThreadPoolExecutor] = None
@@ -2067,6 +258,8 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         self._iterator_count = 0
         self.batch_size: int = -1
         self.number_of_iterations: int = -1
+
+        self._indices: List[int] = []
 
         # for loading ahead batches
         self._loaded_data_mu = threading.Lock()
@@ -2111,37 +304,11 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         pass
 
-    def _modify_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """Checks how to create metadata from input source and create train, validation, and test metadata."""
+    def set_indices(self, indices: List[int]):
 
-        metadata = self.metadata.filter(pl.col(metadata_columns.path).apply(self._check_file))
+        self._indices = indices
 
-        return metadata
-
-    def _check_file(self, file_path: str) -> bool:
-        """"Helper function to check a single file.
-
-        Parameters
-        ----------
-        file_path : str
-            The path of the file
-        """
-
-        # Check criteria for the file name
-        check = self._filter_file_name(file_path.split('/')[-1])
-
-        return check
-
-    def _filter_file_name(self, file_name: str) -> bool:
-        """"Helper function to filter a single file based on its name and criteria.
-
-        Parameters
-        ----------
-        file_name : str
-            The path of the file
-        """
-
-        return True
+        self._update_num_iterations()
 
     def set_batch_size(self, batch_size: int) -> None:
         """Sets the batch size and thus finds the total number of batches in one epoch.
@@ -2155,34 +322,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         self.batch_size = batch_size
 
-        # bookkeeping for the returned number of iterations from workers
-        number_of_iterations_workers = []
-
-        # Set batch size of all the workers and get their number_of_iterations
-        for worker in self._get_dataloader_workers():
-            number_of_iterations_workers.append(worker.set_batch_size(batch_size))
-
-        # Check if all the returned number of iterations are the same
-        assert all([no == number_of_iterations_workers[0] for no in number_of_iterations_workers]) is True, \
-            (
-                    f'Returned number_of_iterations from all DataLoader\'s must be the same.\n'
-                    f'I received number of iterations from the workers as follows:\n'
-                    f'\t- ' +
-                    "\n\t- ".join(
-                        [f"{name}: {no}" for name, no in zip(self.workers.get_names(), number_of_iterations_workers)]
-                    ) +
-                    f"\n\n"
-                    f"Possibly, the amount of data you have is not the same across different parent folders.\n"
-            )
-
-        # Set the number of iterations
-        self.number_of_iterations = number_of_iterations_workers[0]
-
-        # # set the wrap around
-        # if self._batch_size_effective > self.batch_size_report:
-        #     self._data_loading_wrap_around = True
-        # else:
-        #     self._data_loading_wrap_around = False
+        self._update_num_iterations()
 
     def get_batch_size(self) -> int:
         """
@@ -2197,6 +337,10 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         return self.batch_size
+
+    def _update_num_iterations(self):
+
+        self.number_of_iterations = int(len(self._indices) / self.batch_size)
 
     def get_number_of_iterations(self) -> int:
         """
@@ -2220,33 +364,6 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         """
 
         return self.get_number_of_iterations()
-
-    def __iter__(self):
-        """Returns an iterable, self."""
-
-        # reset the iteration counter
-        self._iterator_count = 0
-
-        return self
-
-    def __next__(self):
-        """Returns the next set of data.
-
-        Returns
-        -------
-        A collection of next set of data
-
-        """
-
-        # if the batch size is more that the amount of data left, go to beginning and return None
-        if self._iterator_count > self.get_number_of_iterations():
-            self._iterator_count = 0
-            return StopIteration
-
-        # Load the data
-        data = self.__getitem__(self._iterator_count)
-
-        return data
 
     def _reset_load_ahead_data(self):
         """Resets the loaded ahead data"""
@@ -2288,10 +405,9 @@ class DataLoaderManager(base.BaseEventManager, ABC):
                     f"requested batch {batch} is beyond the number of batches of {self.get_number_of_iterations()}"
                 )
 
-        return self.load_batch(batch)
+        return self._load_batch(batch)
 
-    @abstractmethod
-    def load_batch(self, item: int):
+    def _load_batch(self, item: int):
         """
         loads a batch and returns the result
 
@@ -2306,7 +422,18 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         """
 
-        raise NotImplementedError
+        start_idx = item * self.batch_size
+        data = [
+            self._idx_2_processor[idx].load_bundle(idx)
+            for idx in
+            self._indices[start_idx:(start_idx+self.batch_size)]
+        ]
+
+        return self._prepare_loaded_data(data)
+
+    @abstractmethod
+    def _prepare_loaded_data(self, data: List[DataMuncher]):
+        pass
 
     def _load_ahead_batches(self, batches: List[int]) -> None:
         """
@@ -2406,124 +533,155 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return data
 
-    def set_metadata(self, metadata: pl.DataFrame, distribute: bool = True) -> (pl.DataFrame, pl.DataFrame):
-        """Sets the internal metadata and returns the same thing."""
 
-        metadata_original = self.metadata_original = metadata
-        metadata = self.metadata = self._modify_metadata(metadata)
-
-        if distribute:
-            self._distribute_metadata_to_workers()
-
-        return metadata_original, metadata
+class Data(base.BaseWorker, ABC):
 
     @abstractmethod
-    def _distribute_metadata_to_workers(self) -> None:
-        """distribute the metadata to workers."""
+    def get_bundle_count(self) -> int:
+        pass
 
+    @abstractmethod
+    def set_bundle_ids(self, ids: List[int]) -> Result[None, Exception]:
+        pass
+
+    @abstractmethod
+    def load_bundle(self, bundle_id: int) -> DataMuncher:
         pass
 
 
-class DataLoader(base.BaseEventWorker, ABC):
-    """This abstract class loads the data."""
+class SeparateFilesData(Data):
 
-    def __init__(self, metadata: pl.DataFrame, config: ConfigParser = None):
-        """Initializer for data loader.
-
-        Parameters
-        ----------
-        metadata : pl.DataFrame
-            The metadata for the data to be loaded
-        config : ConfigParser
-            The configuration for the instance
-        """
+    def __init__(self, config: ConfigParser = None):
 
         super().__init__(config)
 
-        # Set the metadata
-        self.metadata: pl.DataFrame = self.set_metadata(metadata)
+        # Folders containing the data
+        self._folders: List[str] = []
 
-        # Flag for if we should load the data with multithreading
-        self.multithreading: bool = self._config.get_or_else('multithreading', True)
-        self.use_own_multithreading: bool = self._config.get_or_else('use_own_multithreading', False)
-        self.thread_count: int = self._config.get_or_else('multithreading_count', 5)
-        self.use_shared_multithreading: bool = self._config.get_or_else('use_shared_multithreading', True)
-        # placeholder for the multithreading pool
-        self.thread_pool: Optional[ThreadPoolExecutor] = None
-        if self.use_own_multithreading is True:
-            self.thread_pool = ThreadPoolExecutor(
-                self.thread_count,
-                thread_name_prefix="tabaluga-dataloader-thread-pool"
-            )
+        # list of extensions to ignore and accept
+        self._extension_ignore: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('extension_ignore', [])
+        ]
+        self._extension_accept: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('extension_accept', [])
+        ]
 
-        # for loading ahead batches
-        self._loaded_data_mu = threading.Lock()
-        self._loaded_data = DataMuncher()  # will be a mapping from str(batch) to the loaded data
-        self._load_ahead_batch_count = self._config.get_or_else('load_ahead_batch_count', 3)
-        self._load_ahead_enabled = self._load_ahead_batch_count > 0
-        import multiprocessing
-        self._r_data_load_ahead: Optional[multiprocessing.connection.Connection] = None
-        self._w_data_load_ahead: Optional[multiprocessing.connection.Connection] = None
-        self._load_ahead_thread: Optional[threading.Thread] = None
-        if self._load_ahead_enabled:
-            self._log.info(f"loading batches ahead with size of {self._load_ahead_batch_count}")
-            self._r_data_load_ahead, self._w_data_load_ahead = multiprocessing.Pipe(duplex=False)
-            self._load_ahead_thread = threading.Thread(
-                name='tabaluga-dataloader-batch-ahead-load',
-                target=self._load_ahead_batch_thread,
-                daemon=True,
-            )
-            self._load_ahead_thread.start()
+        self._iwholepath_regex: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex', [])
+        ]
+        self._iwholepath_regex_ignore: List[re.Pattern] = [
+            re.compile(item) for item in self._config.get_or_else('iwholepath_regex_ignore', [])
+        ]
 
-        # bookkeeping for the batch size and thus the number of iterations (batches) in each epoch
-        self.batch_size: int = -1
-        self.number_of_iterations: int = -1
-        # in case the effective batch size is bigger than the report, we have to wrap around the metadata while loading
-        self._data_loading_wrap_around = False
+        # Folders containing the data
+        self._folders: List[str] = self._config.get_value_option('folders').expect('folder config does not exist')
+        # self._add_train_folders: List[str] = self._config.get_or_else('additional_train_folders', [])
+        # self._add_val_folders: List[str] = self._config.get_or_else('additional_val_folders', [])
+        # self._add_test_folders: List[str] = self._config.get_or_else('additional_test_folders', [])
+        # self._add_train_folders = [] if self._add_train_folders == [None] else self._add_train_folders
+        # self._add_val_folders = [] if self._add_val_folders == [None] else self._add_val_folders
+        # self._add_test_folders = [] if self._add_test_folders == [None] else self._add_test_folders
 
-        # bookkeeping for iterator
-        self._iterator_count = 0
+        # File names in nested lists
+        self._deep_folders: bool = self._config.get_or_else('deep', False)
 
-    def set_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """Sets the internal metadata and returns the same thing."""
+        # how to create criterion
+        self._criterion: List[str] = \
+            self._config.get_value_option('criterion_generation.criterion')\
+            .expect('criterion config does not exist')
+        self._criterion_hash: bool = self._config.get_or_else('criterion_generation.hash', True)
+        self._check_criterion(self._criterion)
 
-        metadata = self.metadata = self._modify_metadata(metadata)
+        self._metadata = self._build_and_get_metadata(self._folders)
+
+    def _check_criterion(self, criterion: List[str]):
+        """Checks if the given criterion is ok"""
+
+        # the criterion values should be from the columns' names
+        for criteria in criterion:
+            if criteria not in metadata_columns.__dict__.keys():
+                self._log.error(
+                    f"criteria '{criteria}' not accepted. Only the following criterion are accepted:"
+                    + '\n\t - '
+                    + '\n\t - '.join(metadata_columns.__dict__.keys())
+                    + '\n'
+                )
+                raise ValueError("unknown criteria")
+
+    def _build_and_get_metadata(self, folders: List[str]) -> pl.DataFrame:
+        """
+        This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
+
+        Returns
+        -------
+        pl.DataFrame
+            pandas dataframe of the information
+
+        """
+
+        self._check_populate_folder_metadata(folders)
+        metadata = self._build_and_get_metadata_folders(folders)
+        metadata = self._bundle_metadata(metadata)
 
         return metadata
 
-    def set_shared_multithreading_pool(self, pool: ThreadPoolExecutor):
-        """
-        Sets the shared multithreading pool to be used for data loading
+    def _check_populate_folder_metadata(self, folders: List[str]):
+        """Checks given folders for sanity and existence."""
 
-        Parameters
-        ----------
-        pool : ThreadPoolExecutor
-            the thread pool
+        # Check if folder list is given
+        if folders is None:
+            raise ValueError("No folders given to read files from!")
+        for folder in folders:
+            if not isinstance(folder, str):
+                raise ValueError(f"given folder {folder} is not string")
+            if Path(folder).exists() is False:
+                raise FileNotFoundError(f'The folder {folder} does not exist!')
 
-        """
-        if self.use_shared_multithreading:
-            self.thread_pool = pool
-
-    def _modify_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
-        """Checks how to create metadata from input source and create train, validation, and test metadata."""
-
-        metadata = metadata.filter(pl.col(metadata_columns.path).apply(self._check_file, return_dtype=pl.Boolean))
-
-        return metadata
-
-    def _check_file(self, file_path: str) -> bool:
+    def _check_file(self, file_path: Path) -> bool:
         """"Helper function to check a single file.
 
         Parameters
         ----------
-        file_path : str
+        file_path : Path
             The path of the file
         """
 
-        # Check criteria for the file name
-        check = self._filter_file_name(file_path.split('/')[-1])
+        # Check that the file is not a folder
+        if file_path.is_file() is False:
+            return False
 
-        return check
+        if self._filter_file_path(file_path) is False:
+            return False
+
+        # Check criteria for the file name
+        if self._filter_file_name(file_path.name) is False:
+            return False
+
+        return True
+
+    def _filter_file_path(self, file_path: Path) -> bool:
+        """
+        Checks the file path to see if it is acceptable or not.
+
+        Parameters
+        ----------
+        file_path : Path
+
+        Returns
+        -------
+        bool
+
+        """
+
+        if self._iwholepath_regex and \
+                (any([reg.match(file_path.as_posix().lower()) is not None for reg in self._iwholepath_regex]) is False):
+            return False
+
+        for reg in self._iwholepath_regex_ignore:
+            if reg.match(file_path.as_posix().lower()) is not None:
+                return False
+
+        return True
 
     def _filter_file_name(self, file_name: str) -> bool:
         """"Helper function to filter a single file based on its name and criteria.
@@ -2534,346 +692,345 @@ class DataLoader(base.BaseEventWorker, ABC):
             The path of the file
         """
 
+        check = False if file_name.startswith('.') else True
+        # Take care of MacOS special files
+        check &= file_name not in ['Icon\r']
+
+        # criteria for the file extension
+        check &= self._filter_file_extension(
+            pathlib.Path(file_name).suffix[1:].lower()
+        )  # remove the leading . from the ext
+
+        return check
+
+    def _filter_file_extension(self, extension: str) -> bool:
+        """
+        Method to check whether the extension is acceptable or not.
+
+        Parameters
+        ----------
+        extension : str
+            the extension
+
+        Returns
+        -------
+        bool
+            whether the extension is acceptable
+
+        """
+
+        if any(pattern.match(extension) is not None for pattern in self._extension_ignore):
+            return False
+
+        if self._extension_accept and all(pattern.match(extension) is None for pattern in self._extension_accept):
+            return False
+
         return True
 
-    def _get_metadata_len(self) -> int:
-        """Finds and returns the length of metadata."""
-
-        return len(self.metadata)
-
-    def set_batch_size(self, batch_size: int) -> int:
-        """Sets the batch size and thus finds the total number of batches in one epoch.
-
-        Parameter
-        ---------
-        batch_size : int
-            Batch size
-
+    def _build_and_get_metadata_folders(self, folders: List[str] = None) -> pl.DataFrame:
         """
+        This method goes over the specified folders, read files and creates and returns a pandas data frame from them.
 
-        self.batch_size = batch_size
-        self.number_of_iterations = self._get_metadata_len() // batch_size
-
-        # reset the loaded data
-        self._loaded_data = DataMuncher()
-
-        # set the wrap around
-        # if self._batch_size_effective > self.batch_size_report:
-        #     self._data_loading_wrap_around = True
-        # else:
-        #     self._data_loading_wrap_around = False
-
-        return self.number_of_iterations
-
-    def get_batch_size(self) -> int:
-        """
-        Returns the batch size.
-
-        This returns the batch size
+        Parameters
+        ----------
+        folders : List[str], optional
+            list of folders to look into. if not given, the default folder is assumed
 
         Returns
         -------
-        int
-            batch size
+        pl.DataFrame
+            dataframe of the information
+
         """
 
-        return self.batch_size
+        folders = folders if folders is not None else self._folders
 
-    def get_number_of_iterations(self) -> int:
+        # File names in nested lists
+        if self._deep_folders is False:
+            # only one level deep
+            file_nested_paths = [list(Path(folder).iterdir()) for folder in folders]
+        else:
+            # grab everything!
+            file_nested_paths = [list(Path(folder).glob('**/*')) for folder in folders]
+
+        # Flatten the file names and make absolute paths
+        file_paths = [
+            file_path
+            for file_paths in file_nested_paths
+            for file_path in file_paths
+            if self._check_file(file_path)
+        ]
+        # Retrieve the folder path and file names
+        folder_paths = [file_name.parent for file_name in file_paths]
+        folder_parent_paths = [folder_path.parent for folder_path in folder_paths]
+        folder_names = [folder_path.name for folder_path in folder_paths]
+        file_names = [file_path.stem for file_path in file_paths]
+        file_extensions = [file_path.suffix.lower() for file_path in file_paths]
+
+        # Create data frame of all the files in the folder
+        metadata = pl.DataFrame(
+            data={
+                metadata_columns.folder_path: [str(item) for item in folder_paths],
+                metadata_columns.folder_parent_path: [str(item) for item in folder_parent_paths],
+                metadata_columns.folder_name: folder_names,
+                metadata_columns.file_name: file_names,
+                metadata_columns.file_extension: file_extensions,
+                metadata_columns.path: [str(item) for item in file_paths],
+                # metadata_columns.metadata_sync_choice: True,
+                # metadata_columns.syncable: True,
+                # metadata_columns.id: ids,
+            },
+            schema={
+                metadata_columns.folder_path: metadata_columns_type.folder_path,
+                metadata_columns.folder_parent_path: metadata_columns_type.folder_parent_path,
+                metadata_columns.folder_name: metadata_columns_type.folder_name,
+                metadata_columns.file_name: metadata_columns_type.file_name,
+                metadata_columns.file_extension: metadata_columns_type.file_extension,
+                metadata_columns.path: metadata_columns_type.path,
+                # metadata_columns.metadata_sync_choice: metadata_columns_type.metadata_sync_choice,
+                # metadata_columns.syncable: metadata_columns_type.syncable,
+                # metadata_columns.id: metadata_columns_type.id,
+            }
+        )
+
+        return metadata
+
+    def _add_bundle_id_column(self, metadata: pl.DataFrame) -> pl.DataFrame:
         """
-        Returns the number of iterations.
-
-        This method returns number of iterations of report as it is the count that we want to iterate over globally.
-
-        Returns
-        -------
-        int
-            batch size
-        """
-
-        return self.number_of_iterations
-
-    def get_number_of_iterations_batch_size_1(self) -> int:
-        """
-        Returns the number of iterations if we were to use batch size 1.
-
-        Returns
-        -------
-        int
-            number of iterations
-        """
-
-        return self._get_metadata_len()
-
-    def _load_data(self, metadata: pl.DataFrame):
-        """Loads data provided in the metadata data frame.
+        Creates the bundle id column and returns it
 
         Parameters
         ----------
         metadata : pl.DataFrame
-            Panda's data frame containing the data metadata to be loaded
+            the metadata
 
         Returns
         -------
-        Loaded data
+        pl.DataFrame
+            the new metadata with the new column updated
 
         """
 
-        _metadata_columns = metadata.columns
-
-        # Load the data
-        # Load data with multithreading
-        if self.multithreading is True:
-            if self.thread_pool is None:
-                self._log.error('multithreading is on but no multithreading pool is provided. maybe check the config')
-                raise RuntimeError(
-                    'multithreading is on but no multithreading pool is provided. maybe check the config'
+        if len(metadata) > 0:
+            import hashlib
+            metadata = metadata.with_columns(
+                pl.concat_str(
+                    pl.col([getattr(metadata_columns, item) for item in self._criterion]), separator="+++"
                 )
-            # Load the data with threads
-            data = list(
-                self.thread_pool.map(
-                    self._load_single_data,
-                    metadata.iter_rows(named=True)
-                )
+                .apply(lambda x: hashlib.md5(x.encode()).hexdigest())
+                .alias(metadata_columns.bundle_id)
             )
         else:
-            data = [
-                self._load_single_data(row)
-                for row
-                in metadata.iter_rows(named=True)
+            # add empty str literal cause the column type is str
+            metadata = metadata.with_columns(
+                pl.lit("").alias(metadata_columns.bundle_id),
+            )
+
+        return metadata
+
+    def _check_print_bundle_sanity(self, metadata: pl.DataFrame) -> None:
+        """Checks the given metadata and makes some info if necessary."""
+
+        count_df = metadata.groupby(metadata_columns.bundle_id).count()
+
+        from collections import Counter
+        count = Counter(count_df['count'])
+        if (length := len(count.values())) == 0:
+            self._log.error(f"ended up in a weird situation: data bundles seem to not exist!")
+        elif length == 1:
+            self._log.info(f"data bundles contain {list(count.keys())[0]} elements each")
+        else:
+            warn = \
+                "data bundles contain different amount of elements. I found:" \
+                "\n\t (bundle size) (count)" \
+                "\n\t\t (samples' path)"
+            for c, v in count.items():
+                warn += f"\n\t- {c}: {v}"
+                # get the elements that have c counts
+                bundle_ids = count_df.filter(pl.col('count') == c)[:10][metadata_columns.bundle_id]
+                sample_df_str = "- " + "\n- ".join(
+                    list(metadata.filter((pl.col(metadata_columns.bundle_id).is_in(bundle_ids)))[metadata_columns.path])
+                )
+                from tabaluga.util.util import REGEX_INDENT_NEW_LINE_ONLY
+                sample_df_str = REGEX_INDENT_NEW_LINE_ONLY.sub('\n\t\t ', sample_df_str)
+
+                warn += f"\n\t\t {sample_df_str}"
+
+            warn += "\n"
+
+            self._log.warning(warn)
+
+    def _bundle_metadata(self, metadata: pl.DataFrame) -> pl.DataFrame:
+
+        # add criterion column
+        metadata = self._add_bundle_id_column(metadata)
+
+        self._check_print_bundle_sanity(metadata)
+
+        return metadata
+
+    def get_bundle_count(self) -> int:
+
+        return self._metadata.get_column(metadata_columns.bundle_id).n_unique()
+
+    def set_bundle_ids(self, ids: List[int]) -> Result[None, Exception]:
+
+        bundle_ids = self._metadata.get_column(metadata_columns.bundle_id).unique(maintain_order=True)
+        if len(bundle_ids) != len(ids):
+            return Err(Exception("got wrong number of ids"))
+        mapping = {old: new for old, new in zip(bundle_ids, ids)}
+        self._metadata = self._metadata.with_columns(pl.col(metadata_columns.bundle_id).replace(mapping))
+
+        return Ok(None)
+
+    _processor = nothing
+
+    def set_processor(self, processor):
+        self._processor = Some(processor)
+
+    def load_bundle(self, bundle_id: int) -> DataMuncher:
+        raise NotImplementedError
+
+
+class CocoData(Data):
+
+    def __init__(self, config: ConfigParser):
+
+        super().__init__(config)
+
+        self._coco_path = (
+            self._config
+            .get_value_option('coco_annotation_path')
+            .expect("could not find coco_annotation_path in the config")
+        )
+        self._coco_json = (
+            DataMuncher(
+                self._read_json(pathlib.Path(self._coco_path))
+                .expect(f"error reading coco json at path {self._coco_path}")
+            )
+        )
+        self._categories = (
+            self._coco_json
+            .get_value_option('categories')
+            .expect("could not find categories in the coco json")
+        )
+        self._coco_annotations = (
+            self._gather_annotations(
+                self._coco_json
+                .get_value_option('annotations')
+                .expect("could not find annotations in the coco json")
+            )
+            .expect(f"error gathering coco annotations of path {self._coco_path}")
+        )
+        self._img_dir_relative_path = (
+            self._config
+            .get_value_option('image_dir_relative_path')
+            .expect("could not find image_dir_relative_path in the config")
+        )
+        self._img_dir_path = pathlib.Path(self._coco_path).parent / self._img_dir_relative_path
+
+        self._metadata = (
+            self._build_metadata()
+            .expect(f"error while building metadata for coco at path {self._coco_path}")
+        )
+
+    @staticmethod
+    def _read_json(path: pathlib.Path) -> Result[Dict, Exception]:
+
+        with open(path.as_posix()) as f:
+            return Ok(json.load(f))
+
+    def _build_metadata(self) -> Result[pl.DataFrame, Exception]:
+
+        try:
+            img_paths = [
+                self._img_dir_path / img.get("file_name") for img in self._coco_json.get('images')
             ]
 
-        data = self._load_data_post(data)
+            img_ids = [
+                int(img.get("id")) for img in self._coco_json.get('images')
+            ]
 
-        return data
+            for img_path in img_paths:
+                if not img_path.exists():
+                    raise RuntimeError(f"cannot find the image at path {img_path}")
 
-    @abstractmethod
-    def _load_single_data(self, row: Dict[str, Any]):
-        """Loads a single file whose path is given.
+            metadata = pl.DataFrame(
+                data={
+                    metadata_columns_COCO.image_id: img_ids,
+                    metadata_columns.folder_path: [str(_.parent) for _ in img_paths],
+                    metadata_columns.folder_parent_path: [_.parent.parent.name for _ in img_paths],
+                    metadata_columns.folder_name: [_.parent.name for _ in img_paths],
+                    metadata_columns.file_name: [_.name for _ in img_paths],
+                    metadata_columns.file_extension: [_.suffix for _ in img_paths],
+                    metadata_columns.path: [str(item) for item in img_paths],
+                },
+                schema={
+                    metadata_columns_COCO.image_id: metadata_columns_COCO_type.image_id,
+                    metadata_columns.folder_path: metadata_columns_type.folder_path,
+                    metadata_columns.folder_parent_path: metadata_columns_type.folder_parent_path,
+                    metadata_columns.folder_name: metadata_columns_type.folder_name,
+                    metadata_columns.file_name: metadata_columns_type.file_name,
+                    metadata_columns.file_extension: metadata_columns_type.file_extension,
+                    metadata_columns.path: metadata_columns_type.path,
+                }
+            )
+        except Exception as e:
+            return Err(e)
 
-        Parameters
-        ----------
-        row : Dict[str, Any]
-            Pandas row entry of that specific data
+        return Ok(metadata)
 
-        Returns
-        -------
-        Loaded data
+    @staticmethod
+    def _gather_annotations(annotations) -> Result[Dict[int, Dict[int, List]], Exception]:
 
-        """
+        from collections import defaultdict
+        coco_annotations = defaultdict(list)
 
-        raise NotImplementedError
+        try:
+            for anno in annotations:
+                coco_annotations[int(anno['image_id'])].append(anno)
 
-    @abstractmethod
-    def _load_data_post(self, data: List):
-        """Reforms the data already loaded into the desired format.
+            coco_annotations_final = {img_id: defaultdict(list) for img_id in coco_annotations.keys()}
+            for img_id, annos in coco_annotations.items():
+                for anno in annos:
+                    coco_annotations_final[img_id][anno['category_id']].append(anno)
+        except Exception as e:
+            return Err(e)
 
-        Parameters
-        ----------
-        data : List
-            The already loaded data in a list
+        return Ok(coco_annotations_final)
 
-        Returns
-        -------
-        Loaded data in the desired format
+    def get_bundle_count(self) -> int:
 
-        """
+        return len(self._metadata)
 
-        raise NotImplementedError
+    def set_bundle_ids(self, ids: List[int]) -> Result[None, Exception]:
 
-    def load_batch(self, item: int):
-        """
-        loads a batch and returns the result
+        if len(self._metadata) != len(ids):
+            return Err(Exception("got wrong number of ids"))
+        self._metadata = self._metadata.with_columns(pl.Series(name=metadata_columns.bundle_id, values=ids))
 
-        Parameters
-        ----------
-        item : int
-            batch number
+        return Ok(None)
 
-        Returns
-        -------
-        result
+    _processor = nothing
 
-        """
+    @staticmethod
+    def set_processor(processor):
+        CocoData._processor = Some(processor)
 
-        # Check if item count is sensible
-        if item >= self.get_number_of_iterations() and self._data_loading_wrap_around is False:
-            raise RuntimeError(f'Requested number of images to be loaded goes beyond the end of available data.')
+    def load_bundles(self, bundle_ids: List[int]) -> List[DataMuncher]:
 
-        # Find the corresponding metadata
-        begin_index = (item * self.batch_size) % self._get_metadata_len()
-        end_index = begin_index + self.batch_size
-        metadata = \
-            self.metadata.filter(pl.col(metadata_columns.index).is_between(begin_index, end_index, closed='left')) \
-                .sort(by=metadata_columns.index)
+        metadata_rows = self._metadata.filter(pl.col(metadata_columns.bundle_id).is_in(bundle_ids))
+        image_ids = list(metadata_rows[metadata_columns_COCO.image_id])
+        annos = [self._coco_annotations.get(image_id, {}) for image_id in image_ids]
+        res = self._processor.map(lambda x: x.process(metadata_rows, annos, self._categories)).get()
 
-        if end_index > self._get_metadata_len() - 1 and self._data_loading_wrap_around is True:
-            remainder = self.batch_size - (self._get_metadata_len() - 1 - begin_index)
-            metadata2 = self.metadata.filter(pl.col(metadata_columns.index).le(remainder - 2))
-            metadata = pl.concat([metadata, metadata2])
+        return res
 
-        # Load the images
-        data = self._load_data(metadata)
+    def load_bundle(self, bundle_id: int) -> DataMuncher:
 
-        return data
+        metadata_row = self._metadata.filter(pl.col(metadata_columns.bundle_id) == bundle_id)
+        image_id = metadata_row[metadata_columns_COCO.image_id][0]
+        anno = self._coco_annotations.get(image_id, {})
+        res = self._processor.map(lambda x: x.process(metadata_row, anno, self._categories)).get()
 
-    def load_batch_size_1(self, item: int):
-        """
-        loads a batch with batch size of 1 and returns the result, which is a single element
-
-        Parameters
-        ----------
-        item : int
-            batch number
-
-        Returns
-        -------
-        result
-
-        """
-
-        # Check if item count is sensible
-        if item >= self._get_metadata_len():
-            raise RuntimeError(f'Requested number of batch to be loaded goes beyond the end of available data.')
-
-        # Find the corresponding metadata
-        begin_index = item % self._get_metadata_len()
-        end_index = begin_index + 1
-        metadata = self.metadata.loc[begin_index:(end_index - 1)]
-
-        # Load the images
-        data = self._load_data(metadata)
-
-        return data
-
-    def _load_ahead_batches(self, batches: List[int]) -> None:
-        """
-        loads the batches given as input and stores them. This method is used in the look ahead loading.
-
-        Parameters
-        ----------
-        batches : List[int]
-            list of batches that has to be loaded
-
-        """
-
-        # look for the batches we have and load the ones we do not
-        already_loaded_data_option = [
-            (batch, self._loaded_data.get_value_option(str(batch)))
-            for batch
-            in batches
-        ]
-
-        # the batches that we will need
-        old_loaded_data = {
-            str(loaded_data[0]): loaded_data[1].get()
-            for loaded_data
-            in already_loaded_data_option
-            if loaded_data[1].is_defined()
-        }
-
-        # load the batches that are not already loaded and save them
-        new_data = {}
-        for loaded_data in already_loaded_data_option:
-            # skip if we already have the data
-            if loaded_data[1].is_defined():
-                continue
-            # load the new batch
-            new_data[str(loaded_data[0])] = self.load_batch(loaded_data[0])
-            # update the loaded data
-            new_loaded_data = DataMuncher({**old_loaded_data, **new_data})
-            with self._loaded_data_mu:  # most probably, we will not have to wait here
-                self._loaded_data = new_loaded_data
-
-    def _load_ahead_batch_thread(self) -> None:
-        """method for the load ahead thread to run"""
-
-        while True:
-
-            # get the batch size that was loaded
-            r, _, _ = select.select([self._r_data_load_ahead], [], [])
-            batch = r[0].recv()
-
-            # find the batch sizes that should be loaded
-            start_idx = batch + 1
-            end_idx = batch + 1 + self._load_ahead_batch_count
-            batches_to_be_loaded = list(range(start_idx, end_idx))
-
-            # correct the batch indices if necessary
-            if self._data_loading_wrap_around is False and end_idx >= self.get_number_of_iterations():
-                batches_to_be_loaded = list(range(start_idx, self.get_number_of_iterations()))
-
-            # do the batch ahead loading
-            self._load_ahead_batches(batches_to_be_loaded)
-
-    def __len__(self) -> int:
-        """Gives the total number of iterations this data loader will go through.
-
-        Returns
-        -------
-        Total number of batches in each epoch
-
-        """
-
-        return self.get_number_of_iterations()
-
-    def __iter__(self):
-        """Returns an iterable, self."""
-
-        # reset the counter
-        self._iterator_count = 0
-
-        return self
-
-    def __next__(self):
-        """Returns the next set of data.
-
-        Returns
-        -------
-        A collection of next set of data
-
-        """
-
-        # if the batch size is more that the amount of data left, go to beginning and return None
-        if self._iterator_count > self.get_number_of_iterations():
-            self._iterator_count = 0
-            raise StopIteration
-
-        # Load the data
-        data = self.__getitem__(self._iterator_count)
-
-        return data
-
-    def __getitem__(self, item: int):
-        """Returns the item-th batch of the data.
-
-        Parameters
-        ----------
-        item : int
-            The index of the batch of the data to be returned
-
-        Returns
-        -------
-        A list of the data loaded
-
-        """
-
-        if self._load_ahead_enabled:
-            # try to load from the already loaded data and if not exist, load manually
-
-            with self._loaded_data_mu:
-                data = self._loaded_data.get_value_option(str(item))
-
-            # if not already loaded, load it
-            if data.is_empty():
-                data = self.load_batch(item)
-            else:
-                data = data.get()
-
-            # now, let the load ahead know
-            self._w_data_load_ahead.send(item)
-
-        else:
-            data = self.load_batch(item)
-
-        return data
+        return res
