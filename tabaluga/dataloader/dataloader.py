@@ -117,8 +117,8 @@ class DataManager(base.BaseEventManager, ABC):
         # bookkeeping for the training batch size
         self._batch_size_train: int = self.batch_size
         # bookkeeping for the val/test batch size
-        self._batch_size_val: int = self._config.get_or_else('batch_size_val', None)
-        self._batch_size_test: int = self._config.get_or_else('batch_size_test', None)
+        self._batch_size_val: int = self._config.get_or_else('batch_size_val', self.batch_size)
+        self._batch_size_test: int = self._config.get_or_else('batch_size_test', self.batch_size)
 
         # build the data generator
         self._data_infos = self._config.get("data")
