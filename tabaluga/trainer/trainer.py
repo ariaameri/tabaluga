@@ -14,6 +14,10 @@ import sys
 import os
 import traceback
 from ..util.result import Result, Ok
+from opentelemetry import trace
+
+# Acquire a tracer
+_tracer = trace.get_tracer("diceroller.tracer")
 
 BATCH_STRING = 'batch'
 EPOCH_STRING = 'epoch'
@@ -180,7 +184,14 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_epoch_begin()
 
             # Do one epoch
-            epoch_history = self.one_epoch()
+            with _tracer.start_as_current_span(
+                "tabaluga.epoch",
+                attributes={
+                    "epoch": self.epoch
+                }
+            ) as span:
+                epoch_history = self.one_epoch()
+                span.set_status(trace.status.StatusCode.OK)
 
             # Epoch has ended
             self.on_epoch_end()
@@ -210,7 +221,15 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_train_begin()
 
         self.on_train_epoch_begin()
-        self.train_epoch_info: List[DataMuncher] = self.train_one_epoch()
+        with _tracer.start_as_current_span(
+                "tabaluga.epoch.train",
+                attributes={
+                    "epoch": self.epoch
+                }
+        ) as span:
+            self.train_epoch_info: List[DataMuncher] = self.train_one_epoch()
+            span.set_status(trace.status.StatusCode.OK)
+
         # bookkeeping
         self.train_life_info.append(self.train_epoch_info)
         self.on_train_epoch_end()
@@ -223,7 +242,14 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_begin()
 
         self.on_val_epoch_begin()
-        self.val_epoch_info: List[DataMuncher] = self.val_one_epoch()
+        with _tracer.start_as_current_span(
+                "tabaluga.epoch.val",
+                attributes={
+                    "epoch": self.epoch
+                }
+        ) as span:
+            self.val_epoch_info: List[DataMuncher] = self.val_one_epoch()
+            span.set_status(trace.status.StatusCode.OK)
         # bookkeeping
         self.val_life_info.append(self.val_epoch_info)
         self.on_val_epoch_end()
@@ -263,7 +289,15 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_train_batch_begin()
 
             # train on batch
-            self.train_batch_info: DataMuncher = self.train_one_batch()
+            with _tracer.start_as_current_span(
+                    "tabaluga.batch.train",
+                    attributes={
+                        "epoch": self.epoch,
+                        "batch": self.batch,
+                    }
+            ) as span:
+                self.train_batch_info: DataMuncher = self.train_one_batch()
+                span.set_status(trace.status.StatusCode.OK)
 
             # keep the result
             # decided to update the train epoch info incrementally in case it was needed
@@ -310,7 +344,14 @@ class Trainer(base.BaseEventManager, ABC):
             self.on_val_batch_begin()
 
             # validate on batch
-            self.val_batch_info: DataMuncher = self.val_one_batch()
+            with _tracer.start_as_current_span(
+                    "tabaluga.batch.val",
+                    attributes={
+                        "epoch": self.epoch,
+                        "batch": self.batch,
+                    }
+            ) as span:
+                self.val_batch_info: DataMuncher = self.val_one_batch()
 
             # keep the result
             # decided to update the validation epoch info incrementally in case it was needed
