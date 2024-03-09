@@ -4,8 +4,8 @@ import time
 import typing
 from threading import Thread
 
-from tabaluga.tabaluga.util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
-from tabaluga.tabaluga.util.data_muncher import UPDATE_OPERATIONS as UO
+from tabaluga.util.data_muncher import FILTER_OPERATIONS as FO, FILTER_MODIFIERS as FM
+from tabaluga.util.data_muncher import UPDATE_OPERATIONS as UO
 
 from ..base.base import Logger, ConfigReader
 from ..util.config import ConfigParser

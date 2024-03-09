@@ -5,8 +5,8 @@ import subprocess
 import sys
 from enum import Enum
 
-from tabaluga.tabaluga.util.option import Option, Some
-from tabaluga.tabaluga.util.result import Result
+from tabaluga.util.option import Option, Some
+from tabaluga.util.result import Result
 
 REGEX_INDENT: re.Pattern = re.compile(r'(^|\n)')
 REGEX_INDENT_NEW_LINE_ONLY: re.Pattern = re.compile(r'(\n)')
