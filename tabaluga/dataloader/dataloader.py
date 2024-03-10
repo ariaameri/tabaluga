@@ -161,7 +161,7 @@ class DataManager(base.BaseEventManager, ABC):
         bundle_ids = []
         for data_info in self._data_infos:
 
-            keys = list(data_info.keys)
+            keys = list(data_info.keys())
 
             if len(keys) != 1:
                 raise ValueError("data must have a single key")
