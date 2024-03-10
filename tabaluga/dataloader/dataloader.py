@@ -161,16 +161,17 @@ class DataManager(base.BaseEventManager, ABC):
         bundle_ids = []
         for data_info in self._data_infos:
 
-            if len(data_info.keys()) != 1:
+            keys = list(data_info.keys)
+
+            if len(keys) != 1:
                 raise ValueError("data must have a single key")
 
-            match list(data_info.keys())[0]:
-                case "separate_files":
-                    data_processor = SeparateFilesData(ConfigParser(data_info["separate_files"]))
-                case "coco":
-                    data_processor = CocoData(ConfigParser(data_info["coco"]))
-                case x:
-                    raise ValueError(f"unsupported data type of {x}")
+            if keys[0] == "separate_files":
+                data_processor = SeparateFilesData(ConfigParser(data_info["separate_files"]))
+            elif keys[0] == "coco":
+                data_processor = CocoData(ConfigParser(data_info["coco"]))
+            else:
+                return Err(ValueError(f"unsupported data type of {keys[0]}"))
 
             if (res := data_processor.sync()).is_err():
                 return res
