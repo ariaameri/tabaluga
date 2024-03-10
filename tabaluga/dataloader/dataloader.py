@@ -470,11 +470,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             "batch_size": self.batch_size,
             "batch": item,
         })
+        span_context = span.get_span_context()
 
         start_idx = item * self.batch_size
         if self._thread_pool is not None:
             data = [
-                self._thread_pool.submit(self._idx_2_processor[idx].load_bundle, idx)
+                self._thread_pool.submit(self._idx_2_processor[idx].load_bundle, idx, span_context)
                 for idx
                 in self._indices[start_idx:(start_idx+self.batch_size)]
             ]
@@ -610,7 +611,7 @@ class Data(base.BaseWorker, ABC):
         pass
 
     @abstractmethod
-    def load_bundle(self, bundle_id: int) -> DataMuncher:
+    def load_bundle(self, bundle_id: int, otel_context=None) -> DataMuncher:
         pass
 
     @abstractmethod
@@ -1106,12 +1107,15 @@ class CocoData(Data):
 
         return res
 
-    def load_bundle(self, bundle_id: int) -> DataMuncher:
+    def load_bundle(self, bundle_id: int, otel_context) -> DataMuncher:
 
         metadata_row = self._metadata.filter(pl.col(metadata_columns.bundle_id) == bundle_id)
         image_id = metadata_row[metadata_columns_COCO.image_id][0]
         anno = self._coco_annotations.get(image_id, {})
-        res = self._processor.map(lambda x: x.process(metadata_row, anno, self._categories)).get()
+        with _tracer.start_as_current_span("tabaluga.data_loader.coco.processor.load"):
+            res = self._processor.map(
+                lambda x: x.process(metadata_row, anno, self._categories, otel_context=otel_context)
+            ).get()
 
         return res
 
