@@ -127,7 +127,9 @@ class DataManager(base.BaseEventManager, ABC):
 
         # build the data generator
         self._data_infos = self._config.get("data")
-        self._data_processors, self._bundle_ids, self._bundle_id_2_processor = self._build_dataloaders()
+        self._data_processors, self._bundle_ids, self._bundle_id_2_processor = (
+            self._build_dataloaders().expect("failed building dataloaders")
+        )
 
         self._train_ids, self._val_ids, self._test_ids = self._get_train_val_test_indices()
 
@@ -169,6 +171,8 @@ class DataManager(base.BaseEventManager, ABC):
                 case x:
                     raise ValueError(f"unsupported data type of {x}")
 
+            if (res := data_processor.sync()).is_err():
+                return res
             # update the cumulative bundle ids
             current_bundle_count = data_processor.get_bundle_count()
             new_ids = list(range(bundle_count, bundle_count + current_bundle_count))
@@ -179,7 +183,7 @@ class DataManager(base.BaseEventManager, ABC):
             bundle_count += current_bundle_count
             data.append(data_processor)
 
-        return data, bundle_ids, bundle_mapping
+        return Ok((data, bundle_ids, bundle_mapping))
 
     def _get_train_val_test_indices(self):
 
@@ -609,6 +613,10 @@ class Data(base.BaseWorker, ABC):
     def load_bundle(self, bundle_id: int) -> DataMuncher:
         pass
 
+    @abstractmethod
+    def sync(self):
+        pass
+
 
 class SeparateFilesData(Data):
 
@@ -952,6 +960,17 @@ class SeparateFilesData(Data):
     def load_bundle(self, bundle_id: int) -> DataMuncher:
         raise NotImplementedError
 
+    def sync(self) -> Result[None, Exception]:
+
+        if not mpi.mpi_communicator.is_distributed():
+            return Ok(None)
+
+        if (res := mpi.mpi_communicator.collective_bcast(self._metadata, root_rank=0)).is_err():
+            return res
+        self._metadata = res.get()
+
+        return Ok(None)
+
 
 class CocoData(Data):
 
@@ -1095,3 +1114,68 @@ class CocoData(Data):
         res = self._processor.map(lambda x: x.process(metadata_row, anno, self._categories)).get()
 
         return res
+
+    def sync(self) -> Result[None, Exception]:
+
+        if not mpi.mpi_communicator.is_distributed():
+            return Ok(None)
+
+        if (res := mpi.mpi_communicator.collective_bcast(self._metadata, root_rank=0)).is_err():
+            return res
+        self._metadata = res.get()
+        if (res := mpi.mpi_communicator.collective_bcast(self._coco_json.dict_representation(), root_rank=0)).is_err():
+            return res
+        self._coco_json = DataMuncher(res.get())
+        if (res := mpi.mpi_communicator.collective_bcast(self._categories, root_rank=0)).is_err():
+            return res
+        self._categories = res.get()
+        if (res := mpi.mpi_communicator.collective_bcast(self._coco_annotations, root_rank=0)).is_err():
+            return res
+        self._coco_annotations = res.get()
+        if (res := mpi.mpi_communicator.collective_bcast(self._img_dir_relative_path, root_rank=0)).is_err():
+            return res
+        self._img_dir_relative_path = res.get()
+
+        return Ok(None)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
