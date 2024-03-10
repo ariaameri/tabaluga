@@ -105,7 +105,7 @@ class DataManager(base.BaseEventManager, ABC):
         # Get random seed and shuffle boolean
         _seed = self._config.get_or_else('seed', None)
         self._seed = _seed if _seed is not None else np.random.randint(0, 100000)
-        self._shuffle: bool = self._config.get_or_else('shuffle.enabled', False)
+        self._shuffle_enabled: bool = self._config.get_or_else('shuffle.enabled', False)
         self._shuffle_add_node_rank: bool = self._config.get_or_else('shuffle.add_node_rank', True)
 
         # Get test and validation ratios
@@ -132,6 +132,7 @@ class DataManager(base.BaseEventManager, ABC):
         )
 
         self._train_ids, self._val_ids, self._test_ids = self._get_train_val_test_indices()
+        self._train_ids_full = self._train_ids  # for later distributing the indices
 
         # Create workers
         self.create_workers()
@@ -188,7 +189,7 @@ class DataManager(base.BaseEventManager, ABC):
     def _get_train_val_test_indices(self):
 
         bundle_ids = self._bundle_ids
-        if self._shuffle:
+        if self._shuffle_enabled:
             rand_state = np.random.get_state()
             np.random.seed(self._seed)
             bundle_ids = list(np.random.permutation(bundle_ids))
@@ -238,9 +239,14 @@ class DataManager(base.BaseEventManager, ABC):
     def _get_dataloader_workers_test(self) -> List:
         """Returns the list of test data loader"""
 
-        if self._shuffle:
+        pass
+
+    def _shuffle(self, rand_seed_add: int):
+
+        if self._shuffle_enabled:
             rand_state = np.random.get_state()
             np.random.seed(self._seed + rand_seed_add)
+            self._train_ids_full = list(np.random.permutation(self._train_ids_full))
             self._train_ids = list(np.random.permutation(self._train_ids))
             np.random.set_state(rand_state)
 
@@ -279,6 +285,46 @@ class DataManager(base.BaseEventManager, ABC):
                 worker.set_batch_size(self.batch_size)
 
         self._log.info(f"batch size set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
+
+    def sync_and_shuffle(self, rand_seed_add: int):
+
+        # first, shuffle the data
+        self._shuffle(rand_seed_add)
+
+        if not mpi.mpi_communicator.is_distributed():
+            self._distribute_train_val_test_ids()
+            return Ok(None)
+
+        def split_ids_for_nodes(ids: List, batch_size: int, node_count: int) -> List[List]:
+
+            total_count = len(ids)
+            total_batch_count = int(total_count / batch_size)
+            batch_count_per_node = int(total_batch_count / node_count)
+            item_count_per_node = int(batch_count_per_node * batch_size)
+
+            ids_nodes = []
+            for start_idx in range(0, item_count_per_node * node_count, item_count_per_node):
+                ids_nodes.append(ids[start_idx:(start_idx+item_count_per_node)])
+
+            return ids_nodes
+
+        if (res_train_ids_full := mpi.mpi_communicator.collective_bcast(self._train_ids_full, root_rank=0)).is_err():
+            return res_train_ids_full
+
+        train_ids = (
+            split_ids_for_nodes(self._train_ids_full, self._batch_size_train, mpi.mpi_communicator.get_size())
+            if mpi.mpi_communicator.is_main_rank() else None
+        )
+        if (res_train_ids := mpi.mpi_communicator.collective_scatter(train_ids, root_rank=0)).is_err():
+            return res_train_ids
+
+        self._train_ids_full = res_train_ids_full.get()
+        self._train_ids = res_train_ids.get()
+        self._val_ids = self._val_ids if mpi.mpi_communicator.is_main_rank() else []
+        self._test_ids = self._test_ids if mpi.mpi_communicator.is_main_rank() else []
+
+        self._distribute_train_val_test_ids()
+        return Ok(None)
 
 
 class DataLoaderManager(base.BaseEventManager, ABC):
