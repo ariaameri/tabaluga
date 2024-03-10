@@ -24,11 +24,13 @@ from ..util.data_muncher import DataMuncher
 from ..util.option import Some, Option, nothing
 from ..util.result import Result, Err, Ok
 from opentelemetry import trace
+from opentelemetry import context
 from tabaluga.util.tracer import TRACER_NAME
 from tabaluga.util.util import EventMode
 
 # Acquire a tracer
 _tracer = trace.get_tracer(TRACER_NAME)
+
 
 # a mapping between the column concepts and their names
 @dataclass(frozen=True)
@@ -517,12 +519,15 @@ class DataLoaderManager(base.BaseEventManager, ABC):
             "batch_size": self.batch_size,
             "batch": item,
         })
-        span_context = span.get_span_context()
+        otel_context = trace.set_span_in_context(span)
 
         start_idx = item * self.batch_size
         if self._thread_pool is not None:
+            def set_otel_call(idx):
+                context.attach(otel_context)
+                return self._idx_2_processor[idx].load_bundle(idx)
             data = [
-                self._thread_pool.submit(self._idx_2_processor[idx].load_bundle, idx, span_context)
+                self._thread_pool.submit(set_otel_call, idx)
                 for idx
                 in self._indices[start_idx:(start_idx+self.batch_size)]
             ]
@@ -658,7 +663,7 @@ class Data(base.BaseWorker, ABC):
         pass
 
     @abstractmethod
-    def load_bundle(self, bundle_id: int, otel_context=None) -> DataMuncher:
+    def load_bundle(self, bundle_id: int) -> DataMuncher:
         pass
 
     @abstractmethod
@@ -1154,15 +1159,14 @@ class CocoData(Data):
 
         return res
 
-    def load_bundle(self, bundle_id: int, otel_context=None) -> DataMuncher:
+    def load_bundle(self, bundle_id: int) -> DataMuncher:
 
         metadata_row = self._metadata.filter(pl.col(metadata_columns.bundle_id) == bundle_id)
         image_id = metadata_row[metadata_columns_COCO.image_id][0]
         anno = self._coco_annotations.get(image_id, {})
-        with _tracer.start_as_current_span("tabaluga.data_loader.coco.processor.load"):
-            res = self._processor.map(
-                lambda x: x.process(metadata_row, anno, self._categories, otel_context=otel_context)
-            ).get()
+        res = self._processor.map(
+            lambda x: x.process(metadata_row, anno, self._categories)
+        ).get()
 
         return res
 
