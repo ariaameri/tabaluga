@@ -25,6 +25,7 @@ from ..util.option import Some, Option, nothing
 from ..util.result import Result, Err, Ok
 from opentelemetry import trace
 from tabaluga.util.tracer import TRACER_NAME
+from tabaluga.util.util import EventMode
 
 # Acquire a tracer
 _tracer = trace.get_tracer(TRACER_NAME)
@@ -146,9 +147,6 @@ class DataManager(base.BaseEventManager, ABC):
 
         self._distribute_train_val_test_ids()
 
-        # set the batch sizes
-        self.set_batch_size(self.batch_size)
-
     @_tracer.start_as_current_span(
         "tabaluga.data_manager.build_data_loaders"
     )
@@ -220,7 +218,21 @@ class DataManager(base.BaseEventManager, ABC):
 
         pass
 
-    def shuffle(self, rand_seed_add: int):
+    @abstractmethod
+    def _get_dataloader_workers_train(self) -> List:
+        """Returns the list of train data loader"""
+
+        pass
+
+    @abstractmethod
+    def _get_dataloader_workers_val(self) -> List:
+        """Returns the list of val data loader"""
+
+        pass
+
+    @abstractmethod
+    def _get_dataloader_workers_test(self) -> List:
+        """Returns the list of test data loader"""
 
         if self._shuffle:
             rand_state = np.random.get_state()
@@ -228,9 +240,7 @@ class DataManager(base.BaseEventManager, ABC):
             self._train_ids = list(np.random.permutation(self._train_ids))
             np.random.set_state(rand_state)
 
-            self._distribute_train_val_test_ids()
-
-    def set_batch_size(self, batch_size: int) -> None:
+    def set_batch_size(self, batch_size: int, event_mode: EventMode = None) -> None:
         """Sets the batch size
 
         Parameter
@@ -240,11 +250,29 @@ class DataManager(base.BaseEventManager, ABC):
 
         """
 
-        self.batch_size = batch_size
-
-        # Set batch size of all the workers
-        for worker in self._get_dataloader_workers():
-            worker.set_batch_size(self.batch_size)
+        if event_mode is None:
+            self.batch_size = batch_size
+            self._batch_size_train = batch_size
+            self._batch_size_val = batch_size
+            self._batch_size_test = batch_size
+            # Set batch size of all the workers
+            for worker in self._get_dataloader_workers():
+                worker.set_batch_size(self.batch_size)
+        elif event_mode == EventMode.train:
+            self.batch_size = batch_size
+            self._batch_size_train = batch_size
+            for worker in self._get_dataloader_worker_train():
+                worker.set_batch_size(self.batch_size)
+        elif event_mode == EventMode.val:
+            self.batch_size = batch_size
+            self._batch_size_val = batch_size
+            for worker in self._get_dataloader_worker_val():
+                worker.set_batch_size(self.batch_size)
+        elif event_mode == EventMode.test:
+            self.batch_size = batch_size
+            self._batch_size_test = batch_size
+            for worker in self._get_dataloader_worker_test():
+                worker.set_batch_size(self.batch_size)
 
         self._log.info(f"batch size set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
 
