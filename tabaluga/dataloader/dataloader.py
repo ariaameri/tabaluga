@@ -274,17 +274,17 @@ class DataManager(base.BaseEventManager, ABC):
         elif event_mode == EventMode.train:
             self.batch_size = batch_size
             self._batch_size_train = batch_size
-            for worker in self._get_dataloader_worker_train():
+            for worker in self._get_dataloader_workers_train():
                 worker.set_batch_size(self.batch_size)
         elif event_mode == EventMode.val:
             self.batch_size = batch_size
             self._batch_size_val = batch_size
-            for worker in self._get_dataloader_worker_val():
+            for worker in self._get_dataloader_workers_val():
                 worker.set_batch_size(self.batch_size)
         elif event_mode == EventMode.test:
             self.batch_size = batch_size
             self._batch_size_test = batch_size
-            for worker in self._get_dataloader_worker_test():
+            for worker in self._get_dataloader_workers_test():
                 worker.set_batch_size(self.batch_size)
 
         self._log.info(f"batch size set to {colored.fg('cyan')}{batch_size}{colored.attr('reset')}")
