@@ -23,7 +23,11 @@ from ..util.config import ConfigParser
 from ..util.data_muncher import DataMuncher
 from ..util.option import Some, Option, nothing
 from ..util.result import Result, Err, Ok
+from opentelemetry import trace
+from tabaluga.util.tracer import TRACER_NAME
 
+# Acquire a tracer
+_tracer = trace.get_tracer(TRACER_NAME)
 
 # a mapping between the column concepts and their names
 @dataclass(frozen=True)
@@ -145,6 +149,9 @@ class DataManager(base.BaseEventManager, ABC):
         # set the batch sizes
         self.set_batch_size(self.batch_size)
 
+    @_tracer.start_as_current_span(
+        "tabaluga.data_manager.build_data_loaders"
+    )
     def _build_dataloaders(self):
 
         data = []
@@ -408,6 +415,9 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
         return self._load_batch(batch)
 
+    @_tracer.start_as_current_span(
+        "tabaluga.data_loader_manager.load_batch"
+    )
     def _load_batch(self, item: int):
         """
         loads a batch and returns the result
@@ -422,6 +432,12 @@ class DataLoaderManager(base.BaseEventManager, ABC):
         result
 
         """
+
+        span = trace.get_current_span()
+        span.set_attributes({
+            "batch_size": self.batch_size,
+            "batch": item,
+        })
 
         start_idx = item * self.batch_size
         if self._thread_pool is not None:
@@ -522,23 +538,31 @@ class DataLoaderManager(base.BaseEventManager, ABC):
 
     def get(self, batch: int, *args, **kwargs):
 
-        if self._load_ahead_enabled:
-            # try to load from the already loaded data and if not exist, load manually
+        with _tracer.start_as_current_span(
+            "tabaluga.data_loader_manager.get_data",
+            attributes={
+                "batch_size": self.batch_size,
+                "batch": batch,
+            }
+        ) as span:
+            if self._load_ahead_enabled:
+                # try to load from the already loaded data and if not exist, load manually
 
-            with self._loaded_data_mu:
-                data = self._loaded_data.get_value_option(str(batch))
+                with self._loaded_data_mu:
+                    data = self._loaded_data.get_value_option(str(batch))
 
-            # if not already loaded, load it
-            if data.is_empty():
-                data = self._load_batch_wrap(batch, *args, **kwargs)
+                # if not already loaded, load it
+                if data.is_empty():
+                    data = self._load_batch_wrap(batch, *args, **kwargs)
+                else:
+                    span.set_attributes("from", "memory")
+                    data = data.get()
+
+                # now, let the load ahead know
+                self._w_data_load_ahead.send(batch)
+
             else:
-                data = data.get()
-
-            # now, let the load ahead know
-            self._w_data_load_ahead.send(batch)
-
-        else:
-            data = self._load_batch_wrap(batch, *args, **kwargs)
+                data = self._load_batch_wrap(batch, *args, **kwargs)
 
         return data
 

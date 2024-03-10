@@ -15,9 +15,10 @@ import os
 import traceback
 from ..util.result import Result, Ok
 from opentelemetry import trace
+from tabaluga.util.tracer import TRACER_NAME
 
 # Acquire a tracer
-_tracer = trace.get_tracer("diceroller.tracer")
+_tracer = trace.get_tracer(TRACER_NAME)
 
 BATCH_STRING = 'batch'
 EPOCH_STRING = 'epoch'
@@ -152,10 +153,12 @@ class Trainer(base.BaseEventManager, ABC):
         self.on_begin()
 
         # do the training
-        self.train()
+        with _tracer.start_as_current_span("tabaluga.train") as span:
+            self.train()
 
         # do the testing
-        self.test()
+        with _tracer.start_as_current_span("tabaluga.test") as span:
+            self.test()
 
         # Everything is finished
         self.on_end()
@@ -282,45 +285,47 @@ class Trainer(base.BaseEventManager, ABC):
 
         for self.batch in range(self.number_of_iterations):
 
-            if self.batch != 0:
-                self.iter_num += 1
-
-            self.on_batch_begin()
-            self.on_train_batch_begin()
-
-            # train on batch
             with _tracer.start_as_current_span(
                     "tabaluga.batch.train",
                     attributes={
                         "epoch": self.epoch,
                         "batch": self.batch,
-                    }
+                    },
             ) as span:
+
+                if self.batch != 0:
+                    self.iter_num += 1
+
+                self.on_batch_begin()
+                self.on_train_batch_begin()
+
+                # train on batch
                 self.train_batch_info: DataMuncher = self.train_one_batch()
-                span.set_status(trace.status.StatusCode.OK)
 
-            # keep the result
-            # decided to update the train epoch info incrementally in case it was needed
-            self.train_epoch_info.append(
-                # add additional info
-                self.train_batch_info.update(
-                    {},
-                    {
-                        UO.SET_ONLY: {
-                            EPOCH_STRING: self.epoch,
-                            BATCH_STRING: self.batch,
+                # keep the result
+                # decided to update the train epoch info incrementally in case it was needed
+                self.train_epoch_info.append(
+                    # add additional info
+                    self.train_batch_info.update(
+                        {},
+                        {
+                            UO.SET_ONLY: {
+                                EPOCH_STRING: self.epoch,
+                                BATCH_STRING: self.batch,
+                            }
                         }
-                    }
+                    )
                 )
-            )
-            self.train_current_statistics = \
-                self.train_current_statistics.update(
-                    {'Train': {FO.EXISTS: 1}},
-                    {UO.SET: {'Train': self.train_batch_info}},
-                )
+                self.train_current_statistics = \
+                    self.train_current_statistics.update(
+                        {'Train': {FO.EXISTS: 1}},
+                        {UO.SET: {'Train': self.train_batch_info}},
+                    )
 
-            self.on_train_batch_end()
-            self.on_batch_end()
+                self.on_train_batch_end()
+                self.on_batch_end()
+
+                span.set_status(trace.status.StatusCode.OK)
 
         return self.train_epoch_info
 
@@ -341,9 +346,6 @@ class Trainer(base.BaseEventManager, ABC):
 
         for self.batch in range(self.number_of_iterations):
 
-            self.on_val_batch_begin()
-
-            # validate on batch
             with _tracer.start_as_current_span(
                     "tabaluga.batch.val",
                     attributes={
@@ -351,29 +353,33 @@ class Trainer(base.BaseEventManager, ABC):
                         "batch": self.batch,
                     }
             ) as span:
+
+                self.on_val_batch_begin()
+
+                # validate on batch
                 self.val_batch_info: DataMuncher = self.val_one_batch()
 
-            # keep the result
-            # decided to update the validation epoch info incrementally in case it was needed
-            self.val_epoch_info.append(
-                # add additional info
-                self.val_batch_info.update(
-                    {},
-                    {
-                        UO.SET_ONLY: {
-                            EPOCH_STRING: self.epoch,
-                            BATCH_STRING: self.batch,
+                # keep the result
+                # decided to update the validation epoch info incrementally in case it was needed
+                self.val_epoch_info.append(
+                    # add additional info
+                    self.val_batch_info.update(
+                        {},
+                        {
+                            UO.SET_ONLY: {
+                                EPOCH_STRING: self.epoch,
+                                BATCH_STRING: self.batch,
+                            }
                         }
-                    }
+                    )
                 )
-            )
-            self.train_current_statistics = \
-                self.train_current_statistics.update(
-                    {'Validation': {FO.EXISTS: 1}},
-                    {UO.SET: {'Validation': self.val_batch_info}},
-                )
+                self.train_current_statistics = \
+                    self.train_current_statistics.update(
+                        {'Validation': {FO.EXISTS: 1}},
+                        {UO.SET: {'Validation': self.val_batch_info}},
+                    )
 
-            self.on_val_batch_end()
+                self.on_val_batch_end()
 
         return self.val_epoch_info
 
