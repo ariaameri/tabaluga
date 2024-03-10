@@ -1153,7 +1153,7 @@ class CocoData(Data):
 
         return res
 
-    def load_bundle(self, bundle_id: int, otel_context) -> DataMuncher:
+    def load_bundle(self, bundle_id: int, otel_context=None) -> DataMuncher:
 
         metadata_row = self._metadata.filter(pl.col(metadata_columns.bundle_id) == bundle_id)
         image_id = metadata_row[metadata_columns_COCO.image_id][0]
