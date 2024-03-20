@@ -154,7 +154,7 @@ class DataManager(base.BaseEventManager, ABC):
             )
             self._distribute_shared_multithreading_pool()
 
-        self._distribute_train_val_test_ids()
+        # self._distribute_train_val_test_ids()
 
     @_tracer.start_as_current_span(
         "tabaluga.data_manager.build_data_loaders"
