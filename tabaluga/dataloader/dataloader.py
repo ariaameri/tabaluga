@@ -253,8 +253,9 @@ class DataManager(base.BaseEventManager, ABC):
         if self._shuffle_enabled:
             rand_state = np.random.get_state()
             np.random.seed(self._seed + rand_seed_add)
-            self._train_ids_full = list(np.random.permutation(self._train_ids_full))
-            self._train_ids = list(np.random.permutation(self._train_ids))
+            # optimize this maybe? sorting each time might have performance hit
+            self._train_ids_full = list(np.random.permutation(sorted(self._train_ids_full)))
+            self._train_ids = list(np.random.permutation(sorted(self._train_ids)))
             np.random.set_state(rand_state)
 
     def set_batch_size(self, batch_size: int, event_mode: EventMode = None) -> None:
