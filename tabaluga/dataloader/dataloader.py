@@ -644,7 +644,7 @@ class DataLoaderManager(base.BaseEventManager, ABC):
                 if data.is_empty():
                     data = self._load_batch_wrap(batch, *args, **kwargs)
                 else:
-                    span.set_attributes("from", "memory")
+                    span.set_attributes({"from": "memory"})
                     data = data.get()
 
                 # now, let the load ahead know
