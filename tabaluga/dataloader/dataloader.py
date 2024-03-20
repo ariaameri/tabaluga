@@ -101,18 +101,16 @@ class DataManager(base.BaseEventManager, ABC):
 
         self._check_process_config()
 
-        # Get the input type
-        self._input_type: str = self._config.get_or_else('input_type', 'folder_path')
-
         # Get random seed and shuffle boolean
-        _seed = self._config.get_or_else('seed', None)
+        _seed = self._config.get_or_else('seed.seed', None)
         self._seed = _seed if _seed is not None else np.random.randint(0, 100000)
+        _seed_split = self._config.get_or_else('seed.split', None)
+        self._seed_split = _seed_split if _seed_split is not None else np.random.randint(0, 100000)
         self._shuffle_enabled: bool = self._config.get_or_else('shuffle.enabled', False)
-        self._shuffle_add_node_rank: bool = self._config.get_or_else('shuffle.add_node_rank', True)
 
         # Get test and validation ratios
-        self._test_ratio: float = self._config.get_or_else('test_ratio', 0)
-        self._val_ratio: float = self._config.get_or_else('val_ratio', 0)
+        self._test_ratio: float = self._config.get_or_else('test_ratio', None) or 0
+        self._val_ratio: float = self._config.get_or_else('val_ratio', None) or 0
 
         # Set batch size
         self.batch_size: int = self._config.get('batch_size')
@@ -124,8 +122,8 @@ class DataManager(base.BaseEventManager, ABC):
         # bookkeeping for the training batch size
         self._batch_size_train: int = self.batch_size
         # bookkeeping for the val/test batch size
-        self._batch_size_val: int = self._config.get_or_else('batch_size_val', self.batch_size)
-        self._batch_size_test: int = self._config.get_or_else('batch_size_test', self.batch_size)
+        self._batch_size_val: int = self._config.get_or_else('batch_size_val', None) or self.batch_size
+        self._batch_size_test: int = self._config.get_or_else('batch_size_test', None) or self.batch_size
 
         # build the data generator
         self._data_infos = self._config.get("data")
@@ -135,16 +133,22 @@ class DataManager(base.BaseEventManager, ABC):
 
         self._train_ids, self._val_ids, self._test_ids = self._get_train_val_test_indices()
         self._train_ids_full = self._train_ids  # for later distributing the indices
+        self._log.info(
+            f"I found the following number of items/batches:\n"
+            f"\t train: {len(self._train_ids):8d} / {int(len(self._train_ids) / self._batch_size_train):8d}\n"
+            f"\t val:   {len(self._val_ids):8d} / {int(len(self._val_ids) / self._batch_size_val):8d}\n"
+            f"\t test:  {len(self._test_ids):8d} / {int(len(self._test_ids) / self._batch_size_test):8d}\n"
+        )
 
         # Create workers
         self.create_workers()
 
         # the shared multithreading pool
-        self._multithreading = self._config.get_or_else('multithreading', False)
+        self._multithreading = self._config.get_or_else('multithreading.enabled', False)
         self._thread_pool: Optional[ThreadPoolExecutor] = None
 
         if self._multithreading:
-            multithreading_count = self._config.get_or_else('multithreading_count', 5)
+            multithreading_count = self._config.get_or_else('multithreading.count', 5)
             self._thread_pool = ThreadPoolExecutor(
                 multithreading_count, thread_name_prefix="tabaluga-datamanager-thread-pool"
             )
@@ -194,7 +198,7 @@ class DataManager(base.BaseEventManager, ABC):
         bundle_ids = self._bundle_ids
         if self._shuffle_enabled:
             rand_state = np.random.get_state()
-            np.random.seed(self._seed)
+            np.random.seed(self._seed_split)
             bundle_ids = list(np.random.permutation(bundle_ids))
             np.random.set_state(rand_state)
 
