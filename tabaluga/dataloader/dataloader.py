@@ -280,7 +280,7 @@ class DataManager(base.BaseEventManager, ABC):
             self._batch_size_train = batch_size
             for worker in self._get_dataloader_workers_train():
                 worker.set_batch_size(self.batch_size)
-        elif event_mode == EventMode.val:
+        elif event_mode == EventMode.validation:
             self.batch_size = batch_size
             self._batch_size_val = batch_size
             for worker in self._get_dataloader_workers_val():
